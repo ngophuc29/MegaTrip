@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -45,12 +46,72 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   const [tourDeparture, setTourDeparture] = useState<Date>();
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Thêm state cho from/to các loại search
+  const [flightFrom, setFlightFrom] = useState<string>('');
+  const [flightTo, setFlightTo] = useState<string>('');
+  const [busFrom, setBusFrom] = useState<string>('');
+  const [busTo, setBusTo] = useState<string>('');
+  const [tourFrom, setTourFrom] = useState<string>('');
+  const [tourTo, setTourTo] = useState<string>('');
 
   useEffect(() => {
     fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
       setProvinces(data);
     });
   }, []);
+
+  useEffect(() => {
+    if (searchParams) {
+      if (activeTab === 'flight') {
+        const from = searchParams.get('from');
+        const to = searchParams.get('to');
+        const departure = searchParams.get('departure');
+        const returnDate = searchParams.get('return');
+        const adults = searchParams.get('adults');
+        const children = searchParams.get('children');
+        const infants = searchParams.get('infants');
+        if (from !== null) setFlightFrom(String(from));
+        if (to !== null) setFlightTo(String(to));
+        if (departure) setFlightDeparture(new Date(departure));
+        if (returnDate) setFlightReturn(new Date(returnDate));
+        if (adults || children || infants) {
+          setPassengers({
+            adults: adults ? Number(adults) : 1,
+            children: children ? Number(children) : 0,
+            infants: infants ? Number(infants) : 0,
+          });
+        }
+        if (from && to && departure) {
+          onSearch?.();
+        }
+      }
+      if (activeTab === 'bus') {
+        const from = searchParams.get('from');
+        const to = searchParams.get('to');
+        const departure = searchParams.get('departure');
+        if (from !== null) setBusFrom(String(from));
+        if (to !== null) setBusTo(String(to));
+        if (departure) setBusDeparture(new Date(departure));
+        if (from && to && departure) {
+          onSearch?.();
+        }
+      }
+      if (activeTab === 'tour') {
+        const from = searchParams.get('from');
+        const to = searchParams.get('to');
+        const departure = searchParams.get('departure');
+        if (from !== null) setTourFrom(String(from));
+        if (to !== null) setTourTo(String(to));
+        if (departure) setTourDeparture(new Date(departure));
+        if (from && to && departure) {
+          onSearch?.();
+        }
+      }
+    }
+  }, [searchParams, activeTab]);
 
   const updatePassengerCount = (type: keyof PassengerCount, increment: boolean) => {
     setPassengers(prev => ({
@@ -60,6 +121,17 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   };
 
   const totalPassengers = passengers.adults + passengers.children + passengers.infants;
+
+  // Hàm chuyển route và truyền query
+  const handleSearch = (type: 'flight' | 'bus' | 'tour') => {
+    if (type === 'flight') {
+      router.push(`/ve-may-bay?from=${flightFrom}&to=${flightTo}&departure=${flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}&return=${flightReturn ? flightReturn.toISOString().split('T')[0] : ''}&adults=${passengers.adults}&children=${passengers.children}&infants=${passengers.infants}`);
+    } else if (type === 'bus') {
+      router.push(`/xe-du-lich?from=${busFrom}&to=${busTo}&departure=${busDeparture ? busDeparture.toISOString().split('T')[0] : ''}`);
+    } else if (type === 'tour') {
+      router.push(`/tour?from=${tourFrom}&to=${tourTo}&departure=${tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''}`);
+    }
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto">
@@ -109,7 +181,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                   />
                   <span>Một chiều</span>
                 </Label>
-                <Label className="flex items-center space-x-2 cursor-pointer">
+                {/* <Label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="radio"
                     name="flightType"
@@ -119,20 +191,20 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     className="text-primary"
                   />
                   <span>Nhiều thành phố</span>
-                </Label>
+                </Label> */}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* From */}
                 <div className="space-y-2">
                   <Label htmlFor="from">Từ</Label>
-                  <Select>
+                  <Select value={flightFrom} onValueChange={setFlightFrom}>
                     <SelectTrigger>
                       <SelectValue placeholder="Thành phố hoặc sân bay" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -141,13 +213,13 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                 {/* To */}
                 <div className="space-y-2 relative">
                   <Label htmlFor="to">Đến</Label>
-                  <Select>
+                  <Select value={flightTo} onValueChange={setFlightTo}>
                     <SelectTrigger>
                       <SelectValue placeholder="Thành phố hoặc sân bay" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -155,72 +227,36 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     variant="ghost"
                     size="sm"
                     className="absolute right-2 top-8 h-8 w-8 p-0"
+                    onClick={() => {
+                      setFlightFrom(flightTo);
+                      setFlightTo(flightFrom);
+                    }}
                   >
-                    <ArrowLeftRight className="h-4 w-4" />
+                    {/* <ArrowLeftRight className="h-4 w-4" /> */}
                   </Button>
                 </div>
 
                 {/* Departure Date */}
                 <div className="space-y-2">
                   <Label>Ngày đi</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !flightDeparture && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {flightDeparture ? (
-                          format(flightDeparture, "dd/MM/yyyy", { locale: vi })
-                        ) : (
-                          <span>Chọn ngày</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={flightDeparture}
-                        onSelect={setFlightDeparture}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Input
+                    type="date"
+                    className="block h-12 bg-white shadow-md text-black w-full"
+                    value={flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}
+                    onChange={e => setFlightDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
                 </div>
 
                 {/* Return Date */}
                 {flightType === 'roundtrip' && (
                   <div className="space-y-2">
                     <Label>Ngày về</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !flightReturn && "text-muted-foreground"
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {flightReturn ? (
-                            format(flightReturn, "dd/MM/yyyy", { locale: vi })
-                          ) : (
-                            <span>Chọn ngày</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={flightReturn}
-                          onSelect={setFlightReturn}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <Input
+                      type="date"
+                      className="block h-12 bg-white shadow-md text-black w-full"
+                      value={flightReturn ? flightReturn.toISOString().split('T')[0] : ''}
+                      onChange={e => setFlightReturn(e.target.value ? new Date(e.target.value) : undefined)}
+                    />
                   </div>
                 )}
               </div>
@@ -331,7 +367,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
 
                 {/* Search Button */}
                 <div className="flex items-end">
-                  <Button className="w-full h-10" onClick={onSearch}>
+                  <Button className="w-full h-10" onClick={() => handleSearch('flight')}>
                     <Search className="mr-2 h-4 w-4" />
                     Tìm chuyến bay
                   </Button>
@@ -346,61 +382,41 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="bus-from">Điểm đón</Label>
-                  <Select>
+                  <Select value={busFrom} onValueChange={setBusFrom}>
                     <SelectTrigger>
                       <SelectValue placeholder="Tỉnh/Thành phố hoặc bến xe" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bus-to">Điểm trả</Label>
-                  <Select>
+                  <Select value={busTo} onValueChange={setBusTo}>
                     <SelectTrigger>
                       <SelectValue placeholder="Tỉnh/Thành phố hoặc bến xe" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Ngày đi</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !busDeparture && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {busDeparture ? (
-                          format(busDeparture, "dd/MM/yyyy", { locale: vi })
-                        ) : (
-                          <span>Chọn ngày</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={busDeparture}
-                        onSelect={setBusDeparture}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Input
+                    type="date"
+                    className="block h-12 bg-white shadow-md text-black w-full"
+                    value={busDeparture ? busDeparture.toISOString().split('T')[0] : ''}
+                    onChange={e => setBusDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
                 </div>
                 <div className="flex items-end">
-                  <Button className="w-full h-10" onClick={onSearch}>
+                  <Button className="w-full h-10" onClick={() => handleSearch('bus')}>
                     <Search className="mr-2 h-4 w-4" />
                     Tìm chuyến xe
                   </Button>
@@ -415,61 +431,41 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="tour-from">Điểm khởi hành</Label>
-                  <Select>
+                  <Select value={tourFrom} onValueChange={setTourFrom}>
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn điểm khởi hành" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="tour-to">Điểm đến</Label>
-                  <Select>
+                  <Select value={tourTo} onValueChange={setTourTo}>
                     <SelectTrigger>
                       <SelectValue placeholder="Điểm đến mong muốn" />
                     </SelectTrigger>
                     <SelectContent>
                       {provinces.map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Ngày khởi hành</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !tourDeparture && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {tourDeparture ? (
-                          format(tourDeparture, "dd/MM/yyyy", { locale: vi })
-                        ) : (
-                          <span>Chọn ngày</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={tourDeparture}
-                        onSelect={setTourDeparture}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Input
+                    type="date"
+                    className="block h-12 bg-white shadow-md text-black w-full"
+                    value={tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''}
+                    onChange={e => setTourDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
                 </div>
                 <div className="flex items-end">
-                  <Button className="w-full h-10" onClick={onSearch}>
+                  <Button className="w-full h-10" onClick={() => handleSearch('tour')}>
                     <Search className="mr-2 h-4 w-4" />
                     Tìm tour
                   </Button>

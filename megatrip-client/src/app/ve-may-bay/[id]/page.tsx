@@ -155,9 +155,9 @@ export default function ChiTietVeMayBay() {
             <div className="border-b">
                 <div className="container py-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Link prefetch={false}  href="/" className="hover:text-primary">Trang chủ</Link>
+                        <Link prefetch={false} href="/" className="hover:text-primary">Trang chủ</Link>
                         <span>/</span>
-                        <Link prefetch={false}  href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
+                        <Link prefetch={false} href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
                         <span>/</span>
                         <span>Chi tiết chuyến bay</span>
                     </div>
@@ -170,7 +170,7 @@ export default function ChiTietVeMayBay() {
                     <div className="flex-1 space-y-6">
                         {/* Back Button */}
                         <Button variant="outline" asChild className="w-fit">
-                            <Link prefetch={false}  href="/ve-may-bay">
+                            <Link prefetch={false} href="/ve-may-bay">
                                 <ChevronLeft className="h-4 w-4 mr-2" />
                                 Quay lại kết quả tìm kiếm
                             </Link>
@@ -393,7 +393,9 @@ export default function ChiTietVeMayBay() {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <Label htmlFor="dateOfBirth">Ngày sinh</Label>
-                                                <Input id="dateOfBirth" type="date" value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
+                                                <Input id="dateOfBirth" type="date"
+                                                    className="block h-12 bg-white shadow-md text-black w-full"
+                                                    value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
                                             </div>
                                             <div>
                                                 <Label htmlFor="nationality">Quốc tịch</Label>
@@ -523,7 +525,7 @@ export default function ChiTietVeMayBay() {
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
                                     <Button className="w-full" size="lg" asChild>
-                                        <Link prefetch={false}  href="/thanh-toan">
+                                        <Link prefetch={false} href="/thanh-toan">
                                             Tiếp tục thanh toán
                                         </Link>
                                     </Button>

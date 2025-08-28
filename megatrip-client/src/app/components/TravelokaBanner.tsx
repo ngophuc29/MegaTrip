@@ -1,4 +1,6 @@
+'use client'
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -118,10 +120,32 @@ export default function TravelokaBanner() {
   const [passengerCounts, setPassengerCounts] = useState({ adults: 1, children: 0, infants: 0 });
   const totalPassengers = passengerCounts.adults + passengerCounts.children + passengerCounts.infants;
   const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
+  // Thêm state cho fromProvince và toProvince
+  const [fromProvince, setFromProvince] = useState<string>("");
+  const [toProvince, setToProvince] = useState<string>("");
+
+  // Thêm state cho from/to của buses và tours
+  const [busFrom, setBusFrom] = useState<string>("");
+  const [busTo, setBusTo] = useState<string>("");
+  const [tourFrom, setTourFrom] = useState<string>("");
+  const [tourTo, setTourTo] = useState<string>("");
+
+  const router = useRouter();
+
+  // Hàm swap
+  const handleSwapProvinces = () => {
+    setFromProvince(toProvince);
+    setToProvince(fromProvince);
+  };
 
   useEffect(() => {
     fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
       setProvinces(data);
+      // Gán mặc định nếu chưa có
+      // if (data.length > 0 && !fromProvince && !toProvince) {
+      //   setFromProvince(data[0].code);
+      //   setToProvince(data[1]?.code || "");
+      // }
     });
   }, []);
 
@@ -138,6 +162,17 @@ export default function TravelokaBanner() {
       ...prev,
       [type]: Math.max(type === 'adults' ? 1 : 0, prev[type] + (increment ? 1 : -1))
     }));
+  };
+
+  // Hàm chuyển route và truyền query
+  const handleSearch = () => {
+    if (activeTab === 'flights') {
+      router.push(`/ve-may-bay?from=${fromProvince}&to=${toProvince}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}&return=${toDate ? toDate.toISOString().split('T')[0] : ''}&adults=${passengerCounts.adults}&children=${passengerCounts.children}&infants=${passengerCounts.infants}`);
+    } else if (activeTab === 'buses') {
+      router.push(`/xe-du-lich?from=${busFrom}&to=${busTo}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}`);
+    } else if (activeTab === 'tours') {
+      router.push(`/tour?from=${tourFrom}&to=${tourTo}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}&passengers=${passengers}`);
+    }
   };
 
   return (
@@ -256,27 +291,17 @@ export default function TravelokaBanner() {
                       />
                       <span className="text-sm font-medium text-white">Một chiều</span>
                     </label>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        name="tripType"
-                        value="multicity"
-                        checked={tripType === 'multicity'}
-                        onChange={(e) => setTripType(e.target.value)}
-                        className="text-blue-600"
-                      />
-                      <span className="text-sm font-medium text-white">Nhiều thành phố</span>
-                    </label>
+                 
                   </div>
 
                   {/* Search Fields */}
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_1fr_1fr] gap-4 items-center">
                     {/* From */}
-                    <div className="relative">
+                    <div className="relative w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Từ</label>
-                      <Select>
+                      <Select value={fromProvince} onValueChange={setFromProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="TP HCM (SGN)" />
+                          <SelectValue placeholder="" />
                         </SelectTrigger>
                         <SelectContent>
                           {provinces.map((prov) => (
@@ -287,18 +312,18 @@ export default function TravelokaBanner() {
                     </div>
 
                     {/* Swap Button */}
-                    <div className="flex items-end justify-center h-full">
-                      <Button variant="outline" size="icon" className="h-12 w-12 rounded-full bg-white shadow-md text-black flex items-center justify-center">
+                    <div className="flex items-end justify-center h-full w-full">
+                      <Button variant="outline" size="icon" className="h-12 w-12 rounded-full bg-white shadow-md text-black flex items-center justify-center" onClick={handleSwapProvinces}>
                         <ArrowUpDown className="h-4 w-4" />
                       </Button>
                     </div>
 
                     {/* To */}
-                    <div className="relative">
+                    <div className="relative w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Đến</label>
-                      <Select>
+                      <Select value={toProvince} onValueChange={setToProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="Hà Nội (HAN)" />
+                          <SelectValue placeholder="" />
                         </SelectTrigger>
                         <SelectContent>
                           {provinces.map((prov) => (
@@ -309,34 +334,26 @@ export default function TravelokaBanner() {
                     </div>
 
                     {/* Departure Date */}
-                    <div className="relative">
+                    <div className="relative w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Ngày đi</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className={cn("h-12 w-full justify-start text-left font-normal bg-white shadow-md text-black", !fromDate && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" /> {fromDate ? fromDate.toLocaleDateString('vi-VN') : "Chọn ngày"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus />
-                        </PopoverContent>
-                      </Popover>
+                      <Input
+                        type="date"
+                        className="block h-12 bg-white shadow-md text-black w-full"
+                        value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
+                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                      />
                     </div>
 
                     {/* Return Date */}
                     {tripType === 'roundtrip' && (
-                      <div className="relative">
+                      <div className="relative w-full">
                         <label className="block text-sm font-semibold text-white mb-1">Ngày về</label>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className={cn("h-12 w-full justify-start text-left font-normal bg-white shadow-md text-black", !toDate && "text-muted-foreground")}>
-                              <CalendarIcon className="mr-2 h-4 w-4" /> {toDate ? toDate.toLocaleDateString('vi-VN') : "Chọn ngày"}
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                            <Calendar mode="single" selected={toDate} onSelect={setToDate} initialFocus />
-                          </PopoverContent>
-                        </Popover>
+                        <Input
+                          type="date"
+                          className="block h-12 bg-white shadow-md text-black w-full"
+                          value={toDate ? toDate.toISOString().split('T')[0] : ''}
+                          onChange={e => setToDate(e.target.value ? new Date(e.target.value) : undefined)}
+                        />
                       </div>
                     )}
                   </div>
@@ -430,7 +447,7 @@ export default function TravelokaBanner() {
                         </PopoverContent>
                       </Popover>
                     </div>
-                    <Button size="lg" className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white shadow-md">
+                    <Button size="lg" className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white shadow-md" onClick={handleSearch}>
                       <Search className="mr-2 h-5 w-5" />
                       Tìm chuyến bay
                     </Button>
@@ -472,47 +489,45 @@ export default function TravelokaBanner() {
               {activeTab === 'buses' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
+                    <div className="w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Điểm đi</label>
-                      <Select>
+                      <Select value={busFrom} onValueChange={setBusFrom}>
                         <SelectTrigger className="h-12">
-                          <SelectValue placeholder="TP. Hồ Chí Minh" />
+                          <SelectValue placeholder="Chọn điểm đi" />
                         </SelectTrigger>
                         <SelectContent>
                           {provinces.map((prov) => (
-                            <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                            <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div>
+                    <div className="w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Điểm đến</label>
-                      <Select>
+                      <Select value={busTo} onValueChange={setBusTo}>
                         <SelectTrigger className="h-12">
-                          <SelectValue placeholder="Đà Lạt" />
+                          <SelectValue placeholder="Chọn điểm đến" />
                         </SelectTrigger>
                         <SelectContent>
                           {provinces.map((prov) => (
-                            <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                            <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div>
+                    <div className="w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Ngày đi</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className={cn("h-12 w-full justify-start text-left font-normal bg-white shadow-md text-black", !fromDate && "text-muted-foreground")}> <CalendarIcon className="mr-2 h-4 w-4" /> {fromDate ? fromDate.toLocaleDateString('vi-VN') : "Chọn ngày"} </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar mode="single" selected={fromDate} onSelect={setFromDate} initialFocus />
-                        </PopoverContent>
-                      </Popover>
+                      <Input
+                        type="date"
+                        className="block h-12 bg-white shadow-md text-black w-full"
+                        value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
+                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                      />
                     </div>
 
-                    <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white">
+                    <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSearch}>
                       <Search className="mr-2 h-5 w-5" />
                       Tìm xe
                     </Button>
@@ -524,68 +539,45 @@ export default function TravelokaBanner() {
               {activeTab === 'tours' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
+                    <div className="w-full">
+                      <label className="block text-sm font-semibold text-white mb-1">Điểm khởi hành</label>
+                      <Select value={tourFrom} onValueChange={setTourFrom}>
+                        <SelectTrigger className="h-12">
+                          <SelectValue placeholder="Chọn điểm khởi hành" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {provinces.map((prov) => (
+                            <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Điểm đến</label>
-                      <Select>
+                      <Select value={tourTo} onValueChange={setTourTo}>
                         <SelectTrigger className="h-12">
                           <SelectValue placeholder="Chọn điểm đến" />
                         </SelectTrigger>
                         <SelectContent>
                           {provinces.map((prov) => (
-                            <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                            <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <div>
+                    <div className="w-full">
                       <label className="block text-sm font-semibold text-white mb-1">Ngày khởi hành</label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "h-12 w-full justify-start text-left font-normal bg-white shadow-md text-black",
-                              !fromDate && "text-muted-foreground"
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {fromDate ? fromDate.toLocaleDateString('vi-VN') : "Chọn ngày"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={fromDate}
-                            onSelect={setFromDate}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <Input
+                        type="date"
+                        className="block h-12 bg-white shadow-md text-black w-full"
+                        value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
+                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                      />
                     </div>
 
-                    <div>
-                      <label className="block text-sm font-semibold text-white mb-1">Số khách</label>
-                      <Select value={passengers.toString()} onValueChange={(value) => setPassengers(parseInt(value))}>
-                        <SelectTrigger className="h-12">
-                          <SelectValue>
-                            <div className="flex items-center">
-                              <Users className="mr-2 h-4 w-4" />
-                              {passengers} khách
-                            </div>
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                            <SelectItem key={num} value={num.toString()}>
-                              {num} khách
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white">
+                    <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSearch}>
                       <Search className="mr-2 h-5 w-5" />
                       Tìm tour
                     </Button>

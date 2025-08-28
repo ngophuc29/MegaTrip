@@ -72,6 +72,7 @@ const sampleBuses = [
         duration: '7h 00m',
         distance: '308km',
         price: 280000,
+        
         seats: 45,
         availableSeats: 12,
         amenities: ['wifi', 'water', 'toilet'],
@@ -281,6 +282,30 @@ export default function XeDuLich() {
             setTimeout(() => setCopied(prev => ({...prev, [code]: false})), 2000);
         });
     };
+
+    function FilterSidebarSkeleton() {
+        return (
+            <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))] animate-pulse">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                    <div className="h-5 w-24 bg-gray-200 rounded shimmer" />
+                    <div className="h-8 w-8 bg-gray-200 rounded shimmer" />
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-6 w-full bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-16 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-28 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <>
             {/* Search Section */}
@@ -548,139 +573,141 @@ export default function XeDuLich() {
                     <div className="flex flex-col lg:flex-row gap-6">
                         {/* Filters Sidebar */}
                         <div className={`lg:w-80 ${showFilters ? 'block' : 'hidden lg:block'}`}>
-                            <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                                    <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
+                            {isLoading ? <FilterSidebarSkeleton /> : (
+                                <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                                        <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
 
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setShowFilters(!showFilters)}
-                                        className="lg:hidden"
-                                    >
-                                        <Filter className="h-4 w-4" />
-                                    </Button>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Price Range */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
-                                        <div className="px-2">
-                                            <Slider
-                                                value={priceRange}
-                                                onValueChange={setPriceRange}
-                                                max={500000}
-                                                min={200000}
-                                                step={50000}
-                                                className="mb-3"
-                                            />
-                                            <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
-                                                <span>{formatPrice(priceRange[0])}</span>
-                                                <span>{formatPrice(priceRange[1])}</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowFilters(!showFilters)}
+                                            className="lg:hidden"
+                                        >
+                                            <Filter className="h-4 w-4" />
+                                        </Button>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        {/* Price Range */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
+                                            <div className="px-2">
+                                                <Slider
+                                                    value={priceRange}
+                                                    onValueChange={setPriceRange}
+                                                    max={500000}
+                                                    min={200000}
+                                                    step={50000}
+                                                    className="mb-3"
+                                                />
+                                                <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
+                                                    <span>{formatPrice(priceRange[0])}</span>
+                                                    <span>{formatPrice(priceRange[1])}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <Separator />
+                                        <Separator />
 
-                                    {/* Bus Companies */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Nhà xe</Label>
-                                        <div className="space-y-3">
-                                            {busCompanies.map((company) => (
-                                                <div key={company.name} className="flex items-center justify-between">
-                                                    <div className="flex items-center space-x-2">
+                                        {/* Bus Companies */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Nhà xe</Label>
+                                            <div className="space-y-3">
+                                                {busCompanies.map((company) => (
+                                                    <div key={company.name} className="flex items-center justify-between">
+                                                        <div className="flex items-center space-x-2">
+                                                            <Checkbox
+                                                                id={company.name}
+                                                                checked={selectedCompanies.includes(company.name)}
+                                                                onCheckedChange={(checked) => {
+                                                                    if (checked) {
+                                                                        setSelectedCompanies([...selectedCompanies, company.name]);
+                                                                    } else {
+                                                                        setSelectedCompanies(selectedCompanies.filter(c => c !== company.name));
+                                                                    }
+                                                                }}
+                                                            />
+                                                            <label htmlFor={company.name} className="text-sm cursor-pointer">
+                                                                {company.name}
+                                                            </label>
+                                                        </div>
+                                                        <div className="flex items-center text-xs text-[hsl(var(--muted-foreground))]">
+                                                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
+                                                            {company.rating}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Bus Types */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Loại xe</Label>
+                                            <div className="space-y-3">
+                                                {busTypes.map((type) => (
+                                                    <div key={type} className="flex items-center space-x-2">
                                                         <Checkbox
-                                                            id={company.name}
-                                                            checked={selectedCompanies.includes(company.name)}
+                                                            id={type}
+                                                            checked={selectedTypes.includes(type)}
                                                             onCheckedChange={(checked) => {
                                                                 if (checked) {
-                                                                    setSelectedCompanies([...selectedCompanies, company.name]);
+                                                                    setSelectedTypes([...selectedTypes, type]);
                                                                 } else {
-                                                                    setSelectedCompanies(selectedCompanies.filter(c => c !== company.name));
+                                                                    setSelectedTypes(selectedTypes.filter(t => t !== type));
                                                                 }
                                                             }}
                                                         />
-                                                        <label htmlFor={company.name} className="text-sm cursor-pointer">
-                                                            {company.name}
+                                                        <label htmlFor={type} className="text-sm cursor-pointer flex items-center gap-1">
+                                                            {getTypeIcon(type)}
+                                                            {type}
                                                         </label>
                                                     </div>
-                                                    <div className="flex items-center text-xs text-[hsl(var(--muted-foreground))]">
-                                                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
-                                                        {company.rating}
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    <Separator />
+                                        <Separator />
 
-                                    {/* Bus Types */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Loại xe</Label>
-                                        <div className="space-y-3">
-                                            {busTypes.map((type) => (
-                                                <div key={type} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={type}
-                                                        checked={selectedTypes.includes(type)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedTypes([...selectedTypes, type]);
-                                                            } else {
-                                                                setSelectedTypes(selectedTypes.filter(t => t !== type));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label htmlFor={type} className="text-sm cursor-pointer flex items-center gap-1">
-                                                        {getTypeIcon(type)}
-                                                        {type}
+                                        {/* Departure Time */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
+                                                <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Quick Filters */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="wifi" />
+                                                    <label htmlFor="wifi" className="text-sm cursor-pointer">
+                                                        Có WiFi
                                                     </label>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Departure Time */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
-                                            <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Quick Filters */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="wifi" />
-                                                <label htmlFor="wifi" className="text-sm cursor-pointer">
-                                                    Có WiFi
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="toilet" />
-                                                <label htmlFor="toilet" className="text-sm cursor-pointer">
-                                                    Có WC
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="refundable" />
-                                                <label htmlFor="refundable" className="text-sm cursor-pointer">
-                                                    Có hoàn hủy
-                                                </label>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="toilet" />
+                                                    <label htmlFor="toilet" className="text-sm cursor-pointer">
+                                                        Có WC
+                                                    </label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="refundable" />
+                                                    <label htmlFor="refundable" className="text-sm cursor-pointer">
+                                                        Có hoàn hủy
+                                                    </label>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </div>
 
                         {/* Results */}

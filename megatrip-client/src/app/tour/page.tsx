@@ -172,6 +172,29 @@ const sampleTours = [
     },
 ];
 
+function FilterSidebarSkeleton() {
+    return (
+        <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))] animate-pulse">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <div className="h-5 w-24 bg-gray-200 rounded shimmer" />
+                <div className="h-8 w-8 bg-gray-200 rounded shimmer" />
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-6 w-full bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-16 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-28 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function Tour() {
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 6000000]);
@@ -619,123 +642,125 @@ export default function Tour() {
                     <div className="flex flex-col lg:flex-row gap-6">
                         {/* Filters Sidebar */}
                         <div className={`lg:w-80 ${showFilters ? 'block' : 'hidden lg:block'}`}>
-                            <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                                    <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setShowFilters(!showFilters)}
-                                        className="lg:hidden"
-                                    >
-                                        <Filter className="h-4 w-4" />
-                                    </Button>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Price Range */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
-                                        <div className="px-2">
-                                            <Slider
-                                                value={priceRange}
-                                                onValueChange={setPriceRange}
-                                                max={6000000}
-                                                min={1000000}
-                                                step={200000}
-                                                className="mb-3"
-                                            />
-                                            <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
-                                                <span>{formatPrice(priceRange[0])}</span>
-                                                <span>{formatPrice(priceRange[1])}</span>
+                            {isLoading ? <FilterSidebarSkeleton /> : (
+                                <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                                        <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowFilters(!showFilters)}
+                                            className="lg:hidden"
+                                        >
+                                            <Filter className="h-4 w-4" />
+                                        </Button>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        {/* Price Range */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
+                                            <div className="px-2">
+                                                <Slider
+                                                    value={priceRange}
+                                                    onValueChange={setPriceRange}
+                                                    max={6000000}
+                                                    min={1000000}
+                                                    step={200000}
+                                                    className="mb-3"
+                                                />
+                                                <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
+                                                    <span>{formatPrice(priceRange[0])}</span>
+                                                    <span>{formatPrice(priceRange[1])}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <Separator />
+                                        <Separator />
 
-                                    {/* Duration */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Thời lượng</Label>
-                                        <div className="space-y-3">
-                                            {durations.map((duration) => (
-                                                <div key={duration} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={duration}
-                                                        checked={selectedDurations.includes(duration)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedDurations([...selectedDurations, duration]);
-                                                            } else {
-                                                                setSelectedDurations(selectedDurations.filter(d => d !== duration));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label htmlFor={duration} className="text-sm cursor-pointer">
-                                                        {duration}
+                                        {/* Duration */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Thời lượng</Label>
+                                            <div className="space-y-3">
+                                                {durations.map((duration) => (
+                                                    <div key={duration} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={duration}
+                                                            checked={selectedDurations.includes(duration)}
+                                                            onCheckedChange={(checked) => {
+                                                                if (checked) {
+                                                                    setSelectedDurations([...selectedDurations, duration]);
+                                                                } else {
+                                                                    setSelectedDurations(selectedDurations.filter(d => d !== duration));
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label htmlFor={duration} className="text-sm cursor-pointer">
+                                                            {duration}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Departure */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Điểm khởi hành</Label>
+                                            <div className="space-y-3">
+                                                {departures.map((departure) => (
+                                                    <div key={departure} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={departure}
+                                                            checked={selectedDepartures.includes(departure)}
+                                                            onCheckedChange={(checked) => {
+                                                                if (checked) {
+                                                                    setSelectedDepartures([...selectedDepartures, departure]);
+                                                                } else {
+                                                                    setSelectedDepartures(selectedDepartures.filter(d => d !== departure));
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label htmlFor={departure} className="text-sm cursor-pointer">
+                                                            {departure}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Features */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Tiện ích</Label>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="flight" />
+                                                    <label htmlFor="flight" className="text-sm cursor-pointer flex items-center">
+                                                        <Plane className="h-3 w-3 mr-1" />
+                                                        Bao gồm vé máy bay
                                                     </label>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Departure */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Điểm khởi hành</Label>
-                                        <div className="space-y-3">
-                                            {departures.map((departure) => (
-                                                <div key={departure} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={departure}
-                                                        checked={selectedDepartures.includes(departure)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedDepartures([...selectedDepartures, departure]);
-                                                            } else {
-                                                                setSelectedDepartures(selectedDepartures.filter(d => d !== departure));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label htmlFor={departure} className="text-sm cursor-pointer">
-                                                        {departure}
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="hotel4" />
+                                                    <label htmlFor="hotel4" className="text-sm cursor-pointer flex items-center">
+                                                        <Hotel className="h-3 w-3 mr-1" />
+                                                        Khách sạn 4-5 sao
                                                     </label>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Features */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Tiện ích</Label>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="flight" />
-                                                <label htmlFor="flight" className="text-sm cursor-pointer flex items-center">
-                                                    <Plane className="h-3 w-3 mr-1" />
-                                                    Bao gồm vé máy bay
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="hotel4" />
-                                                <label htmlFor="hotel4" className="text-sm cursor-pointer flex items-center">
-                                                    <Hotel className="h-3 w-3 mr-1" />
-                                                    Khách sạn 4-5 sao
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="meals" />
-                                                <label htmlFor="meals" className="text-sm cursor-pointer flex items-center">
-                                                    <Utensils className="h-3 w-3 mr-1" />
-                                                    Bữa ăn đầy đủ
-                                                </label>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="meals" />
+                                                    <label htmlFor="meals" className="text-sm cursor-pointer flex items-center">
+                                                        <Utensils className="h-3 w-3 mr-1" />
+                                                        Bữa ăn đầy đủ
+                                                    </label>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </div>
 
                         {/* Results */}

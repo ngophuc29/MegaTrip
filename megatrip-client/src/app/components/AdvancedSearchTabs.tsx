@@ -300,64 +300,24 @@ export default function AdvancedSearchTabs() {
               {/* Departure Date */}
               <div className="space-y-2">
                 <Label>Ngày đi</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !flightDeparture && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {flightDeparture ? (
-                        format(flightDeparture, "dd/MM/yyyy", { locale: vi })
-                      ) : (
-                        <span>Chọn ngày</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={flightDeparture}
-                      onSelect={setFlightDeparture}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  type="date"
+                  className="block h-12 bg-white shadow-md text-black w-full"
+                  value={flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}
+                  onChange={e => setFlightDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                />
               </div>
 
               {/* Return Date */}
               {flightType === 'roundtrip' && (
                 <div className="space-y-2">
                   <Label>Ngày về</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !flightReturn && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {flightReturn ? (
-                          format(flightReturn, "dd/MM/yyyy", { locale: vi })
-                        ) : (
-                          <span>Chọn ngày</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={flightReturn}
-                        onSelect={setFlightReturn}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Input
+                    type="date"
+                    className="block h-12 bg-white shadow-md text-black w-full"
+                    value={flightReturn ? flightReturn.toISOString().split('T')[0] : ''}
+                    onChange={e => setFlightReturn(e.target.value ? new Date(e.target.value) : undefined)}
+                  />
                 </div>
               )}
             </div>
@@ -533,32 +493,12 @@ export default function AdvancedSearchTabs() {
               </div>
               <div className="space-y-2">
                 <Label>Ngày đi</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !busDeparture && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {busDeparture ? (
-                        format(busDeparture, "dd/MM/yyyy", { locale: vi })
-                      ) : (
-                        <span>Chọn ngày</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={busDeparture}
-                      onSelect={setBusDeparture}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  type="date"
+                  className="block h-12 bg-white shadow-md text-black w-full"
+                  value={busDeparture ? busDeparture.toISOString().split('T')[0] : ''}
+                  onChange={e => setBusDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                />
               </div>
               <div className="flex items-end">
                 <Button className="w-full h-10 btn-professional">
@@ -623,32 +563,12 @@ export default function AdvancedSearchTabs() {
               </div>
               <div className="space-y-2">
                 <Label>Ngày khởi hành</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !tourDeparture && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {tourDeparture ? (
-                        format(tourDeparture, "dd/MM/yyyy", { locale: vi })
-                      ) : (
-                        <span>Chọn ngày</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={tourDeparture}
-                      onSelect={setTourDeparture}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                <Input
+                  type="date"
+                  className="block h-12 bg-white shadow-md text-black w-full"
+                  value={tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''}
+                  onChange={e => setTourDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                />
               </div>
               <div className="flex items-end">
                 <Button className="w-full h-10 btn-professional">

@@ -336,6 +336,7 @@ export default function TaiKhoan() {
                                                     <div>
                                                         <Label htmlFor="dateOfBirth">Ngày sinh</Label>
                                                         <Input
+                                                            className="block h-12 bg-white shadow-md text-black w-full"
                                                             id="dateOfBirth"
                                                             type="date"
                                                             value={editForm.dateOfBirth}

@@ -1,7 +1,7 @@
 "use client"
 import { useState } from 'react';
 import Link from 'next/link';
-import { useNavigate } from 'react-router-dom';
+import { useRouter } from 'next/navigation';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -104,7 +104,7 @@ const paymentMethods = [
 ];
 
 export default function ThanhToan() {
-    const navigate = useNavigate();
+    const router = useRouter();
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedPayment, setSelectedPayment] = useState('credit_card');
     const [needInvoice, setNeedInvoice] = useState(false);
@@ -173,10 +173,10 @@ export default function ThanhToan() {
         setTimeout(() => {
             if (selectedPayment === 'bank_transfer') {
                 // Redirect to bank transfer instructions page
-                navigate('/chuyen-khoan');
+                router.push('/chuyen-khoan');
             } else {
                 // Redirect to success page for instant payment methods
-                navigate('/thanh-toan-thanh-cong');
+                router.push('/thanh-toan-thanh-cong');
             }
         }, 1000);
     };
@@ -333,6 +333,8 @@ export default function ThanhToan() {
                                             <div>
                                                 <Label htmlFor="dateOfBirth">Ngày sinh *</Label>
                                                 <Input
+                                                    className="block h-12 bg-white shadow-md text-black w-full"
+
                                                     id="dateOfBirth"
                                                     type="date"
                                                     value={passengerInfo.dateOfBirth}

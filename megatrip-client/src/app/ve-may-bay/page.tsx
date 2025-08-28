@@ -382,6 +382,29 @@ export default function VeMayBay() {
         );
     }
 
+    function FilterSidebarSkeleton() {
+        return (
+            <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))] animate-pulse">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                    <div className="h-5 w-24 bg-gray-200 rounded shimmer" />
+                    <div className="h-8 w-8 bg-gray-200 rounded shimmer" />
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-6 w-full bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-16 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-28 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-24 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-20 bg-gray-200 rounded shimmer mb-2" />
+                    <div className="h-4 w-32 bg-gray-200 rounded shimmer mb-2" />
+                </CardContent>
+            </Card>
+        );
+    }
+
     return (
         <>
             {/* Search Section */}
@@ -661,113 +684,115 @@ export default function VeMayBay() {
                     <div className="flex flex-col lg:flex-row gap-6">
                         {/* Filters Sidebar */}
                         <div className={`lg:w-80 ${showFilters ? 'block' : 'hidden lg:block'}`}>
-                            <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
-                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                                    <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
+                            {isLoading ? <FilterSidebarSkeleton /> : (
+                                <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
+                                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                                        <CardTitle className="text-lg text-[hsl(var(--primary))] font-bold">Bộ lọc</CardTitle>
 
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setShowFilters(!showFilters)}
-                                        className="lg:hidden"
-                                    >
-                                        <Filter className="h-4 w-4" />
-                                    </Button>
-                                </CardHeader>
-                                <CardContent className="space-y-6">
-                                    {/* Price Range */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
-                                        <div className="px-2">
-                                            <Slider
-                                                value={priceRange}
-                                                onValueChange={setPriceRange}
-                                                max={3000000}
-                                                min={1000000}
-                                                step={100000}
-                                                className="mb-3"
-                                            />
-                                            <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
-                                                <span>{formatPrice(priceRange[0])}</span>
-                                                <span>{formatPrice(priceRange[1])}</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setShowFilters(!showFilters)}
+                                            className="lg:hidden"
+                                        >
+                                            <Filter className="h-4 w-4" />
+                                        </Button>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        {/* Price Range */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Khoảng giá</Label>
+                                            <div className="px-2">
+                                                <Slider
+                                                    value={priceRange}
+                                                    onValueChange={setPriceRange}
+                                                    max={3000000}
+                                                    min={1000000}
+                                                    step={100000}
+                                                    className="mb-3"
+                                                />
+                                                <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
+                                                    <span>{formatPrice(priceRange[0])}</span>
+                                                    <span>{formatPrice(priceRange[1])}</span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <Separator />
+                                        <Separator />
 
-                                    {/* Airlines */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Hãng hàng không</Label>
-                                        <div className="space-y-3">
-                                            {airlines.map((airline) => (
-                                                <div key={airline.code} className="flex items-center space-x-2">
-                                                    <Checkbox
-                                                        id={airline.code}
-                                                        checked={selectedAirlines.includes(airline.name)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedAirlines([...selectedAirlines, airline.name]);
-                                                            } else {
-                                                                setSelectedAirlines(selectedAirlines.filter(a => a !== airline.name));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <label htmlFor={airline.code} className="text-sm cursor-pointer">
-                                                        {airline.name}
+                                        {/* Airlines */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Hãng hàng không</Label>
+                                            <div className="space-y-3">
+                                                {airlines.map((airline) => (
+                                                    <div key={airline.code} className="flex items-center space-x-2">
+                                                        <Checkbox
+                                                            id={airline.code}
+                                                            checked={selectedAirlines.includes(airline.name)}
+                                                            onCheckedChange={(checked) => {
+                                                                if (checked) {
+                                                                    setSelectedAirlines([...selectedAirlines, airline.name]);
+                                                                } else {
+                                                                    setSelectedAirlines(selectedAirlines.filter(a => a !== airline.name));
+                                                                }
+                                                            }}
+                                                        />
+                                                        <label htmlFor={airline.code} className="text-sm cursor-pointer">
+                                                            {airline.name}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Departure Time */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Button variant="outline" size="sm" className="text-xs">Sáng sớm<br />06:00 - 12:00</Button>
+                                                <Button variant="outline" size="sm" className="text-xs">Chiều<br />12:00 - 18:00</Button>
+                                                <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
+                                                <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
+                                            </div>
+                                        </div>
+
+                                        <Separator />
+
+                                        {/* Quick Filters */}
+                                        <div>
+                                            <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
+                                            <div className="space-y-2">
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="refundable" />
+                                                    <label htmlFor="refundable" className="text-sm cursor-pointer">
+                                                        Có hoàn hủy
                                                     </label>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Departure Time */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <Button variant="outline" size="sm" className="text-xs">Sáng sớm<br />06:00 - 12:00</Button>
-                                            <Button variant="outline" size="sm" className="text-xs">Chiều<br />12:00 - 18:00</Button>
-                                            <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
-                                            <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    {/* Quick Filters */}
-                                    <div>
-                                        <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="refundable" />
-                                                <label htmlFor="refundable" className="text-sm cursor-pointer">
-                                                    Có hoàn hủy
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="changeable" />
-                                                <label htmlFor="changeable" className="text-sm cursor-pointer">
-                                                    Có thể đổi
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="baggage" />
-                                                <label htmlFor="baggage" className="text-sm cursor-pointer">
-                                                    Hành lý ký gửi
-                                                </label>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Checkbox id="wifi" />
-                                                <label htmlFor="wifi" className="text-sm cursor-pointer">
-                                                    Có WiFi
-                                                </label>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="changeable" />
+                                                    <label htmlFor="changeable" className="text-sm cursor-pointer">
+                                                        Có thể đổi
+                                                    </label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="baggage" />
+                                                    <label htmlFor="baggage" className="text-sm cursor-pointer">
+                                                        Hành lý ký gửi
+                                                    </label>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                    <Checkbox id="wifi" />
+                                                    <label htmlFor="wifi" className="text-sm cursor-pointer">
+                                                        Có WiFi
+                                                    </label>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                    </CardContent>
+                                </Card>
+                            )}
                         </div>
 
                         {/* Results */}
