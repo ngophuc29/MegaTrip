@@ -31,7 +31,10 @@ import {
     Timer,
     PlusCircle,
     Info,
+    Minus,
+    Plus,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Sample flight data - normally would come from API based on ID
 const flightDetails = {
@@ -93,7 +96,14 @@ const addOnServices = [
 ];
 
 export default function ChiTietVeMayBay() {
+    const router = useRouter();
     const { id } = useParams();
+    // Số lượng khách từng loại
+    const [participants, setParticipants] = useState({
+        adults: 1,
+        children: 0,
+        infants: 0,
+    });
     const [selectedFare, setSelectedFare] = useState('basic');
     const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
     const [passengerInfo, setPassengerInfo] = useState({
@@ -111,6 +121,8 @@ export default function ChiTietVeMayBay() {
         address: '',
     });
 
+    const totalParticipants = participants.adults + participants.children + participants.infants;
+
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -126,13 +138,24 @@ export default function ChiTietVeMayBay() {
         );
     };
 
+    // Hàm cập nhật số lượng khách
+    const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
+        setParticipants(prev => ({
+            ...prev,
+            [type]: Math.max(type === 'adults' ? 1 : 0, prev[type] + (increment ? 1 : -1))
+        }));
+    };
+    // Tính tổng tiền
     const calculateTotal = () => {
-        const farePrice = flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
+        const adultTotal = participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
+        // Giả sử trẻ em 75% giá vé, em bé 20% giá vé
+        const childTotal = participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
+        const infantTotal = participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
         const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
             const addOn = addOnServices.find(service => service.id === addOnId);
-            return total + (addOn?.price || 0);
+            return total + (addOn?.price || 0) * (participants.adults + participants.children + participants.infants);
         }, 0);
-        return farePrice + addOnTotal;
+        return adultTotal + childTotal + infantTotal + addOnTotal;
     };
 
     const getAmenityIcon = (amenity: string) => {
@@ -278,7 +301,7 @@ export default function ChiTietVeMayBay() {
                                     {Object.entries(flightDetails.fareRules).map(([key, fare]) => (
                                         <div
                                             key={key}
-                                            className={`border rounded-lg p-4 cursor-pointer transition-colors ${selectedFare === key ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'} `}
+                                            className={`border rounded-lg p-4 cursor-pointer transition-colors ${selectedFare === key ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'} ` }
                                             onClick={() => { setSelectedFare(key); console.log('Chọn hạng vé:', key); }}
                                         >
                                             <div className="flex items-center space-x-2 mb-3">
@@ -458,9 +481,88 @@ export default function ChiTietVeMayBay() {
                     <div className="lg:w-96">
                         <Card className="sticky top-20">
                             <CardHeader>
-                                <CardTitle>Tóm tắt đặt chỗ</CardTitle>
+                                <CardTitle>Đặt vé máy bay</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-4">
+                            <CardContent className="space-y-6">
+                                {/* Số lượng khách */}
+                                <div>
+                                    <Label className="text-base font-medium mb-3 block">Số lượng khách</Label>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Người lớn</div>
+                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('adults', false)}
+                                                    disabled={participants.adults <= 1}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.adults}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('adults', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Trẻ em</div>
+                                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('children', false)}
+                                                    disabled={participants.children <= 0}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.children}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('children', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Em bé</div>
+                                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('infants', false)}
+                                                    disabled={participants.infants <= 0}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.infants}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('infants', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Separator />
                                 {/* Flight Summary */}
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
@@ -472,35 +574,51 @@ export default function ChiTietVeMayBay() {
                                         {flightDetails.date} • {flightDetails.departure.time} - {flightDetails.arrival.time}
                                     </div>
                                 </div>
-
                                 <Separator />
-
                                 {/* Pricing Breakdown */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
-                                        <span>Vé {selectedFare === 'basic' ? 'Cơ bản' : selectedFare === 'standard' ? 'Tiêu chuẩn' : 'Linh hoạt'}</span>
-                                        <span>{formatPrice(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price)}</span>
+                                        <span>Người lớn ({participants.adults})</span>
+                                        <span>{formatPrice(participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price)}</span>
                                     </div>
-
-                                    {selectedAddOns.map(addOnId => {
-                                        const addOn = addOnServices.find(service => service.id === addOnId);
-                                        return addOn ? (
-                                            <div key={addOnId} className="flex justify-between text-sm">
-                                                <span>{addOn.name}</span>
-                                                <span>{formatPrice(addOn.price)}</span>
-                                            </div>
-                                        ) : null;
-                                    })}
-
+                                    {participants.children > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Trẻ em ({participants.children})</span>
+                                            <span>{formatPrice(participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))}</span>
+                                        </div>
+                                    )}
+                                    {participants.infants > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Em bé ({participants.infants})</span>
+                                            <span>{formatPrice(participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))}</span>
+                                        </div>
+                                    )}
+                                    {selectedAddOns.length > 0 && (
+                                        <div className="space-y-1">
+                                            {selectedAddOns.map(addOnId => {
+                                                const addOn = addOnServices.find(service => service.id === addOnId);
+                                                return addOn ? (
+                                                    <div key={addOnId} className="flex justify-between text-sm">
+                                                        <span>{addOn.name} ({totalParticipants})</span>
+                                                        <span>{formatPrice(addOn.price * totalParticipants)}</span>
+                                                    </div>
+                                                ) : null;
+                                            })}
+                                        </div>
+                                    )}
+                                    {flightDetails.originalPrice && (
+                                        <div className="flex justify-between text-sm text-muted-foreground">
+                                            <span>Giá gốc</span>
+                                            <span className="line-through">{formatPrice(flightDetails.originalPrice * totalParticipants)}</span>
+                                        </div>
+                                    )}
                                     <Separator />
-
                                     <div className="flex justify-between font-bold text-lg">
                                         <span>Tổng cộng</span>
                                         <span className="text-[hsl(var(--primary))]">{formatPrice(calculateTotal())}</span>
                                     </div>
-
                                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        Giá đã bao gồm thuế và phí
+                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
                                     </div>
                                 </div>
 
@@ -524,10 +642,36 @@ export default function ChiTietVeMayBay() {
 
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
-                                    <Button className="w-full" size="lg" asChild>
-                                        <Link prefetch={false} href="/thanh-toan">
-                                            Tiếp tục thanh toán
-                                        </Link>
+                                    <Button className="w-full" size="lg" onClick={() => {
+                                        // Tính toán giá trị booking
+                                        const basePrice = flightDetails.fareRules[selectedFare].price * participants.adults;
+                                        const taxes = 290000 * (participants.adults + participants.children + participants.infants); // demo
+                                        const addOns = selectedAddOns.reduce((total, addOnId) => {
+                                            const addOn = addOnServices.find(service => service.id === addOnId);
+                                            return total + (addOn?.price || 0) * (participants.adults + participants.children + participants.infants);
+                                        }, 0);
+                                        const discount = flightDetails.discount ? -Math.round(basePrice * flightDetails.discount / 100) : 0;
+                                        const total = basePrice + taxes + addOns + discount;
+                                        // Chuyển sang trang thanh toán với param
+                                        const params = new URLSearchParams({
+                                            type: 'flight',
+                                            route: `${flightDetails.departure.city} → ${flightDetails.arrival.city}`,
+                                            date: flightDetails.date,
+                                            time: `${flightDetails.departure.time} - ${flightDetails.arrival.time}`,
+                                            flightNumber: flightDetails.flightNumber,
+                                            airline: flightDetails.airline,
+                                            basePrice: basePrice.toString(),
+                                            taxes: taxes.toString(),
+                                            addOns: addOns.toString(),
+                                            discount: discount.toString(),
+                                            total: total.toString(),
+                                            adults: participants.adults.toString(),
+                                            children: participants.children.toString(),
+                                            infants: participants.infants.toString(),
+                                        });
+                                        router.push(`/thanh-toan?${params.toString()}`);
+                                    }}>
+                                        Tiếp tục thanh toán
                                     </Button>
                                     <Button variant="outline" className="w-full">
                                         <PlusCircle className="h-4 w-4 mr-2" />

@@ -29,7 +29,10 @@ import {
     Shield,
     Phone,
     Calendar,
+    Minus,
+    Plus,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Sample bus data
 const busDetails = {
@@ -88,7 +91,14 @@ const seatLayout = [
 ];
 
 export default function ChiTietXeDuLich() {
+    const router = useRouter();
     const { id } = useParams();
+    // Số lượng khách từng loại
+    const [participants, setParticipants] = useState({
+        adults: 1,
+        children: 0,
+        infants: 0,
+    });
     const [selectedPickup, setSelectedPickup] = useState(busDetails.pickup[0].location);
     const [selectedDropoff, setSelectedDropoff] = useState(busDetails.dropoff[0].location);
     const [selectedSeat, setSelectedSeat] = useState<string | null>('A2');
@@ -131,6 +141,25 @@ export default function ChiTietXeDuLich() {
             setSelectedSeat(seatId);
         }
     };
+
+    // Hàm cập nhật số lượng khách
+    const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
+        setParticipants(prev => ({
+            ...prev,
+            [type]: Math.max(type === 'adults' ? 1 : 0, prev[type] + (increment ? 1 : -1))
+        }));
+    };
+
+    // Tính tổng tiền
+    const calculateTotal = () => {
+        const adultTotal = participants.adults * busDetails.price;
+        // Giả sử trẻ em 75% giá vé, em bé 20% giá vé
+        const childTotal = participants.children * Math.round(busDetails.price * 0.75);
+        const infantTotal = participants.infants * Math.round(busDetails.price * 0.2);
+        return adultTotal + childTotal + infantTotal;
+    };
+
+    const totalParticipants = participants.adults + participants.children + participants.infants;
 
     return (
         <>
@@ -473,9 +502,88 @@ export default function ChiTietXeDuLich() {
                     <div className="lg:w-96">
                         <Card className="sticky top-20">
                             <CardHeader>
-                                <CardTitle>Tóm tắt đặt chỗ</CardTitle>
+                                <CardTitle>Đặt vé xe</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-4">
+                            <CardContent className="space-y-6">
+                                {/* Số lượng khách */}
+                                <div>
+                                    <Label className="text-base font-medium mb-3 block">Số lượng khách</Label>
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Người lớn</div>
+                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('adults', false)}
+                                                    disabled={participants.adults <= 1}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.adults}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('adults', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Trẻ em</div>
+                                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('children', false)}
+                                                    disabled={participants.children <= 0}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.children}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('children', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Em bé</div>
+                                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('infants', false)}
+                                                    disabled={participants.infants <= 0}
+                                                >
+                                                    <Minus className="h-4 w-4" />
+                                                </Button>
+                                                <span className="w-8 text-center">{participants.infants}</span>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => updateParticipantCount('infants', true)}
+                                                >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Separator />
                                 {/* Trip Summary */}
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
@@ -488,9 +596,7 @@ export default function ChiTietXeDuLich() {
                                         <div>{busDetails.type}</div>
                                     </div>
                                 </div>
-
                                 <Separator />
-
                                 {/* Selected Details */}
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
@@ -508,32 +614,38 @@ export default function ChiTietXeDuLich() {
                                         </div>
                                     )}
                                 </div>
-
                                 <Separator />
-
                                 {/* Pricing */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
-                                        <span>Giá vé</span>
-                                        <span>{formatPrice(busDetails.price)}</span>
+                                        <span>Người lớn ({participants.adults})</span>
+                                        <span>{formatPrice(participants.adults * busDetails.price)}</span>
                                     </div>
-
+                                    {participants.children > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Trẻ em ({participants.children})</span>
+                                            <span>{formatPrice(participants.children * Math.round(busDetails.price * 0.75))}</span>
+                                        </div>
+                                    )}
+                                    {participants.infants > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Em bé ({participants.infants})</span>
+                                            <span>{formatPrice(participants.infants * Math.round(busDetails.price * 0.2))}</span>
+                                        </div>
+                                    )}
                                     {busDetails.originalPrice && (
                                         <div className="flex justify-between text-sm text-muted-foreground">
                                             <span>Giá gốc</span>
-                                            <span className="line-through">{formatPrice(busDetails.originalPrice)}</span>
+                                            <span className="line-through">{formatPrice(busDetails.originalPrice * totalParticipants)}</span>
                                         </div>
                                     )}
-
                                     <Separator />
-
                                     <div className="flex justify-between font-bold text-lg">
                                         <span>Tổng cộng</span>
-                                        <span className="text-[hsl(var(--primary))]">{formatPrice(busDetails.price)}</span>
+                                        <span className="text-[hsl(var(--primary))]">{formatPrice(calculateTotal())}</span>
                                     </div>
-
                                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        Giá đã bao gồm thuế và phí
+                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
                                     </div>
                                 </div>
 
@@ -557,10 +669,29 @@ export default function ChiTietXeDuLich() {
 
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
-                                    <Button className="w-full" size="lg" asChild>
-                                        <Link prefetch={false}  href="/thanh-toan">
-                                            Tiếp tục thanh toán
-                                        </Link>
+                                    <Button className="w-full" size="lg" onClick={() => {
+                                        const basePrice = (participants.adults * busDetails.price) + (participants.children * Math.round(busDetails.price * 0.75)) + (participants.infants * Math.round(busDetails.price * 0.2));
+                                        const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
+                                        const addOns = 0; // xe chưa có dịch vụ thêm
+                                        const discount = busDetails.originalPrice ? basePrice - calculateTotal() : 0;
+                                        const total = basePrice + taxes + addOns - discount;
+                                        const params = new URLSearchParams({
+                                            type: 'bus',
+                                            route: busDetails.route,
+                                            date: busDetails.date,
+                                            time: `${busDetails.departure.time} - ${busDetails.arrival.time}`,
+                                            basePrice: basePrice.toString(),
+                                            taxes: taxes.toString(),
+                                            addOns: addOns.toString(),
+                                            discount: discount.toString(),
+                                            total: total.toString(),
+                                            adults: participants.adults.toString(),
+                                            children: participants.children.toString(),
+                                            infants: participants.infants.toString(),
+                                        });
+                                        router.push(`/thanh-toan?${params.toString()}`);
+                                    }}>
+                                        Tiếp tục thanh toán
                                     </Button>
                                     <Button variant="outline" className="w-full">
                                         <PlusCircle className="h-4 w-4 mr-2" />

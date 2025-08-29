@@ -49,6 +49,7 @@ import {
     MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useRouter } from 'next/navigation';
 
 // Sample tour data with enhanced information
 const tourDetails = {
@@ -236,6 +237,7 @@ const tourDetails = {
 };
 
 export default function ChiTietTour() {
+    const router = useRouter();
     const { id } = useParams();
     const [selectedDate, setSelectedDate] = useState<Date>();
     const [participants, setParticipants] = useState({
@@ -1084,10 +1086,31 @@ export default function ChiTietTour() {
 
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
-                                    <Button className="w-full" size="lg" asChild disabled={!selectedDate}>
-                                        <Link prefetch={false}  href="/thanh-toan">
-                                            Đặt tour ngay
-                                        </Link>
+                                    <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
+                                        if (!selectedDate) return;
+                                        const selectedDateInfo = getSelectedDateInfo();
+                                        const basePrice = (participants.adults * tourDetails.pricing.adult) + (participants.children * tourDetails.pricing.child) + (participants.infants * tourDetails.pricing.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
+                                        const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
+                                        const addOns = 0; // tour chưa có dịch vụ thêm
+                                        const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
+                                        const total = basePrice + taxes + addOns - discount;
+                                        const params = new URLSearchParams({
+                                            type: 'tour',
+                                            route: tourDetails.name,
+                                            date: selectedDateInfo?.date || '',
+                                            time: '',
+                                            basePrice: basePrice.toString(),
+                                            taxes: taxes.toString(),
+                                            addOns: addOns.toString(),
+                                            discount: discount.toString(),
+                                            total: total.toString(),
+                                            adults: participants.adults.toString(),
+                                            children: participants.children.toString(),
+                                            infants: participants.infants.toString(),
+                                        });
+                                        router.push(`/thanh-toan?${params.toString()}`);
+                                    }}>
+                                        Đặt tour ngay
                                     </Button>
                                     <Button variant="outline" className="w-full" disabled={!selectedDate}>
                                         <PlusCircle className="h-4 w-4 mr-2" />

@@ -1,7 +1,7 @@
 "use client"
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -31,27 +31,7 @@ import {
     MapPin,
 } from 'lucide-react';
 
-// Sample booking data - would normally come from context/state
-const bookingData = {
-    type: 'flight', // flight, bus, tour
-    details: {
-        flightNumber: 'VN1546',
-        route: 'TP.HCM → Hà Nội',
-        date: '15/01/2025',
-        time: '06:15 - 08:30',
-        airline: 'Vietnam Airlines',
-        passengers: 1,
-        class: 'Phổ thông',
-    },
-    pricing: {
-        basePrice: 1990000,
-        taxes: 290000,
-        addOns: 150000,
-        discount: -200000,
-        total: 2230000,
-    }
-};
-
+// Khai báo mảng phương thức thanh toán
 const paymentMethods = [
     {
         id: 'credit_card',
@@ -103,8 +83,115 @@ const paymentMethods = [
     },
 ];
 
+// Lấy bookingData từ localStorage nếu có
+const getBookingData = (searchParams: URLSearchParams) => {
+    // Ưu tiên lấy từ param
+    const type = searchParams.get('type');
+    if (type) {
+        // Tùy loại booking, lấy các param phù hợp
+        if (type === 'tour') {
+            return {
+                type: 'tour',
+                details: {
+                    route: searchParams.get('route') || '',
+                    date: searchParams.get('date') || '',
+                    time: searchParams.get('time') || '',
+                },
+                pricing: {
+                    basePrice: Number(searchParams.get('basePrice')) || 0,
+                    taxes: Number(searchParams.get('taxes')) || 0,
+                    addOns: Number(searchParams.get('addOns')) || 0,
+                    discount: Number(searchParams.get('discount')) || 0,
+                    total: Number(searchParams.get('total')) || 0,
+                }
+            };
+        }
+        if (type === 'bus') {
+            return {
+                type: 'bus',
+                details: {
+                    route: searchParams.get('route') || '',
+                    date: searchParams.get('date') || '',
+                    time: searchParams.get('time') || '',
+                },
+                pricing: {
+                    basePrice: Number(searchParams.get('basePrice')) || 0,
+                    taxes: Number(searchParams.get('taxes')) || 0,
+                    addOns: Number(searchParams.get('addOns')) || 0,
+                    discount: Number(searchParams.get('discount')) || 0,
+                    total: Number(searchParams.get('total')) || 0,
+                }
+            };
+        }
+        // ...các loại khác
+    }
+    // Nếu không có param thì lấy từ localStorage
+    if (typeof window !== 'undefined') {
+        const stored = window.localStorage.getItem('bookingData');
+        if (stored) {
+            try {
+                return JSON.parse(stored);
+            } catch {}
+        }
+    }
+    // Dữ liệu mẫu nếu chưa có
+    return {
+        type: 'flight',
+        details: {
+            flightNumber: 'VN1546',
+            route: 'TP.HCM → Hà Nội',
+            date: '15/01/2025',
+            time: '06:15 - 08:30',
+            airline: 'Vietnam Airlines',
+            passengers: 1,
+            class: 'Phổ thông',
+        },
+        pricing: {
+            basePrice: 1990000,
+            taxes: 290000,
+            addOns: 150000,
+            discount: -200000,
+            total: 2230000,
+        }
+    };
+};
+
+// Nhận số lượng khách từ param hoặc localStorage
+const getInitialPassengers = (searchParams: URLSearchParams) => {
+    let adults = 1, children = 0, infants = 0;
+    if (searchParams.get('adults')) adults = Number(searchParams.get('adults'));
+    if (searchParams.get('children')) children = Number(searchParams.get('children'));
+    if (searchParams.get('infants')) infants = Number(searchParams.get('infants'));
+    // Nếu không có param thì lấy từ localStorage
+    if (!searchParams.get('adults') && typeof window !== 'undefined') {
+        const stored = window.localStorage.getItem('participants');
+        if (stored) {
+            try {
+                const p = JSON.parse(stored);
+                adults = p.adults || adults;
+                children = p.children || children;
+                infants = p.infants || infants;
+            } catch {}
+        }
+    }
+    const arr = [];
+    for (let i = 0; i < adults; i++) {
+        arr.push({ type: 'adult', title: 'Mr', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+    }
+    for (let i = 0; i < children; i++) {
+        arr.push({ type: 'child', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+    }
+    for (let i = 0; i < infants; i++) {
+        arr.push({ type: 'infant', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+    }
+    return arr;
+};
+
 export default function ThanhToan() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const [bookingData, setBookingData] = useState(getBookingData(searchParams));
+    const [bookingType, setBookingType] = useState(bookingData.type);
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedPayment, setSelectedPayment] = useState('credit_card');
     const [needInvoice, setNeedInvoice] = useState(false);
@@ -116,15 +203,38 @@ export default function ThanhToan() {
         fullName: '',
     });
 
-    const [passengerInfo, setPassengerInfo] = useState({
-        title: 'Mr',
-        firstName: '',
-        lastName: '',
-        dateOfBirth: '',
-        nationality: 'VN',
-        idNumber: '',
-        idType: 'cccd',
-    });
+    // Nhận số lượng khách từ param hoặc localStorage
+    const getInitialPassengers = (searchParams: URLSearchParams) => {
+        let adults = 1, children = 0, infants = 0;
+        if (searchParams.get('adults')) adults = Number(searchParams.get('adults'));
+        if (searchParams.get('children')) children = Number(searchParams.get('children'));
+        if (searchParams.get('infants')) infants = Number(searchParams.get('infants'));
+        // Nếu không có param thì lấy từ localStorage
+        if (!searchParams.get('adults') && typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem('participants');
+            if (stored) {
+                try {
+                    const p = JSON.parse(stored);
+                    adults = p.adults || adults;
+                    children = p.children || children;
+                    infants = p.infants || infants;
+                } catch {}
+            }
+        }
+        const arr = [];
+        for (let i = 0; i < adults; i++) {
+            arr.push({ type: 'adult', title: 'Mr', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+        }
+        for (let i = 0; i < children; i++) {
+            arr.push({ type: 'child', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+        }
+        for (let i = 0; i < infants; i++) {
+            arr.push({ type: 'infant', firstName: '', lastName: '', dateOfBirth: '', nationality: 'VN', idNumber: '', idType: 'cccd' });
+        }
+        return arr;
+    };
+    // Danh sách hành khách
+    const [passengers, setPassengers] = useState(getInitialPassengers(searchParams));
 
     const [paymentInfo, setPaymentInfo] = useState({
         cardNumber: '',
@@ -164,7 +274,7 @@ export default function ThanhToan() {
         console.log('Processing payment...', {
             method: selectedPayment,
             contactInfo,
-            passengerInfo,
+            passengerInfo: passengers,
             paymentInfo,
             invoiceInfo: needInvoice ? invoiceInfo : null,
         });
@@ -186,6 +296,31 @@ export default function ThanhToan() {
         { number: 2, title: 'Thanh toán', description: 'Chọn phương thức thanh toán' },
         { number: 3, title: 'Xác nhận', description: 'Kiểm tra và hoàn tất đặt chỗ' },
     ];
+
+    // Thêm hành khách
+    const handleAddPassenger = (type: 'adult' | 'child' | 'infant') => {
+        setPassengers(prev => [
+            ...prev,
+            {
+                type,
+                title: type === 'adult' ? 'Mr' : '',
+                firstName: '',
+                lastName: '',
+                dateOfBirth: '',
+                nationality: 'VN',
+                idNumber: '',
+                idType: 'cccd',
+            }
+        ]);
+    };
+    // Xóa hành khách
+    const handleRemovePassenger = (index: number) => {
+        setPassengers(prev => prev.filter((_, i) => i !== index));
+    };
+    // Cập nhật thông tin hành khách
+    const handlePassengerChange = (index: number, field: string, value: any) => {
+        setPassengers(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
+    };
 
     return (
         <>
@@ -293,96 +428,102 @@ export default function ThanhToan() {
                                         </p>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <Label htmlFor="title">Danh xưng</Label>
-                                                <Select value={passengerInfo.title} onValueChange={(value) =>
-                                                    setPassengerInfo(prev => ({ ...prev, title: value }))
-                                                }>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Mr">Ông</SelectItem>
-                                                        <SelectItem value="Mrs">Bà</SelectItem>
-                                                        <SelectItem value="Ms">Cô</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
+                                        {/* Danh sách form hành khách */}
+                                        {passengers.map((p, idx) => (
+                                            <div key={idx} className="border rounded-lg p-4 mb-2 relative">
+                                                <div className="absolute top-2 right-2">
+                                                    {passengers.length > 1 && (
+                                                        <Button variant="ghost" size="sm" onClick={() => handleRemovePassenger(idx)}>
+                                                            Xóa
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <div className="mb-2">
+                                                    <Badge variant={p.type === 'adult' ? 'secondary' : p.type === 'child' ? 'outline' : 'destructive'}>
+                                                        {p.type === 'adult' ? 'Người lớn' : p.type === 'child' ? 'Trẻ em' : 'Em bé'}
+                                                    </Badge>
+                                                </div>
+                                                {p.type === 'adult' ? (
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                        <div>
+                                                            <Label>Danh xưng</Label>
+                                                            <Select value={p.title} onValueChange={value => handlePassengerChange(idx, 'title', value)}>
+                                                                <SelectTrigger>
+                                                                    <SelectValue />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="Mr">Ông</SelectItem>
+                                                                    <SelectItem value="Mrs">Bà</SelectItem>
+                                                                    <SelectItem value="Ms">Cô</SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div>
+                                                            <Label>Họ và tên đệm *</Label>
+                                                            <Input value={p.firstName} onChange={e => handlePassengerChange(idx, 'firstName', e.target.value)} placeholder="VD: NGUYEN VAN" />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Tên *</Label>
+                                                            <Input value={p.lastName} onChange={e => handlePassengerChange(idx, 'lastName', e.target.value)} placeholder="VD: AN" />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <Label>Họ và tên đệm *</Label>
+                                                            <Input value={p.firstName} onChange={e => handlePassengerChange(idx, 'firstName', e.target.value)} placeholder="VD: NGUYEN VAN" />
+                                                        </div>
+                                                        <div>
+                                                            <Label>Tên *</Label>
+                                                            <Input value={p.lastName} onChange={e => handlePassengerChange(idx, 'lastName', e.target.value)} placeholder="VD: AN" />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                                    <div>
+                                                        <Label>Ngày sinh *</Label>
+                                                        <Input type="date" value={p.dateOfBirth} onChange={e => handlePassengerChange(idx, 'dateOfBirth', e.target.value)} />
+                                                    </div>
+                                                    <div>
+                                                        <Label>Quốc tịch</Label>
+                                                        <Select value={p.nationality} onValueChange={value => handlePassengerChange(idx, 'nationality', value)}>
+                                                            <SelectTrigger>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="VN">Việt Nam</SelectItem>
+                                                                <SelectItem value="US">Hoa Kỳ</SelectItem>
+                                                                <SelectItem value="GB">Anh</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                                    <div>
+                                                        <Label>Loại giấy tờ</Label>
+                                                        <Select value={p.idType} onValueChange={value => handlePassengerChange(idx, 'idType', value)}>
+                                                            <SelectTrigger>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="cccd">CCCD</SelectItem>
+                                                                <SelectItem value="cmnd">CMND</SelectItem>
+                                                                <SelectItem value="passport">Hộ chiếu</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div>
+                                                        <Label>Số giấy tờ *</Label>
+                                                        <Input value={p.idNumber} onChange={e => handlePassengerChange(idx, 'idNumber', e.target.value)} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <Label htmlFor="firstName">Họ và tên đệm *</Label>
-                                                <Input
-                                                    id="firstName"
-                                                    value={passengerInfo.firstName}
-                                                    onChange={(e) => setPassengerInfo(prev => ({ ...prev, firstName: e.target.value }))}
-                                                    placeholder="VD: NGUYEN VAN"
-                                                />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="lastName">Tên *</Label>
-                                                <Input
-                                                    id="lastName"
-                                                    value={passengerInfo.lastName}
-                                                    onChange={(e) => setPassengerInfo(prev => ({ ...prev, lastName: e.target.value }))}
-                                                    placeholder="VD: AN"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <Label htmlFor="dateOfBirth">Ngày sinh *</Label>
-                                                <Input
-                                                    className="block h-12 bg-white shadow-md text-black w-full"
-
-                                                    id="dateOfBirth"
-                                                    type="date"
-                                                    value={passengerInfo.dateOfBirth}
-                                                    onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                                                />
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="nationality">Quốc tịch</Label>
-                                                <Select value={passengerInfo.nationality} onValueChange={(value) =>
-                                                    setPassengerInfo(prev => ({ ...prev, nationality: value }))
-                                                }>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="VN">Việt Nam</SelectItem>
-                                                        <SelectItem value="US">Hoa Kỳ</SelectItem>
-                                                        <SelectItem value="GB">Anh</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <Label htmlFor="idType">Loại giấy tờ</Label>
-                                                <Select value={passengerInfo.idType} onValueChange={(value) =>
-                                                    setPassengerInfo(prev => ({ ...prev, idType: value }))
-                                                }>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="cccd">CCCD</SelectItem>
-                                                        <SelectItem value="cmnd">CMND</SelectItem>
-                                                        <SelectItem value="passport">Hộ chiếu</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="idNumber">Số giấy tờ *</Label>
-                                                <Input
-                                                    id="idNumber"
-                                                    value={passengerInfo.idNumber}
-                                                    onChange={(e) => setPassengerInfo(prev => ({ ...prev, idNumber: e.target.value }))}
-                                                    placeholder="Nhập số CCCD/CMND/Hộ chiếu"
-                                                />
-                                            </div>
+                                        ))}
+                                        {/* Nút thêm hành khách */}
+                                        <div className="flex gap-2 mt-2">
+                                            <Button variant="outline" size="sm" onClick={() => handleAddPassenger('adult')}>+ Người lớn</Button>
+                                            <Button variant="outline" size="sm" onClick={() => handleAddPassenger('child')}>+ Trẻ em</Button>
+                                            <Button variant="outline" size="sm" onClick={() => handleAddPassenger('infant')}>+ Em bé</Button>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -496,7 +637,7 @@ export default function ThanhToan() {
                                             <Checkbox
                                                 id="needInvoice"
                                                 checked={needInvoice}
-                                                onCheckedChange={setNeedInvoice}
+                                                onCheckedChange={checked => setNeedInvoice(!!checked)}
                                             />
                                             <div className="flex-1">
                                                 <Label htmlFor="needInvoice" className="font-medium cursor-pointer">
@@ -585,9 +726,13 @@ export default function ThanhToan() {
                                         <div>
                                             <h4 className="font-medium mb-2">Thông tin hành khách</h4>
                                             <div className="text-sm text-muted-foreground space-y-1">
-                                                <div>Tên: {passengerInfo.title} {passengerInfo.firstName} {passengerInfo.lastName}</div>
-                                                <div>Ngày sinh: {passengerInfo.dateOfBirth}</div>
-                                                <div>Giấy tờ: {passengerInfo.idType.toUpperCase()} - {passengerInfo.idNumber}</div>
+                                                {passengers.map((p, idx) => (
+                                                    <div key={idx}>
+                                                        <div>Tên: {p.title} {p.firstName} {p.lastName}</div>
+                                                        <div>Ngày sinh: {p.dateOfBirth}</div>
+                                                        <div>Giấy tờ: {p.idType.toUpperCase()} - {p.idNumber}</div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -609,7 +754,7 @@ export default function ThanhToan() {
                                                 <Checkbox
                                                     id="agreeTerms"
                                                     checked={agreeTerms}
-                                                    onCheckedChange={setAgreeTerms}
+                                                    onCheckedChange={checked => setAgreeTerms(!!checked)}
                                                 />
                                                 <div className="flex-1">
                                                     <Label htmlFor="agreeTerms" className="text-sm cursor-pointer">
@@ -680,38 +825,90 @@ export default function ThanhToan() {
                                 <CardTitle>Tóm tắt đơn hàng</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                {/* Booking Details */}
-                                <div>
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Plane className="h-4 w-4 text-primary" />
-                                        <span className="font-medium">Vé máy bay</span>
+                                {/* Booking Details - Hiển thị theo loại booking */}
+                                {bookingType === 'flight' && (
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Plane className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">Vé máy bay</span>
+                                        </div>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            <div className="flex justify-between">
+                                                <span>Chuyến bay:</span>
+                                                <span>{bookingData.details.flightNumber}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Tuyến:</span>
+                                                <span>{bookingData.details.route}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày bay:</span>
+                                                <span>{bookingData.details.date}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Giờ bay:</span>
+                                                <span>{bookingData.details.time}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Hành khách:</span>
+                                                <span>{passengers.length} người</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="text-sm text-muted-foreground space-y-1">
-                                        <div className="flex justify-between">
-                                            <span>Chuyến bay:</span>
-                                            <span>{bookingData.details.flightNumber}</span>
+                                )}
+                                {bookingType === 'bus' && (
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Users className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">Vé xe du lịch</span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span>Tuyến:</span>
-                                            <span>{bookingData.details.route}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Ngày bay:</span>
-                                            <span>{bookingData.details.date}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Giờ bay:</span>
-                                            <span>{bookingData.details.time}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Hành khách:</span>
-                                            <span>{bookingData.details.passengers} người</span>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            <div className="flex justify-between">
+                                                <span>Tuyến xe:</span>
+                                                <span>{bookingData.details.route || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày đi:</span>
+                                                <span>{bookingData.details.date || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Giờ xuất phát:</span>
+                                                <span>{bookingData.details.time || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Hành khách:</span>
+                                                <span>{passengers.length} người</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-
+                                )}
+                                {bookingType === 'tour' && (
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <MapPin className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">Đặt tour</span>
+                                        </div>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            <div className="flex justify-between">
+                                                <span>Tên tour:</span>
+                                                <span>{bookingData.details.route || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày khởi hành:</span>
+                                                <span>{bookingData.details.date || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Giờ khởi hành:</span>
+                                                <span>{bookingData.details.time || '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Hành khách:</span>
+                                                <span>{passengers.length} người</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <Separator />
-
                                 {/* Pricing Breakdown */}
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
@@ -730,17 +927,13 @@ export default function ThanhToan() {
                                         <span>Giảm giá</span>
                                         <span>{formatPrice(bookingData.pricing.discount)}</span>
                                     </div>
-
                                     <Separator />
-
                                     <div className="flex justify-between font-bold text-lg">
                                         <span>Tổng cộng</span>
                                         <span className="text-primary">{formatPrice(bookingData.pricing.total)}</span>
                                     </div>
                                 </div>
-
                                 <Separator />
-
                                 {/* Security Info */}
                                 <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-sm">
@@ -756,7 +949,6 @@ export default function ThanhToan() {
                                         <span>Vé điện tử</span>
                                     </div>
                                 </div>
-
                                 {/* Support Info */}
                                 <div className="pt-4 border-t text-center">
                                     <div className="text-sm font-medium mb-1">Cần hỗ trợ?</div>
