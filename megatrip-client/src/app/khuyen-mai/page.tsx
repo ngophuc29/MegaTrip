@@ -231,7 +231,7 @@ export default function KhuyenMai() {
             <section className="bg-gradient-to-br from-red-50 to-orange-50 py-12">
                 <div className="container">
                     <div className="text-center mb-8">
-                        <h1 className="text-3xl lg:text-4xl font-bold text-red-600 mb-4">
+                        <h1 className="text-3xl lg:text-4xl font-bold mb-4" style={{ color: 'hsl(var(--destructive))' }}>
                             🔥 Khuyến mãi Hot - Ưu đãi khủng! 🔥
                         </h1>
                         <p className="text-lg text-muted-foreground">
@@ -253,7 +253,7 @@ export default function KhuyenMai() {
                                             <div className="text-sm">{promo.subtitle}</div>
                                         </div>
                                     </div>
-                                    <Badge className="absolute top-2 right-2 bg-red-500">
+                                    <Badge className="absolute top-2 right-2" style={{ background: 'hsl(var(--destructive))', color: 'hsl(var(--destructive-foreground))' }}>
                                         -{promo.discount}
                                     </Badge>
                                 </div>
@@ -326,7 +326,7 @@ export default function KhuyenMai() {
                                     {isExpiringSoon && (
                                         <Badge variant="destructive" className="absolute -top-2 left-4 z-10">
                                             <Clock className="h-3 w-3 mr-1" />
-                                            Còn {daysLeft} ngày
+                                            <span className='text-white' >Còn {daysLeft} ngày</span>
                                         </Badge>
                                     )}
 
@@ -337,7 +337,7 @@ export default function KhuyenMai() {
                                                 <p className="text-sm text-muted-foreground">{voucher.description}</p>
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-2xl font-bold text-red-600">
+                                                <div className="text-2xl font-bold" style={{ color: 'hsl(var(--destructive))' }}>
                                                     {voucher.type === 'percent' ? `-${voucher.discount}` : `-${voucher.discount}`}
                                                 </div>
                                             </div>
@@ -381,10 +381,10 @@ export default function KhuyenMai() {
                                                 <span className="text-muted-foreground">Đã sử dụng</span>
                                                 <span className="font-medium">{voucher.usageCount}/{voucher.usageLimit}</span>
                                             </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className="w-full rounded-full h-2" style={{ background: 'hsl(var(--muted))' }}>
                                                 <div
-                                                    className="bg-primary h-2 rounded-full transition-all"
-                                                    style={{ width: `${Math.min(usagePercent, 100)}%` }}
+                                                    className="h-2 rounded-full transition-all"
+                                                    style={{ width: `${Math.min(usagePercent, 100)}%`, background: 'hsl(var(--primary))' }}
                                                 ></div>
                                             </div>
                                         </div>
@@ -403,17 +403,17 @@ export default function KhuyenMai() {
                                             )}
                                             <div className="flex items-center justify-between">
                                                 <span>Hết hạn:</span>
-                                                <span className={`font-medium ${isExpiringSoon ? 'text-orange-600' : ''}`}>
+                                                <span className={`font-medium ${isExpiringSoon ? '' : ''}`} style={isExpiringSoon ? { color: 'hsl(var(--warning))' } : {}}>
                                                     {voucher.validTo}
                                                 </span>
                                             </div>
                                         </div>
 
                                         {/* Terms */}
-                                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                                        <div className="mt-4 p-3 rounded-lg" style={{ background: 'hsl(var(--info-foreground))' }}>
                                             <div className="flex items-start gap-2">
-                                                <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
-                                                <p className="text-xs text-blue-800">{voucher.terms}</p>
+                                                <AlertCircle className="h-4 w-4" style={{ color: 'hsl(var(--info))' }} />
+                                                <p className="text-xs" style={{ color: 'hsl(var(--info))' }}>{voucher.terms}</p>
                                             </div>
                                         </div>
 

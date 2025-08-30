@@ -44,7 +44,7 @@ export default function Header() {
       <div className="container">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link prefetch={false}  href="/" className="flex items-center space-x-2">
+          <Link href="/" className="flex items-center space-x-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--primary))]">
               <Plane className="h-5 w-5 text-[hsl(var(--primary-foreground))]" />
             </div>
@@ -56,7 +56,7 @@ export default function Header() {
             <NavigationMenuList className="flex space-x-6">
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -66,7 +66,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/ve-may-bay"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -77,7 +77,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/xe-du-lich"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -88,7 +88,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/tour"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -99,7 +99,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/khuyen-mai"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -110,7 +110,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/tin-tuc"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -121,7 +121,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/ho-tro"
                     className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
                   >
@@ -159,7 +159,7 @@ export default function Header() {
 
             {/* Cart */}
             <Button variant="ghost" size="sm" asChild>
-              <Link prefetch={false}  href="/gio-hang">
+              <Link href="/gio-hang">
                 <ShoppingCart className="h-5 w-5" />
                 <span className="sr-only">Giỏ hàng</span>
               </Link>
@@ -181,10 +181,10 @@ export default function Header() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <Link prefetch={false}  href="/dang-nhap">Đăng nhập</Link>
+                  <Link href="/dang-nhap">Đăng nhập</Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link prefetch={false}  href="/dang-ky">Đăng ký</Link>
+                  <Link href="/dang-ky">Đăng ký</Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -202,48 +202,48 @@ export default function Header() {
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col space-y-4 mt-4">
-                  <Link prefetch={false} 
+                  <Link 
                     href="/"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <span>Trang chủ</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/ve-may-bay"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <Plane className="h-4 w-4" />
                     <span>Vé máy bay</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/xe-du-lich"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <Bus className="h-4 w-4" />
                     <span>Xe du lịch</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/tour"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <Map className="h-4 w-4" />
                     <span>Tour</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/khuyen-mai"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <Percent className="h-4 w-4" />
                     <span>Khuyến mãi</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/tin-tuc"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
                     <Newspaper className="h-4 w-4" />
                     <span>Tin tức</span>
                   </Link>
-                  <Link prefetch={false} 
+                  <Link 
                     href="/ho-tro"
                     className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
                   >
