@@ -20,14 +20,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(timer);
   }, [pathname]);
 
+  const hideLayout = pathname === '/dang-nhap' || pathname === '/dang-ky';
+
   return (
     <html lang="vi">
       <body>
-        <div className="min-h-screen flex flex-col">
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </div>
+        {hideLayout ? (
+          <main className="min-h-screen">{children}</main>
+        ) : (
+          <div className="min-h-screen flex flex-col">
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </div>
+        )}
       </body>
     </html>
   );
