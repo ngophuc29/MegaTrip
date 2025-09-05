@@ -269,7 +269,7 @@ export default function ThanhToan() {
         }
     };
 
-    const handlePayment = () => {
+    const handlePayment = async () => {
         // Handle payment processing
         console.log('Processing payment...', {
             method: selectedPayment,
@@ -278,6 +278,82 @@ export default function ThanhToan() {
             paymentInfo,
             invoiceInfo: needInvoice ? invoiceInfo : null,
         });
+
+        // inside handlePayment()
+        if (selectedPayment === 'vnpay') {
+            try {
+                const resp = await fetch('http://localhost:3002/api/create_payment_url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        amount: (bookingData.pricing?.total || 50000),
+                        orderInfo: bookingData.details?.flightNumber || 'Thanh toan MegaTrip',
+                        ip: '127.0.0.1',
+                        returnUrl: 'http://localhost:3002/api/check-payment-vnpay',
+                    }),
+                });
+
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    console.error('VNPay create-qr failed:', resp.status, text);
+                    alert('Không thể tạo thanh toán VNPay. (server trả lỗi)');
+                    return;
+                }
+
+                // try parse JSON, fallback to text
+                let data;
+                const ct = resp.headers.get('content-type') || '';
+                if (ct.includes('application/json')) {
+                    data = await resp.json();
+                } else {
+                    data = await resp.text();
+                }
+                console.log('VNPay response raw:', data);
+
+                // data có thể là:
+                // - một string url trực tiếp
+                // - 1 object { paymentUrl: '...' } hoặc { data: '...' }
+                const url =
+                    (typeof data === 'string' && data) ||
+                    (data && (data.paymentUrl || data.data || data.url));
+
+                if (url) {
+                    window.location.href = url;
+                    return;
+                }
+                alert('Không thể tạo thanh toán VNPay. (data không hợp lệ)');
+            } catch (err) {
+                console.error('Lỗi khi kết nối VNPay:', err);
+                alert('Lỗi khi kết nối VNPay: ' + (err?.message || err));
+            }
+            return;
+        }
+
+        if (selectedPayment === 'zalopay') {
+            try {
+                const resp = await fetch('http://localhost:8888/payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        amount: bookingData.pricing?.total || 50000,
+                        orderInfo: bookingData.details?.flightNumber || 'Thanh toan MegaTrip',
+                        // các trường khác nếu cần
+                    }),
+                });
+                const data = await resp.json();
+                if (data && data.return_code === 1 && data.order_url) {
+                    window.location.href = data.order_url;
+                    return;
+                } else {
+                    alert('Không thể tạo thanh toán ZaloPay: ' + (data?.return_message || 'Lỗi không xác định'));
+                }
+            } catch (err) {
+                console.error('Lỗi khi kết nối ZaloPay:', err);
+                alert('Lỗi khi kết nối ZaloPay: ' + (err?.message || err));
+            }
+            return;
+        }
+
 
         // Simulate payment processing
         setTimeout(() => {

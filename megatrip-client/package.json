@@ -66,6 +66,7 @@
     "tailwind-merge": "^3.3.1",
     "three": "^0.179.1",
     "vaul": "^1.1.2",
+    "vnpay": "^2.4.1",
     "zod": "^4.0.17"
   },
   "devDependencies": {
