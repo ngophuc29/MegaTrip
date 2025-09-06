@@ -282,14 +282,14 @@ export default function ThanhToan() {
         // inside handlePayment()
         if (selectedPayment === 'vnpay') {
             try {
-                const resp = await fetch('http://localhost:3002/api/create_payment_url', {
+                const resp = await fetch('http://localhost:7000/vnpay/create_payment_url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         amount: (bookingData.pricing?.total || 50000),
                         orderInfo: bookingData.details?.flightNumber || 'Thanh toan MegaTrip',
                         ip: '127.0.0.1',
-                        returnUrl: 'http://localhost:3002/api/check-payment-vnpay',
+                        returnUrl: 'http://localhost:7000/vnpay/check-payment',
                     }),
                 });
 
@@ -331,7 +331,7 @@ export default function ThanhToan() {
 
         if (selectedPayment === 'zalopay') {
             try {
-                const resp = await fetch('http://localhost:8888/payment', {
+                const resp = await fetch('http://localhost:7000/zalo/payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -356,7 +356,7 @@ export default function ThanhToan() {
 
         if (selectedPayment === 'momo') {
             try {
-                const resp = await fetch('http://localhost:5000/payment', {
+                const resp = await fetch('http://localhost:7000/momo/payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
