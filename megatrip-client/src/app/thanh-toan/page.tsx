@@ -354,6 +354,29 @@ export default function ThanhToan() {
             return;
         }
 
+        if (selectedPayment === 'momo') {
+            try {
+                const resp = await fetch('http://localhost:5000/payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        // amount, orderInfo... nếu backend MoMo cần truyền từ client
+                        // ở đây backend đang lấy sẵn từ config, nếu muốn truyền động thì sửa backend
+                    }),
+                });
+                const data = await resp.json();
+                if (data && data.resultCode === 0 && (data.payUrl || data.shortLink)) {
+                    window.location.href = data.payUrl || data.shortLink;
+                    return;
+                } else {
+                    alert('Không thể tạo thanh toán MoMo: ' + (data?.message || 'Lỗi không xác định'));
+                }
+            } catch (err) {
+                console.error('Lỗi khi kết nối MoMo:', err);
+                alert('Lỗi khi kết nối MoMo: ' + (err?.message || err));
+            }
+            return;
+        }
 
         // Simulate payment processing
         setTimeout(() => {

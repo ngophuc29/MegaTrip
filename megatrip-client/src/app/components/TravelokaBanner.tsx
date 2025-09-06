@@ -301,10 +301,10 @@ export default function TravelokaBanner() {
                       <label className="block text-sm font-semibold text-white mb-1">Từ</label>
                       <Select value={fromProvince} onValueChange={setFromProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="" />
+                          <SelectValue placeholder="Chọn điểm đi" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code !== toProvince).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -323,10 +323,10 @@ export default function TravelokaBanner() {
                       <label className="block text-sm font-semibold text-white mb-1">Đến</label>
                       <Select value={toProvince} onValueChange={setToProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="" />
+                          <SelectValue placeholder="Chọn điểm đến" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code !== fromProvince).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -496,7 +496,7 @@ export default function TravelokaBanner() {
                           <SelectValue placeholder="Chọn điểm đi" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code.toString() !== busTo).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -510,7 +510,7 @@ export default function TravelokaBanner() {
                           <SelectValue placeholder="Chọn điểm đến" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code.toString() !== busFrom).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -546,7 +546,7 @@ export default function TravelokaBanner() {
                           <SelectValue placeholder="Chọn điểm khởi hành" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code.toString() !== tourTo).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -560,7 +560,7 @@ export default function TravelokaBanner() {
                           <SelectValue placeholder="Chọn điểm đến" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.map((prov) => (
+                          {provinces.filter(prov => prov.code.toString() !== tourFrom).map((prov) => (
                             <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                           ))}
                         </SelectContent>

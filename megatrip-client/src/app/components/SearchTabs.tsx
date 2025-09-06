@@ -203,7 +203,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Thành phố hoặc sân bay" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== flightTo).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -218,7 +218,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Thành phố hoặc sân bay" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== flightFrom).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -387,7 +387,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Tỉnh/Thành phố hoặc bến xe" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== busTo).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -400,7 +400,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Tỉnh/Thành phố hoặc bến xe" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== busFrom).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -436,7 +436,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Chọn điểm khởi hành" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== tourTo).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -449,7 +449,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                       <SelectValue placeholder="Điểm đến mong muốn" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.map((prov) => (
+                      {provinces.filter(prov => prov.code.toString() !== tourFrom).map((prov) => (
                         <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
                       ))}
                     </SelectContent>
