@@ -1,5 +1,5 @@
 "use client"
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -18,6 +18,7 @@ import {
     Home,
     List,
 } from 'lucide-react';
+import VeDienTu from '../components/VeDienTu';
 
 // Sample booking confirmation data
 const bookingConfirmation = {
@@ -48,6 +49,53 @@ const bookingConfirmation = {
 };
 
 export default function ThanhToanThanhCong() {
+    // Lấy dữ liệu booking từ localStorage (ưu tiên) hoặc fallback mẫu
+    const [booking, setBooking] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const stored = window.localStorage.getItem('bookingData');
+            const storedPassengers = window.localStorage.getItem('participants');
+            try {
+                const bookingData = stored ? JSON.parse(stored) : null;
+                const passengers = storedPassengers ? JSON.parse(storedPassengers) : [];
+                if (bookingData) {
+                    return {
+                        bookingType: bookingData.type,
+                        bookingData,
+                        passengers: passengers.length ? passengers : [{
+                            title: '',
+                            firstName: bookingConfirmation.passenger.name,
+                            lastName: '',
+                            gender: '',
+                            dateOfBirth: '',
+                            phone: bookingConfirmation.contact.phone,
+                            idNumber: bookingConfirmation.passenger.idNumber,
+                            idType: 'cccd',
+                        }],
+                    };
+                }
+            } catch {}
+        }
+        // fallback mẫu flight
+        return {
+            bookingType: 'flight',
+            bookingData: {
+                type: 'flight',
+                details: bookingConfirmation.flightDetails,
+                pricing: bookingConfirmation.pricing
+            },
+            passengers: [{
+                title: '',
+                firstName: bookingConfirmation.passenger.name,
+                lastName: '',
+                gender: '',
+                dateOfBirth: '',
+                phone: bookingConfirmation.contact.phone,
+                idNumber: bookingConfirmation.passenger.idNumber,
+                idType: 'cccd',
+            }],
+        };
+    });
+
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -78,142 +126,18 @@ export default function ThanhToanThanhCong() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Main Booking Details */}
+                        {/* Main: chỉ hiển thị vé điện tử */}
                         <div className="lg:col-span-2 space-y-6">
-                            {/* Booking Information */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <FileText className="h-5 w-5" />
-                                        Thông tin đặt chỗ
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div>
-                                            <div className="text-sm text-muted-foreground">Mã đặt chỗ</div>
-                                            <div className="text-xl font-bold text-primary">
-                                                {bookingConfirmation.bookingCode}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-sm text-muted-foreground">Trạng thái</div>
-                                            <div className="flex items-center gap-2">
-                                                <CheckCircle className="h-4 w-4 text-green-500" />
-                                                <span className="font-medium text-green-600">Đã xác nhận</span>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div className="text-sm text-muted-foreground">Ngày đặt</div>
-                                            <div className="font-medium">{bookingConfirmation.bookingDate}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-sm text-muted-foreground">Phương thức thanh toán</div>
-                                            <div className="font-medium">{bookingConfirmation.paymentMethod}</div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Flight Details */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Plane className="h-5 w-5" />
-                                        Chi tiết chuyến bay
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold">06:15</div>
-                                            <div className="text-sm text-muted-foreground">TP.HCM (SGN)</div>
-                                            <div className="text-xs text-muted-foreground">15/01/2025</div>
-                                        </div>
-                                        <div className="flex flex-col items-center justify-center">
-                                            <div className="text-sm text-muted-foreground mb-2">2h 15m</div>
-                                            <div className="w-full h-px bg-gray-300 relative">
-                                                <Plane className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-4 w-4 text-primary bg-white" />
-                                            </div>
-                                            <div className="text-xs text-muted-foreground mt-2">VN1546</div>
-                                        </div>
-                                        <div className="text-center">
-                                            <div className="text-2xl font-bold">08:30</div>
-                                            <div className="text-sm text-muted-foreground">Hà Nội (HAN)</div>
-                                            <div className="text-xs text-muted-foreground">15/01/2025</div>
-                                        </div>
-                                    </div>
-
-                                    <Separator />
-
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                                        <div>
-                                            <div className="text-muted-foreground">Hãng hàng không</div>
-                                            <div className="font-medium">{bookingConfirmation.flightDetails.airline}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-muted-foreground">Hạng vé</div>
-                                            <div className="font-medium">{bookingConfirmation.flightDetails.class}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-muted-foreground">Hành khách</div>
-                                            <div className="font-medium">{bookingConfirmation.passenger.name}</div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Passenger Information */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <Users className="h-5 w-5" />
-                                        Thông tin hành khách
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Họ và tên:</span>
-                                            <span className="font-medium">{bookingConfirmation.passenger.name}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Giấy tờ tùy thân:</span>
-                                            <span className="font-medium">{bookingConfirmation.passenger.idNumber}</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            {/* Payment Information */}
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle className="flex items-center gap-2">
-                                        <CreditCard className="h-5 w-5" />
-                                        Thông tin thanh toán
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Phương thức:</span>
-                                            <span className="font-medium">{bookingConfirmation.paymentMethod}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Mã giao dịch:</span>
-                                            <span className="font-medium">{bookingConfirmation.transactionId}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-muted-foreground">Tổng tiền:</span>
-                                            <span className="text-xl font-bold text-primary">
-                                                {formatPrice(bookingConfirmation.pricing.total)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            <VeDienTu
+                                bookingType={booking.bookingType}
+                                bookingData={booking.bookingData}
+                                passengers={booking.passengers}
+                                countdown={undefined}
+                                expired={false}
+                                bookingCode={bookingConfirmation.bookingCode}
+                                status="Đã thanh toán"
+                            />
                         </div>
-
                         {/* Sidebar - Actions */}
                         <div className="space-y-6">
                             {/* Download E-ticket */}

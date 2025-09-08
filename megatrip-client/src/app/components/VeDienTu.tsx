@@ -1,0 +1,194 @@
+import {
+    CreditCard,
+    CheckCircle,
+    FileText,
+    Plane,
+    Users,
+    Smartphone,
+    Shield,
+    MapPin,
+    Briefcase,
+    Clock,
+    Badge
+} from 'lucide-react';
+
+// Vé điện tử component
+export default function VeDienTu({ bookingType, bookingData, passengers, countdown, expired, bookingCode, status }: any) {
+    const flightBenefits = [
+        { label: 'Quyền sử dụng phòng chờ', icon: <Users className="h-4 w-4 text-blue-600" /> },
+        { label: 'Lên máy bay ưu tiên', icon: <CheckCircle className="h-4 w-4 text-blue-600" /> },
+        { label: 'Bữa ăn cao cấp', icon: <FileText className="h-4 w-4 text-blue-600" /> },
+    ];
+    const flightBaggage = [
+        { label: 'Hành lý ký gửi', value: '40kg' },
+        { label: 'Hành lý xách tay', value: '12kg' },
+    ];
+    const busBenefits = [
+        { label: 'Nước uống miễn phí', icon: <CheckCircle className="h-4 w-4 text-green-600" /> },
+        { label: 'Wifi trên xe', icon: <Smartphone className="h-4 w-4 text-green-600" /> },
+        { label: 'Ghế ngả', icon: <Users className="h-4 w-4 text-green-600" /> },
+    ];
+    const tourBenefits = [
+        { label: 'Hướng dẫn viên chuyên nghiệp', icon: <Users className="h-4 w-4 text-purple-600" /> },
+        { label: 'Bảo hiểm du lịch', icon: <Shield className="h-4 w-4 text-purple-600" /> },
+        { label: 'Vé tham quan', icon: <FileText className="h-4 w-4 text-purple-600" /> },
+    ];
+    function getFlightCode() {
+        if (bookingData.details.flightCode) return bookingData.details.flightCode;
+        if (bookingData.details.airline) {
+            const prefix = bookingData.details.airline.replace(/\s/g, '');
+            return prefix + Math.floor(100 + Math.random() * 900);
+        }
+        return 'VN' + Math.floor(100 + Math.random() * 900);
+    }
+    function getArrival() {
+        return '09:30 Th 6, 06/06/2025';
+    }
+    return (
+        <div className="bg-white rounded-2xl shadow-lg border relative overflow-hidden max-w-3xl mx-auto mb-8">
+            {/* Header vé */}
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between px-8 pt-6 pb-2 border-b bg-gradient-to-r from-blue-50 to-white relative">
+                <div className="flex-1 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 text-xl font-bold text-blue-700">
+                        <CreditCard className="h-6 w-6 text-blue-500" /> Vé Điện Tử
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-gray-700 font-medium">Mã đặt chỗ:</span>
+                        <span className="font-bold text-primary text-lg">{bookingCode}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                        <span className="text-gray-500 text-sm">Trạng thái:</span>
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${status === 'Hết hạn' ? 'bg-red-100 text-red-600' : status === 'Đã thanh toán' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{status}</span>
+                    </div>
+                </div>
+                <div className="flex flex-col items-center gap-2 mt-4 md:mt-0 min-w-[140px]">
+                    <div className="bg-white border rounded-lg px-4 py-2 flex flex-col items-center shadow-sm">
+                        <div className="text-xs text-gray-400 mb-1">MÃ ĐẶT CHỖ</div>
+                        <div className="font-mono text-2xl tracking-widest text-black">{bookingCode}</div>
+                        <div className="mt-1"><span className="block w-24 h-6 bg-[repeating-linear-gradient(90deg,#222_0_2px,transparent_2px_6px)] rounded-sm"></span></div>
+                    </div>
+                    {countdown !== undefined && status === 'Giữ chỗ' && (
+                        <div className="text-xs text-red-500 font-semibold mt-2 flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            Còn {Math.floor(countdown/60).toString().padStart(2,'0')}:{(countdown%60).toString().padStart(2,'0')}
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* Body vé */}
+            <div className="p-6 bg-white grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Box Thông tin chuyến/tour/xe */}
+                <div className="space-y-4">
+                    {bookingType === 'flight' && (
+                        <div className="rounded-xl border bg-blue-50 p-4">
+                            <div className="flex items-center gap-2 mb-3 text-blue-700 font-semibold text-base">
+                                <Plane className="h-5 w-5" /> Thông Tin Chuyến Bay
+                            </div>
+                            <div className="text-sm space-y-1">
+                                <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.route}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{bookingData.details.flightNumber}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Số hiệu:</span><span className="font-medium">{getFlightCode()}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Khởi hành:</span><span>{bookingData.details.departureTime ? `${bookingData.details.departureTime} ${bookingData.details.departureDate || ''}` : (bookingData.details.time && bookingData.details.date ? `${bookingData.details.time} ${bookingData.details.date}` : '--')}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Đến nơi:</span><span>{getArrival()}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{bookingData.details.airline}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Hạng vé:</span><span>{bookingData.details.class}</span></div>
+                            </div>
+                        </div>
+                    )}
+                    {bookingType === 'bus' && (
+                        <div className="rounded-xl border bg-green-50 p-4">
+                            <div className="flex items-center gap-2 mb-3 text-green-700 font-semibold text-base">
+                                <Users className="h-5 w-5" /> Thông Tin Chuyến Xe
+                            </div>
+                            <div className="text-sm space-y-1">
+                                <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.route}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{bookingData.details.date}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Giờ xuất phát:</span><span>{bookingData.details.time}</span></div>
+                                {bookingData.details.seat && <div className="flex justify-between"><span className="text-gray-500">Số ghế:</span><span>{bookingData.details.seat}</span></div>}
+                            </div>
+                        </div>
+                    )}
+                    {bookingType === 'tour' && (
+                        <div className="rounded-xl border bg-purple-50 p-4">
+                            <div className="flex items-center gap-2 mb-3 text-purple-700 font-semibold text-base">
+                                <MapPin className="h-5 w-5" /> Thông Tin Tour
+                            </div>
+                            <div className="text-sm space-y-1">
+                                <div className="flex justify-between"><span className="text-gray-500">Tên tour:</span><span className="font-medium">{bookingData.details.route}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Ngày khởi hành:</span><span>{bookingData.details.date}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Giờ khởi hành:</span><span>{bookingData.details.time}</span></div>
+                                {bookingData.details.guide && <div className="flex justify-between"><span className="text-gray-500">Hướng dẫn viên:</span><span>{bookingData.details.guide}</span></div>}
+                            </div>
+                        </div>
+                    )}
+                    {/* Quyền lợi */}
+                    {(bookingType === 'flight' || bookingType === 'bus' || bookingType === 'tour') && (
+                        <div className={`rounded-xl border p-4 ${bookingType === 'flight' ? 'bg-blue-50' : bookingType === 'bus' ? 'bg-green-50' : 'bg-purple-50'}`}>
+                            <div className={`flex items-center gap-2 mb-2 font-semibold text-base ${bookingType === 'flight' ? 'text-blue-700' : bookingType === 'bus' ? 'text-green-700' : 'text-purple-700'}`}>
+                                <Users className="h-5 w-5" />{bookingType === 'flight' ? 'Quyền lợi' : bookingType === 'bus' ? 'Tiện ích' : 'Quyền lợi'}
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {(bookingType === 'flight' ? flightBenefits : bookingType === 'bus' ? busBenefits : tourBenefits).map((b, i) => (
+                                    <span key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${bookingType === 'flight' ? 'bg-blue-100 text-blue-700' : bookingType === 'bus' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{b.icon}{b.label}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {/* Hành lý chỉ cho flight */}
+                    {bookingType === 'flight' && (
+                        <div className="rounded-xl border bg-blue-50 p-4">
+                            <div className="flex items-center gap-2 mb-2 font-semibold text-base text-blue-700">
+                                <Briefcase className="h-5 w-5" /> Hành lý
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                {flightBaggage.map((b, i) => (
+                                    <div key={i} className="flex justify-between items-center bg-white rounded px-3 py-2 text-sm border">
+                                        <span>{b.label}</span>
+                                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold">{b.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                {/* Box Thông tin hành khách */}
+                <div className="space-y-4">
+                    <div className="rounded-xl border bg-white p-4">
+                        <div className="flex items-center gap-2 mb-3 text-blue-700 font-semibold text-base">
+                            <Users className="h-5 w-5" /> Thông Tin Hành Khách
+                        </div>
+                        <div className="grid gap-3">
+                            {passengers.map((p: any, idx: number) => (
+                                <div key={idx} className="rounded-lg border bg-blue-50 p-3 flex flex-col gap-1">
+                                    <div className="flex items-center gap-2 font-medium text-base">
+                                        <span>{p.title} {p.firstName} {p.lastName}</span>
+                                        <Badge variant="secondary">Ghế {p.seat || idx + 1}</Badge>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <div>Giới Tính: <span className="font-semibold">{p.gender || '--'}</span></div>
+                                        <div>Ngày Sinh: <span className="font-semibold">{p.dateOfBirth || '--'}</span></div>
+                                        <div>Số Điện Thoại: <span className="font-semibold">{p.phone || '--'}</span></div>
+                                        <div>CMND/CCCD: <span className="font-semibold">{p.idNumber || '--'}</span></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    {/* Countdown cho mobile */}
+                    {countdown !== undefined && status === 'Giữ chỗ' && (
+                        <div className="block md:hidden text-xs text-red-500 font-semibold mt-2 text-center">
+                            <Clock className="h-4 w-4 inline-block" />
+                            Còn {Math.floor(countdown/60).toString().padStart(2,'0')}:{(countdown%60).toString().padStart(2,'0')}
+                        </div>
+                    )}
+                </div>
+            </div>
+            {/* Đường xé */}
+            <div className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 relative">
+                <div className="w-6 h-6 bg-white rounded-full border border-gray-200 -ml-3"></div>
+                <div className="flex-1 border-t border-dashed border-gray-300 mx-2"></div>
+                <div className="w-6 h-6 bg-white rounded-full border border-gray-200 -mr-3"></div>
+            </div>
+        </div>
+    );
+}

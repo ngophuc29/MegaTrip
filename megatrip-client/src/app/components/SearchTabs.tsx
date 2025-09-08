@@ -40,10 +40,10 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     children: 0,
     infants: 0,
   });
-  const [flightDeparture, setFlightDeparture] = useState<Date>();
+  const [flightDeparture, setFlightDeparture] = useState<Date>(new Date());
   const [flightReturn, setFlightReturn] = useState<Date>();
-  const [busDeparture, setBusDeparture] = useState<Date>();
-  const [tourDeparture, setTourDeparture] = useState<Date>();
+  const [busDeparture, setBusDeparture] = useState<Date>(new Date());
+  const [tourDeparture, setTourDeparture] = useState<Date>(new Date());
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
   const router = useRouter();

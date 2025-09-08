@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -35,12 +35,23 @@ import {
   Newspaper,
   HelpCircle,
 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 0);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className={`sticky top-0 z-50 w-full  bg-white transition-shadow ${scrolled ? 'shadow-2xl' : ''}`}>
       <div className="container">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
@@ -58,7 +69,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     Trang chủ
                   </Link>
@@ -68,7 +79,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/ve-may-bay"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Plane className="h-4 w-4" />
                     <span>Vé máy bay</span>
@@ -79,7 +90,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/xe-du-lich"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Bus className="h-4 w-4" />
                     <span>Xe du lịch</span>
@@ -90,7 +101,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/tour"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Map className="h-4 w-4" />
                     <span>Tour</span>
@@ -101,7 +112,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/khuyen-mai"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Percent className="h-4 w-4" />
                     <span>Khuyến mãi</span>
@@ -112,7 +123,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/tin-tuc"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Newspaper className="h-4 w-4" />
                     <span>Tin tức</span>
@@ -123,7 +134,7 @@ export default function Header() {
                 <NavigationMenuLink asChild>
                   <Link 
                     href="/ho-tro"
-                    className="flex items-center space-x-1 text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <HelpCircle className="h-4 w-4" />
                     <span>Hỗ trợ</span>
@@ -204,48 +215,48 @@ export default function Header() {
                 <nav className="flex flex-col space-y-4 mt-4">
                   <Link 
                     href="/"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <span>Trang chủ</span>
                   </Link>
                   <Link 
                     href="/ve-may-bay"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Plane className="h-4 w-4" />
                     <span>Vé máy bay</span>
                   </Link>
                   <Link 
                     href="/xe-du-lich"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Bus className="h-4 w-4" />
                     <span>Xe du lịch</span>
                   </Link>
                   <Link 
                     href="/tour"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Map className="h-4 w-4" />
                     <span>Tour</span>
                   </Link>
                   <Link 
                     href="/khuyen-mai"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Percent className="h-4 w-4" />
                     <span>Khuyến mãi</span>
                   </Link>
                   <Link 
                     href="/tin-tuc"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Newspaper className="h-4 w-4" />
                     <span>Tin tức</span>
                   </Link>
                   <Link 
                     href="/ho-tro"
-                    className="flex items-center space-x-2 text-foreground hover:text-primary transition-colors"
+                    className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <HelpCircle className="h-4 w-4" />
                     <span>Hỗ trợ</span>

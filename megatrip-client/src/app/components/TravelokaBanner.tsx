@@ -111,8 +111,8 @@ const sidebarPromotions = [
 
 export default function TravelokaBanner() {
   const [activeTab, setActiveTab] = useState('flights');
-  const [fromDate, setFromDate] = useState<Date>();
-  const [toDate, setToDate] = useState<Date>();
+  const [fromDate, setFromDate] = useState<Date>(new Date());
+  const [toDate, setToDate] = useState<Date>(new Date());
   const [passengers, setPassengers] = useState(1);
   const [tripType, setTripType] = useState('roundtrip');
   const [headerSolid, setHeaderSolid] = useState(false);
@@ -340,7 +340,7 @@ export default function TravelokaBanner() {
                         type="date"
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
-                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                        onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
                       />
                     </div>
 
@@ -352,7 +352,7 @@ export default function TravelokaBanner() {
                           type="date"
                           className="block h-12 bg-white shadow-md text-black w-full"
                           value={toDate ? toDate.toISOString().split('T')[0] : ''}
-                          onChange={e => setToDate(e.target.value ? new Date(e.target.value) : undefined)}
+                          onChange={e => { if (e.target.value) setToDate(new Date(e.target.value)); }}
                         />
                       </div>
                     )}
@@ -523,7 +523,7 @@ export default function TravelokaBanner() {
                         type="date"
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
-                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                        onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
                       />
                     </div>
 
@@ -573,7 +573,7 @@ export default function TravelokaBanner() {
                         type="date"
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
-                        onChange={e => setFromDate(e.target.value ? new Date(e.target.value) : undefined)}
+                        onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
                       />
                     </div>
 

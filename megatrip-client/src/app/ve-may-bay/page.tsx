@@ -53,8 +53,8 @@ const sampleFlights = [
         id: 1,
         airline: 'Vietnam Airlines',
         flightNumber: 'VN1546',
-        departure: { time: '06:15', airport: 'SGN', city: 'TP.HCM' },
-        arrival: { time: '08:30', airport: 'HAN', city: 'Hà Nội' },
+        departure: { time: '06:15', airport: 'SGN', city: 'TP.HCM', date: '2024-06-01' },
+        arrival: { time: '08:30', airport: 'HAN', city: 'Hà Nội', date: '2024-06-01' },
         duration: '2h 15m',
         aircraft: 'Airbus A321-100/200',
         price: 1990000,
@@ -95,8 +95,8 @@ const sampleFlights = [
         id: 2,
         airline: 'VietJet Air',
         flightNumber: 'VJ142',
-        departure: { time: '08:45', airport: 'SGN', city: 'TP.HCM' },
-        arrival: { time: '11:00', airport: 'HAN', city: 'Hà Nội' },
+        departure: { time: '08:45', airport: 'SGN', city: 'TP.HCM', date: '2024-06-01' },
+        arrival: { time: '11:00', airport: 'HAN', city: 'Hà Nội', date: '2024-06-01' },
         duration: '2h 15m',
         aircraft: 'Airbus A320',
         price: 1690000,
@@ -132,8 +132,8 @@ const sampleFlights = [
         id: 3,
         airline: 'Bamboo Airways',
         flightNumber: 'QH1402',
-        departure: { time: '14:30', airport: 'SGN', city: 'TP.HCM' },
-        arrival: { time: '16:50', airport: 'HAN', city: 'Hà Nội' },
+        departure: { time: '14:30', airport: 'SGN', city: 'TP.HCM', date: '2024-06-01' },
+        arrival: { time: '16:50', airport: 'HAN', city: 'Hà Nội', date: '2024-06-01' },
         duration: '2h 20m',
         aircraft: 'Boeing 787',
         price: 2290000,
@@ -171,8 +171,8 @@ const sampleFlights = [
         id: 4,
         airline: 'Jetstar',
         flightNumber: 'BL268',
-        departure: { time: '19:15', airport: 'SGN', city: 'TP.HCM' },
-        arrival: { time: '21:35', airport: 'HAN', city: 'Hà Nội' },
+        departure: { time: '19:15', airport: 'SGN', city: 'TP.HCM', date: '2024-06-01' },
+        arrival: { time: '21:35', airport: 'HAN', city: 'Hà Nội', date: '2024-06-01' },
         duration: '2h 20m',
         aircraft: 'Airbus A320',
         price: 1590000,
@@ -242,13 +242,15 @@ export default function VeMayBay() {
         if (!selectedRoute) return [];
 
         const basePrice = selectedRoute.price ? parseInt(selectedRoute.price.replace(/[^\d]/g, '')) : 1690000;
+        // Lấy ngày đang chọn, nếu chưa chọn thì lấy ngày hôm nay
+        const date = selectedDate || new Date().toISOString().split('T')[0];
 
         return [
             {
                 ...sampleFlights[0],
                 id: 999,
-                departure: { time: '06:15', airport: 'SGN', city: selectedRoute.from },
-                arrival: { time: '08:30', airport: 'HAN', city: selectedRoute.to },
+                departure: { time: '06:15', airport: 'SGN', city: selectedRoute.from, date },
+                arrival: { time: '08:30', airport: 'HAN', city: selectedRoute.to, date },
                 price: basePrice,
                 originalPrice: basePrice + 300000,
                 airline: 'VietJet Air',
@@ -259,8 +261,8 @@ export default function VeMayBay() {
             {
                 ...sampleFlights[0],
                 id: 998,
-                departure: { time: '08:45', airport: 'SGN', city: selectedRoute.from },
-                arrival: { time: '11:00', airport: 'HAN', city: selectedRoute.to },
+                departure: { time: '08:45', airport: 'SGN', city: selectedRoute.from, date },
+                arrival: { time: '11:00', airport: 'HAN', city: selectedRoute.to, date },
                 price: basePrice + 200000,
                 airline: 'Vietnam Airlines',
                 flightNumber: 'VN1546',
@@ -269,8 +271,8 @@ export default function VeMayBay() {
             {
                 ...sampleFlights[0],
                 id: 997,
-                departure: { time: '14:30', airport: 'SGN', city: selectedRoute.from },
-                arrival: { time: '16:50', airport: 'HAN', city: selectedRoute.to },
+                departure: { time: '14:30', airport: 'SGN', city: selectedRoute.from, date },
+                arrival: { time: '16:50', airport: 'HAN', city: selectedRoute.to, date },
                 price: basePrice + 600000,
                 airline: 'Bamboo Airways',
                 flightNumber: 'QH1402',

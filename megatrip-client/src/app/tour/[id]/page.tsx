@@ -241,7 +241,7 @@ export default function ChiTietTour() {
     const { id } = useParams();
     const [selectedDate, setSelectedDate] = useState<Date>();
     const [participants, setParticipants] = useState({
-        adults: 2,
+        adults: 1,
         children: 0,
         infants: 0,
     });
@@ -320,145 +320,148 @@ export default function ChiTietTour() {
             <div className="border-b">
                 <div className="container py-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Link prefetch={false}  href="/" className="hover:text-primary">Trang chủ</Link>
+                        <Link prefetch={false} href="/" className="hover:text-primary">Trang chủ</Link>
                         <span>/</span>
-                        <Link prefetch={false}  href="/tour" className="hover:text-primary">Tour</Link>
+                        <Link prefetch={false} href="/tour" className="hover:text-primary">Tour</Link>
                         <span>/</span>
                         <span>Chi tiết tour</span>
                     </div>
                 </div>
             </div>
+            <div className="container  py-6">
+                {/* Back Button */}
+                <Button variant="outline" asChild className="w-fit mb-4">
+                    <Link prefetch={false} href="/tour">
+                        <ChevronLeft className="h-4 w-4 mr-2" />
+                        Quay lại danh sách tour
+                    </Link>
+                </Button>
+                {/* Tour Header with Enhanced Image Gallery */}
+                <Card>
+                    <CardContent className="p-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-2">
+                            {/* Enhanced Image Gallery */}
+                            <div className="relative">
+                                <div className="relative h-80">
+                                    <img
+                                        src={tourDetails.images[activeImage].url}
+                                        alt={tourDetails.images[activeImage].title}
+                                        className="w-full h-full object-cover"
+                                    />
+                                    {tourDetails.images[activeImage].type === 'video' && (
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <PlayCircle className="h-16 w-16 text-white opacity-80" />
+                                        </div>
+                                    )}
+                                    <div className="absolute top-4 left-4">
+                                        <Badge variant="destructive">Sale 20%</Badge>
+                                    </div>
+                                    <div className="absolute top-4 right-4 flex gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setIsLiked(!isLiked)}
+                                        >
+                                            <Heart className={`h-4 w-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                                        </Button>
+                                        <Button size="sm" variant="secondary">
+                                            <Share2 className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                    <div className="absolute bottom-4 right-4">
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setShowAllImages(true)}
+                                        >
+                                            <ImageIcon className="h-4 w-4 mr-1" />
+                                            {tourDetails.images.length} ảnh
+                                        </Button>
+                                    </div>
+                                </div>
 
+                                {/* Image Thumbnails */}
+                                <div className="flex gap-2 p-4 overflow-x-auto">
+                                    {tourDetails.images.slice(0, 5).map((image, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => setActiveImage(index)}
+                                            className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 ${activeImage === index ? 'border-primary' : 'border-transparent'
+                                                }`}
+                                        >
+                                            <img
+                                                src={image.url}
+                                                alt={image.title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            {image.type === 'video' && (
+                                                <div className="absolute inset-0 flex items-center justify-center">
+                                                    <PlayCircle className="h-4 w-4 text-white" />
+                                                </div>
+                                            )}
+                                        </button>
+                                    ))}
+                                    {tourDetails.images.length > 5 && (
+                                        <button
+                                            onClick={() => setShowAllImages(true)}
+                                            className="flex-shrink-0 w-16 h-16 rounded bg-gray-100 flex items-center justify-center text-xs"
+                                        >
+                                            +{tourDetails.images.length - 5}
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Tour Info */}
+                            <div className="p-6">
+                                <h1 className="text-2xl lg:text-3xl font-bold mb-3">{tourDetails.name}</h1>
+
+                                <div className="space-y-3 mb-4">
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <MapPin className="h-4 w-4" />
+                                        <span>Khởi hành từ {tourDetails.departure}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Timer className="h-4 w-4" />
+                                        <span>{tourDetails.duration}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <Users className="h-4 w-4" />
+                                        <span>Tối đa {tourDetails.maxGroup} khách</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="flex items-center">
+                                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
+                                        <span className="font-medium">{tourDetails.rating}</span>
+                                    </div>
+                                    <span className="text-muted-foreground">({tourDetails.reviews.comments.length} đánh giá)</span>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {tourDetails.originalPrice && (
+                                        <div className="text-lg text-muted-foreground line-through">
+                                            {formatPrice(tourDetails.originalPrice)}
+                                        </div>
+                                    )}
+                                    <div className="text-2xl lg:text-3xl font-bold text-primary">
+                                        Từ {formatPrice(tourDetails.priceFrom)}
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">Giá cho 1 người lớn</div>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
             <div className="container py-6">
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Main Content */}
                     <div className="flex-1 space-y-6">
-                        {/* Back Button */}
-                        <Button variant="outline" asChild className="w-fit">
-                            <Link prefetch={false}  href="/tour">
-                                <ChevronLeft className="h-4 w-4 mr-2" />
-                                Quay lại danh sách tour
-                            </Link>
-                        </Button>
 
-                        {/* Tour Header with Enhanced Image Gallery */}
-                        <Card>
-                            <CardContent className="p-0">
-                                <div className="grid grid-cols-1 lg:grid-cols-2">
-                                    {/* Enhanced Image Gallery */}
-                                    <div className="relative">
-                                        <div className="relative h-80">
-                                            <img
-                                                src={tourDetails.images[activeImage].url}
-                                                alt={tourDetails.images[activeImage].title}
-                                                className="w-full h-full object-cover"
-                                            />
-                                            {tourDetails.images[activeImage].type === 'video' && (
-                                                <div className="absolute inset-0 flex items-center justify-center">
-                                                    <PlayCircle className="h-16 w-16 text-white opacity-80" />
-                                                </div>
-                                            )}
-                                            <div className="absolute top-4 left-4">
-                                                <Badge variant="destructive">Sale 20%</Badge>
-                                            </div>
-                                            <div className="absolute top-4 right-4 flex gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    onClick={() => setIsLiked(!isLiked)}
-                                                >
-                                                    <Heart className={`h-4 w-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
-                                                </Button>
-                                                <Button size="sm" variant="secondary">
-                                                    <Share2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                            <div className="absolute bottom-4 right-4">
-                                                <Button
-                                                    size="sm"
-                                                    variant="secondary"
-                                                    onClick={() => setShowAllImages(true)}
-                                                >
-                                                    <ImageIcon className="h-4 w-4 mr-1" />
-                                                    {tourDetails.images.length} ảnh
-                                                </Button>
-                                            </div>
-                                        </div>
 
-                                        {/* Image Thumbnails */}
-                                        <div className="flex gap-2 p-4 overflow-x-auto">
-                                            {tourDetails.images.slice(0, 5).map((image, index) => (
-                                                <button
-                                                    key={index}
-                                                    onClick={() => setActiveImage(index)}
-                                                    className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 ${activeImage === index ? 'border-primary' : 'border-transparent'
-                                                        }`}
-                                                >
-                                                    <img
-                                                        src={image.url}
-                                                        alt={image.title}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                    {image.type === 'video' && (
-                                                        <div className="absolute inset-0 flex items-center justify-center">
-                                                            <PlayCircle className="h-4 w-4 text-white" />
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            ))}
-                                            {tourDetails.images.length > 5 && (
-                                                <button
-                                                    onClick={() => setShowAllImages(true)}
-                                                    className="flex-shrink-0 w-16 h-16 rounded bg-gray-100 flex items-center justify-center text-xs"
-                                                >
-                                                    +{tourDetails.images.length - 5}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    {/* Tour Info */}
-                                    <div className="p-6">
-                                        <h1 className="text-2xl lg:text-3xl font-bold mb-3">{tourDetails.name}</h1>
-
-                                        <div className="space-y-3 mb-4">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <MapPin className="h-4 w-4" />
-                                                <span>Khởi hành từ {tourDetails.departure}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Timer className="h-4 w-4" />
-                                                <span>{tourDetails.duration}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Users className="h-4 w-4" />
-                                                <span>Tối đa {tourDetails.maxGroup} khách</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="flex items-center">
-                                                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                                                <span className="font-medium">{tourDetails.rating}</span>
-                                            </div>
-                                            <span className="text-muted-foreground">({tourDetails.reviews.comments.length} đánh giá)</span>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            {tourDetails.originalPrice && (
-                                                <div className="text-lg text-muted-foreground line-through">
-                                                    {formatPrice(tourDetails.originalPrice)}
-                                                </div>
-                                            )}
-                                            <div className="text-2xl lg:text-3xl font-bold text-primary">
-                                                Từ {formatPrice(tourDetails.priceFrom)}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground">Giá cho 1 người lớn</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
 
                         {/* Available Dates Calendar */}
                         <Card>
@@ -467,26 +470,34 @@ export default function ChiTietTour() {
                             </CardHeader>
                             <CardContent>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                    {tourDetails.availableDates.map((dateInfo, index) => (
-                                        <div
-                                            key={index}
-                                            className={`p-3 border rounded-lg cursor-pointer transition-colors ${dateInfo.status === 'soldout'
+                                    {tourDetails.availableDates.map((dateInfo, index) => {
+                                        const isSelected = selectedDate && (new Date(dateInfo.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]);
+                                        return (
+                                            <div
+                                                key={index}
+                                                className={`p-3 rounded-lg cursor-pointer transition-colors relative border ${dateInfo.status === 'soldout'
                                                     ? 'bg-[hsl(var(--muted))] cursor-not-allowed opacity-60'
-                                                    : 'hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
-                                                }`}
-                                            onClick={() => {
-                                                if (dateInfo.status !== 'soldout') {
-                                                    setSelectedDate(new Date(dateInfo.date));
-                                                }
-                                            }}
-                                        >
-                                            <div className="text-sm font-medium">{formatDate(dateInfo.date)}</div>
-                                            <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
-                                            <div className="mt-1">
-                                                {getStatusBadge(dateInfo.status, dateInfo.available)}
+                                                    : isSelected
+                                                        ? 'border-2 border-[hsl(var(--primary))] bg-primary/10 ring-2 ring-[hsl(var(--primary))]'
+                                                        : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
+                                                    }`}
+                                                onClick={() => {
+                                                    if (dateInfo.status !== 'soldout') {
+                                                        setSelectedDate(new Date(dateInfo.date));
+                                                    }
+                                                }}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="text-sm font-medium">{formatDate(dateInfo.date)}</div>
+                                                    {isSelected && <CheckCircle className="h-4 w-4 text-[hsl(var(--primary))] ml-2" />}
+                                                </div>
+                                                <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
+                                                <div className="mt-1">
+                                                    {getStatusBadge(dateInfo.status, dateInfo.available)}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </CardContent>
                         </Card>
@@ -690,8 +701,8 @@ export default function ChiTietTour() {
                                                     <Star
                                                         key={i}
                                                         className={`h-5 w-5 ${i < Math.floor(tourDetails.reviews.overall)
-                                                                ? 'fill-yellow-400 text-yellow-400'
-                                                                : 'text-gray-300'
+                                                            ? 'fill-yellow-400 text-yellow-400'
+                                                            : 'text-gray-300'
                                                             }`}
                                                     />
                                                 ))}
@@ -744,8 +755,8 @@ export default function ChiTietTour() {
                                                     >
                                                         <Star
                                                             className={`h-5 w-5 ${i < newReview.rating
-                                                                    ? 'fill-yellow-400 text-yellow-400'
-                                                                    : 'text-gray-300'
+                                                                ? 'fill-yellow-400 text-yellow-400'
+                                                                : 'text-gray-300'
                                                                 }`}
                                                         />
                                                     </button>
@@ -818,8 +829,8 @@ export default function ChiTietTour() {
                                                             <Star
                                                                 key={i}
                                                                 className={`h-4 w-4 ${i < review.rating
-                                                                        ? 'fill-yellow-400 text-yellow-400'
-                                                                        : 'text-gray-300'
+                                                                    ? 'fill-yellow-400 text-yellow-400'
+                                                                    : 'text-gray-300'
                                                                     }`}
                                                             />
                                                         ))}

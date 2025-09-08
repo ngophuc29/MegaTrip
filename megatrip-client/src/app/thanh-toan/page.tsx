@@ -270,6 +270,12 @@ export default function ThanhToan() {
     };
 
     const handlePayment = async () => {
+        // Lưu dữ liệu booking và participants vào localStorage trước khi chuyển trang
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem('bookingData', JSON.stringify(bookingData));
+            window.localStorage.setItem('participants', JSON.stringify(passengers));
+        }
+
         // Handle payment processing
         console.log('Processing payment...', {
             method: selectedPayment,
