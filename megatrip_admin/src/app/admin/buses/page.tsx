@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bus, Plus, Edit, Eye, Trash2, Filter, Download, MapPin, Clock, Users, DollarSign, RefreshCw, Calendar, Ban, AlertTriangle } from "lucide-react";
@@ -93,6 +93,189 @@ const busTypeOptions = [
     { value: "VIP", label: "VIP" }
 ];
 
+const mockBuses: BusRoute[] = [
+    {
+        id: "bus_001",
+        busCode: "PT001",
+        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
+        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
+        routeTo: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
+        departureAt: "2025-09-15T08:00:00.000Z",
+        arrivalAt: "2025-09-16T02:00:00.000Z",
+        duration: "18h 0m",
+        busType: ["Ghế ngồi", "Limousine"],
+        price: 650000,
+        seatsTotal: 45,
+        seatsAvailable: 30,
+        status: "scheduled",
+        amenities: "Wifi, Điều hòa, Nước uống miễn phí",
+        createdAt: "2025-09-01T10:00:00.000Z",
+        updatedAt: "2025-09-01T10:00:00.000Z",
+    },
+    {
+        id: "bus_002",
+        busCode: "HL002",
+        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
+        routeFrom: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
+        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
+        departureAt: "2025-09-16T18:00:00.000Z",
+        arrivalAt: "2025-09-17T06:00:00.000Z",
+        duration: "12h 0m",
+        busType: ["Giường nằm", "VIP"],
+        price: 500000,
+        seatsTotal: 40,
+        seatsAvailable: 10,
+        status: "scheduled",
+        amenities: "Wifi, Chăn gối, Nước uống",
+        createdAt: "2025-09-02T12:00:00.000Z",
+        updatedAt: "2025-09-02T12:00:00.000Z",
+    },
+    {
+        id: "bus_003",
+        busCode: "ML003",
+        operator: { id: "op_003", name: "Mai Linh", logo: "/placeholder.svg", code: "ML" },
+        routeFrom: { code: "SGN_MT", name: "Bến xe Miền Tây", city: "TP.HCM" },
+        routeTo: { code: "HAN_GL", name: "Bến xe Gia Lâm", city: "Hà Nội" },
+        departureAt: "2025-09-17T07:30:00.000Z",
+        arrivalAt: "2025-09-18T15:30:00.000Z",
+        duration: "32h 0m",
+        busType: ["Ghế ngồi"],
+        price: 1200000,
+        seatsTotal: 50,
+        seatsAvailable: 5,
+        status: "delayed",
+        amenities: "Điều hòa, Ghế ngả",
+        createdAt: "2025-09-03T09:00:00.000Z",
+        updatedAt: "2025-09-10T14:00:00.000Z",
+    },
+    {
+        id: "bus_004",
+        busCode: "TB004",
+        operator: { id: "op_004", name: "Thanh Bưởi", logo: "/placeholder.svg", code: "TB" },
+        routeFrom: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
+        routeTo: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
+        departureAt: "2025-09-18T20:00:00.000Z",
+        arrivalAt: "2025-09-19T14:00:00.000Z",
+        duration: "18h 0m",
+        busType: ["Limousine", "VIP"],
+        price: 800000,
+        seatsTotal: 30,
+        seatsAvailable: 15,
+        status: "scheduled",
+        amenities: "Wifi, TV, Nước uống",
+        createdAt: "2025-09-04T11:00:00.000Z",
+        updatedAt: "2025-09-04T11:00:00.000Z",
+    },
+    {
+        id: "bus_005",
+        busCode: "PT005",
+        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
+        routeFrom: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
+        routeTo: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
+        departureAt: "2025-09-19T09:00:00.000Z",
+        arrivalAt: "2025-09-19T21:00:00.000Z",
+        duration: "12h 0m",
+        busType: ["Giường nằm"],
+        price: 550000,
+        seatsTotal: 40,
+        seatsAvailable: 20,
+        status: "scheduled",
+        amenities: "Wifi, Điều hòa",
+        createdAt: "2025-09-05T08:00:00.000Z",
+        updatedAt: "2025-09-05T08:00:00.000Z",
+    },
+    {
+        id: "bus_006",
+        busCode: "HL006",
+        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
+        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
+        routeTo: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
+        departureAt: "2025-09-20T06:00:00.000Z",
+        arrivalAt: "2025-09-21T14:00:00.000Z",
+        duration: "32h 0m",
+        busType: ["VIP"],
+        price: 1300000,
+        seatsTotal: 35,
+        seatsAvailable: 0,
+        status: "cancelled",
+        amenities: "Wifi, Ghế massage, Nước uống",
+        createdAt: "2025-09-06T10:00:00.000Z",
+        updatedAt: "2025-09-10T15:00:00.000Z",
+    },
+    {
+        id: "bus_007",
+        busCode: "ML007",
+        operator: { id: "op_003", name: "Mai Linh", logo: "/placeholder.svg", code: "ML" },
+        routeFrom: { code: "HAN_GL", name: "Bến xe Gia Lâm", city: "Hà Nội" },
+        routeTo: { code: "SGN_MT", name: "Bến xe Miền Tây", city: "TP.HCM" },
+        departureAt: "2025-09-21T07:00:00.000Z",
+        arrivalAt: "2025-09-22T15:00:00.000Z",
+        duration: "32h 0m",
+        busType: ["Ghế ngồi", "Limousine"],
+        price: 1100000,
+        seatsTotal: 45,
+        seatsAvailable: 10,
+        status: "scheduled",
+        amenities: "Điều hòa, Nước uống",
+        createdAt: "2025-09-07T09:00:00.000Z",
+        updatedAt: "2025-09-07T09:00:00.000Z",
+    },
+    {
+        id: "bus_008",
+        busCode: "TB008",
+        operator: { id: "op_004", name: "Thanh Bưởi", logo: "/placeholder.svg", code: "TB" },
+        routeFrom: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
+        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
+        departureAt: "2025-09-22T10:00:00.000Z",
+        arrivalAt: "2025-09-22T12:30:00.000Z",
+        duration: "2h 30m",
+        busType: ["Ghế ngồi"],
+        price: 150000,
+        seatsTotal: 30,
+        seatsAvailable: 25,
+        status: "completed",
+        amenities: "Điều hòa",
+        createdAt: "2025-09-08T11:00:00.000Z",
+        updatedAt: "2025-09-08T11:00:00.000Z",
+    },
+    {
+        id: "bus_009",
+        busCode: "PT009",
+        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
+        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
+        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
+        departureAt: "2025-09-23T08:30:00.000Z",
+        arrivalAt: "2025-09-24T02:30:00.000Z",
+        duration: "18h 0m",
+        busType: ["Giường nằm", "VIP"],
+        price: 700000,
+        seatsTotal: 40,
+        seatsAvailable: 12,
+        status: "scheduled",
+        amenities: "Wifi, Nước uống, Chăn gối",
+        createdAt: "2025-09-09T10:00:00.000Z",
+        updatedAt: "2025-09-09T10:00:00.000Z",
+    },
+    {
+        id: "bus_010",
+        busCode: "HL010",
+        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
+        routeFrom: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
+        routeTo: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
+        departureAt: "2025-09-24T06:00:00.000Z",
+        arrivalAt: "2025-09-25T14:00:00.000Z",
+        duration: "32h 0m",
+        busType: ["Limousine"],
+        price: 1250000,
+        seatsTotal: 35,
+        seatsAvailable: 8,
+        status: "scheduled",
+        amenities: "Wifi, Ghế massage, Nước uống",
+        createdAt: "2025-09-10T09:00:00.000Z",
+        updatedAt: "2025-09-10T09:00:00.000Z",
+    },
+];
+
 export default function Buses() {
     const [selectedBuses, setSelectedBuses] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -132,35 +315,51 @@ export default function Buses() {
         pageSize: 10,
     });
 
-    // Fetch buses with React Query
+    // Fetch buses with mock data
     const { data: busesData, isLoading, error, refetch } = useQuery({
         queryKey: ['buses', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.operator !== 'all' && { operator: filters.operator }),
-                ...(filters.status !== 'all' && { status: filters.status }),
-                ...(filters.route !== 'all' && { route: filters.route }),
+            const filteredBuses = mockBuses.filter((bus) => {
+                const matchesSearch = bus.busCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    bus.operator.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    bus.routeFrom.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    bus.routeTo.city.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesOperator = filters.operator === 'all' || bus.operator.id === filters.operator;
+                const matchesStatus = filters.status === 'all' || bus.status === filters.status;
+                const matchesRoute = filters.route === 'all' ||
+                    `${bus.routeFrom.code}-${bus.routeTo.code}`.includes(filters.route);
+                return matchesSearch && matchesOperator && matchesStatus && matchesRoute;
             });
 
-            const response = await fetch(`/api/admin/buses?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch buses');
-            return response.json();
+            const start = (pagination.current - 1) * pagination.pageSize;
+            const end = start + pagination.pageSize;
+            const paginatedBuses = filteredBuses.slice(start, end);
+
+            return {
+                data: paginatedBuses,
+                pagination: {
+                    total: filteredBuses.length,
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                },
+            };
         },
     });
 
-    // Create bus mutation
+    // Create bus mutation (mock implementation)
     const createBusMutation = useMutation({
         mutationFn: async (data: BusFormData) => {
-            const response = await fetch('/api/admin/buses', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to create bus route');
-            return response.json();
+            const newBus: BusRoute = {
+                ...data,
+                id: `bus_${Date.now()}`,
+                operator: mockOperators.find(op => op.id === data.operatorId)!,
+                routeFrom: mockStations.find(st => st.code === data.routeFrom)!,
+                routeTo: mockStations.find(st => st.code === data.routeTo)!,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            mockBuses.push(newBus); // Add to mock data
+            return newBus;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
@@ -180,16 +379,20 @@ export default function Buses() {
         },
     });
 
-    // Update bus mutation
+    // Update bus mutation (mock implementation)
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-            const response = await fetch(`/api/admin/buses/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to update bus route');
-            return response.json();
+            const index = mockBuses.findIndex(bus => bus.id === id);
+            if (index === -1) throw new Error('Bus not found');
+            mockBuses[index] = {
+                ...mockBuses[index],
+                ...data,
+                operator: mockOperators.find(op => op.id === (data.operatorId || mockBuses[index].operator.id))!,
+                routeFrom: mockStations.find(st => st.code === (data.routeFrom || mockBuses[index].routeFrom.code))!,
+                routeTo: mockStations.find(st => st.code === (data.routeTo || mockBuses[index].routeTo.code))!,
+                updatedAt: new Date().toISOString(),
+            };
+            return mockBuses[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
@@ -209,20 +412,18 @@ export default function Buses() {
         },
     });
 
-    // Delete bus mutation
+    // Delete bus mutation (mock implementation)
     const deleteBusMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/buses/${id}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete bus route');
-            return response.json();
+            const index = mockBuses.findIndex(bus => bus.id === id);
+            if (index === -1) throw new Error('Bus not found');
+            const deletedBus = mockBuses.splice(index, 1)[0];
+            return deletedBus;
         },
         onSuccess: (_, busId) => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setDeleteModalOpen(false);
             setBusToDelete(null);
-
             const bus = busesData?.data?.find((b: BusRoute) => b.id === busId);
             toast({
                 title: "Đã xóa tuyến xe",
@@ -252,16 +453,24 @@ export default function Buses() {
         },
     });
 
-    // Bulk operations mutation
+    // Bulk operations mutation (mock implementation)
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            const response = await fetch('/api/admin/buses/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ids }),
+            ids.forEach(id => {
+                const index = mockBuses.findIndex(bus => bus.id === id);
+                if (index !== -1) {
+                    if (action === 'delete') {
+                        mockBuses.splice(index, 1);
+                    } else if (action === 'activate') {
+                        mockBuses[index].status = 'scheduled';
+                        mockBuses[index].updatedAt = new Date().toISOString();
+                    } else if (action === 'cancel') {
+                        mockBuses[index].status = 'cancelled';
+                        mockBuses[index].updatedAt = new Date().toISOString();
+                    }
+                }
             });
-            if (!response.ok) throw new Error('Failed to perform bulk action');
-            return response.json();
+            return { success: true };
         },
         onSuccess: (_, { action, ids }) => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
@@ -367,7 +576,6 @@ export default function Buses() {
         setFormData(prev => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
-        // Clear error for this field
         if (formErrors[field]) {
             setFormErrors(prev => ({ ...prev, [field]: "" }));
         }
@@ -503,7 +711,7 @@ export default function Buses() {
                         <span className="text-gray-500">/{record.seatsTotal}</span>
                     </div>
                     <div className={`text-xs ${record.seatsAvailable <= record.seatsTotal * 0.2 ? 'text-red-600' :
-                            record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
+                        record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
                         }`}>
                         {record.seatsAvailable} chỗ trống
                     </div>
@@ -591,7 +799,6 @@ export default function Buses() {
 
     const confirmDelete = () => {
         if (busToDelete) {
-            // Check if bus has bookings
             const bookedSeats = busToDelete.seatsTotal - busToDelete.seatsAvailable;
             if (bookedSeats > 0) {
                 toast({
@@ -1015,7 +1222,6 @@ export default function Buses() {
                 </div>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                     <CardContent className="pt-4">
@@ -1065,7 +1271,6 @@ export default function Buses() {
                 </Card>
             </div>
 
-            {/* Main Table */}
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
@@ -1128,7 +1333,6 @@ export default function Buses() {
                 </CardContent>
             </Card>
 
-            {/* Bus Modal */}
             <ModalForm
                 open={modalOpen}
                 onOpenChange={handleModalClose}
@@ -1152,7 +1356,6 @@ export default function Buses() {
                 {renderBusForm()}
             </ModalForm>
 
-            {/* Delete Confirmation */}
             <ConfirmModal
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}

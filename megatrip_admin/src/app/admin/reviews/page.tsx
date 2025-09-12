@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Star, Plus, Edit, Eye, Trash2, ThumbsUp, ThumbsDown, MessageSquare, Image, RefreshCw, CheckCircle, XCircle, Flag } from "lucide-react";
+import { Star, Edit, Eye, Trash2, ThumbsUp, MessageSquare, Image, RefreshCw, CheckCircle, XCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -58,13 +58,202 @@ const ratingOptions = [
     { value: "1", label: "1 sao" },
 ];
 
+const mockReviews: Review[] = [
+    {
+        id: "review_001",
+        customerId: "cust_001",
+        customerName: "Nguyễn Văn An",
+        customerAvatar: "https://example.com/avatars/an.jpg",
+        serviceId: "tour_001",
+        serviceName: "Tour Đà Lạt 3N2Đ",
+        serviceType: "tour",
+        rating: 5,
+        title: "Chuyến đi tuyệt vời",
+        content: "Hướng dẫn viên nhiệt tình, cảnh đẹp, dịch vụ tốt. Rất đáng tiền!",
+        images: ["https://example.com/images/dalat1.jpg", "https://example.com/images/dalat2.jpg"],
+        status: "approved",
+        isHelpful: true,
+        helpfulCount: 25,
+        replyText: "Cảm ơn bạn đã đánh giá! Rất mong được phục vụ bạn lần nữa.",
+        repliedBy: "Admin",
+        repliedAt: "2025-09-01T10:00:00.000Z",
+        createdAt: "2025-08-30T09:00:00.000Z",
+        updatedAt: "2025-09-01T10:00:00.000Z",
+    },
+    {
+        id: "review_002",
+        customerId: "cust_002",
+        customerName: "Trần Thị Bình",
+        customerAvatar: "",
+        serviceId: "flight_001",
+        serviceName: "Vé máy bay SGN-HAN",
+        serviceType: "flight",
+        rating: 4,
+        title: "Chuyến bay ổn",
+        content: "Chuyến bay đúng giờ, nhân viên thân thiện, nhưng ghế hơi chật.",
+        images: [],
+        status: "pending",
+        isHelpful: false,
+        helpfulCount: 10,
+        createdAt: "2025-09-02T14:30:00.000Z",
+        updatedAt: "2025-09-02T14:30:00.000Z",
+    },
+    {
+        id: "review_003",
+        customerId: "cust_003",
+        customerName: "Lê Minh Châu",
+        customerAvatar: "https://example.com/avatars/chau.jpg",
+        serviceId: "bus_001",
+        serviceName: "Vé xe Sài Gòn - Nha Trang",
+        serviceType: "bus",
+        rating: 3,
+        title: "Bình thường",
+        content: "Xe sạch sẽ nhưng tài xế chạy hơi nhanh, cần cải thiện.",
+        images: ["https://example.com/images/bus1.jpg"],
+        status: "rejected",
+        isHelpful: false,
+        helpfulCount: 5,
+        createdAt: "2025-08-25T08:00:00.000Z",
+        updatedAt: "2025-08-26T09:00:00.000Z",
+    },
+    {
+        id: "review_004",
+        customerId: "cust_004",
+        customerName: "Phạm Quốc Dũng",
+        customerAvatar: "",
+        serviceId: "tour_002",
+        serviceName: "Tour Phú Quốc 4N3Đ",
+        serviceType: "tour",
+        rating: 5,
+        title: "Kỳ nghỉ tuyệt vời",
+        content: "Bãi biển đẹp, khách sạn sang trọng, tổ chức rất chuyên nghiệp.",
+        images: ["https://example.com/images/phuquoc1.jpg"],
+        status: "approved",
+        isHelpful: true,
+        helpfulCount: 30,
+        createdAt: "2025-09-05T11:00:00.000Z",
+        updatedAt: "2025-09-05T11:00:00.000Z",
+    },
+    {
+        id: "review_005",
+        customerId: "cust_005",
+        customerName: "Hoàng Thị Mai",
+        customerAvatar: "https://example.com/avatars/mai.jpg",
+        serviceId: "flight_002",
+        serviceName: "Vé máy bay HAN-DAD",
+        serviceType: "flight",
+        rating: 2,
+        title: "Không hài lòng",
+        content: "Chuyến bay bị delay 2 tiếng, không được thông báo trước.",
+        images: [],
+        status: "pending",
+        isHelpful: false,
+        helpfulCount: 3,
+        createdAt: "2025-09-07T15:00:00.000Z",
+        updatedAt: "2025-09-07T15:00:00.000Z",
+    },
+    {
+        id: "review_006",
+        customerId: "cust_006",
+        customerName: "Đỗ Văn Hùng",
+        customerAvatar: "",
+        serviceId: "bus_002",
+        serviceName: "Vé xe Đà Lạt - Sài Gòn",
+        serviceType: "bus",
+        rating: 4,
+        title: "Chuyến đi tốt",
+        content: "Xe thoải mái, đúng giờ, nhưng wifi trên xe không ổn định.",
+        images: [],
+        status: "approved",
+        isHelpful: true,
+        helpfulCount: 15,
+        replyText: "Cảm ơn bạn đã phản hồi. Chúng tôi sẽ cải thiện wifi trong thời gian tới.",
+        repliedBy: "Admin",
+        repliedAt: "2025-09-03T12:00:00.000Z",
+        createdAt: "2025-09-02T10:00:00.000Z",
+        updatedAt: "2025-09-03T12:00:00.000Z",
+    },
+    {
+        id: "review_007",
+        customerId: "cust_007",
+        customerName: "Vũ Thị Lan",
+        customerAvatar: "https://example.com/avatars/lan.jpg",
+        serviceId: "tour_003",
+        serviceName: "Tour Hà Giang 5N4Đ",
+        serviceType: "tour",
+        rating: 5,
+        title: "Trải nghiệm đáng nhớ",
+        content: "Cảnh quan hùng vĩ, tổ chức tốt, đồ ăn địa phương ngon.",
+        images: ["https://example.com/images/hagiang1.jpg", "https://example.com/images/hagiang2.jpg"],
+        status: "pending",
+        isHelpful: false,
+        helpfulCount: 8,
+        createdAt: "2025-09-08T09:00:00.000Z",
+        updatedAt: "2025-09-08T09:00:00.000Z",
+    },
+    {
+        id: "review_008",
+        customerId: "cust_008",
+        customerName: "Ngô Minh Tuấn",
+        customerAvatar: "",
+        serviceId: "flight_003",
+        serviceName: "Vé máy bay SGN-PQC",
+        serviceType: "flight",
+        rating: 3,
+        title: "Tạm được",
+        content: "Dịch vụ ổn, nhưng quy trình check-in hơi chậm.",
+        images: [],
+        status: "rejected",
+        isHelpful: false,
+        helpfulCount: 2,
+        createdAt: "2025-09-01T16:00:00.000Z",
+        updatedAt: "2025-09-02T10:00:00.000Z",
+    },
+    {
+        id: "review_009",
+        customerId: "cust_009",
+        customerName: "Bùi Thị Hương",
+        customerAvatar: "https://example.com/avatars/huong.jpg",
+        serviceId: "bus_003",
+        serviceName: "Vé xe Hà Nội - Hải Phòng",
+        serviceType: "bus",
+        rating: 4,
+        title: "Dịch vụ tốt",
+        content: "Xe mới, sạch sẽ, tài xế thân thiện. Sẽ sử dụng lại.",
+        images: [],
+        status: "approved",
+        isHelpful: true,
+        helpfulCount: 20,
+        createdAt: "2025-09-04T13:00:00.000Z",
+        updatedAt: "2025-09-04T13:00:00.000Z",
+    },
+    {
+        id: "review_010",
+        customerId: "cust_010",
+        customerName: "Trương Văn Nam",
+        customerAvatar: "",
+        serviceId: "tour_004",
+        serviceName: "Tour Côn Đảo 3N2Đ",
+        serviceType: "tour",
+        rating: 1,
+        title: "Không như kỳ vọng",
+        content: "Lịch trình không rõ ràng, dịch vụ khách sạn kém.",
+        images: ["https://example.com/images/condao1.jpg"],
+        status: "pending",
+        isHelpful: false,
+        helpfulCount: 1,
+        createdAt: "2025-09-09T11:00:00.000Z",
+        updatedAt: "2025-09-09T11:00:00.000Z",
+    },
+];
+
 export default function Reviews() {
     const [selectedReviews, setSelectedReviews] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filters, setFilters] = useState<ReviewFilters>({
         status: "all",
         serviceType: "all",
-        rating: "all"
+        rating: "all",
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
@@ -84,37 +273,54 @@ export default function Reviews() {
         pageSize: 10,
     });
 
-    // Fetch reviews with React Query
+    // Fetch reviews with mock data
     const { data: reviewsData, isLoading, error, refetch } = useQuery({
-        queryKey: ['reviews', pagination.current, pagination.pageSize, searchQuery, filters],
+        queryKey: ["reviews", pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.status !== 'all' && { status: filters.status }),
-                ...(filters.serviceType !== 'all' && { serviceType: filters.serviceType }),
-                ...(filters.rating !== 'all' && { rating: filters.rating }),
+            const filteredReviews = mockReviews.filter((review) => {
+                const matchesSearch =
+                    review.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    review.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    review.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    review.serviceName.toLowerCase().includes(searchQuery.toLowerCase());
+
+                const matchesStatus = filters.status === "all" || review.status === filters.status;
+                const matchesServiceType = filters.serviceType === "all" || review.serviceType === filters.serviceType;
+                const matchesRating = filters.rating === "all" || review.rating.toString() === filters.rating;
+
+                return matchesSearch && matchesStatus && matchesServiceType && matchesRating;
             });
 
-            const response = await fetch(`/api/admin/reviews?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch reviews');
-            return response.json();
+            const start = (pagination.current - 1) * pagination.pageSize;
+            const end = start + pagination.pageSize;
+            const paginatedReviews = filteredReviews.slice(start, end);
+
+            return {
+                data: paginatedReviews,
+                pagination: {
+                    total: filteredReviews.length,
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                },
+            };
         },
     });
 
     // Approve review mutation
     const approveReviewMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/reviews/${id}/approve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            if (!response.ok) throw new Error('Failed to approve review');
-            return response.json();
+            const index = mockReviews.findIndex((review) => review.id === id);
+            if (index === -1) throw new Error("Review not found");
+
+            mockReviews[index] = {
+                ...mockReviews[index],
+                status: "approved",
+                updatedAt: new Date().toISOString(),
+            };
+            return mockReviews[index];
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['reviews'] });
+            queryClient.invalidateQueries({ queryKey: ["reviews"] });
             toast({
                 title: "Duyệt đánh giá thành công",
                 description: "Đánh giá đã được phê duyệt và hiển thị công khai",
@@ -132,16 +338,18 @@ export default function Reviews() {
     // Reject review mutation
     const rejectReviewMutation = useMutation({
         mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-            const response = await fetch(`/api/admin/reviews/${id}/reject`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ reason }),
-            });
-            if (!response.ok) throw new Error('Failed to reject review');
-            return response.json();
+            const index = mockReviews.findIndex((review) => review.id === id);
+            if (index === -1) throw new Error("Review not found");
+
+            mockReviews[index] = {
+                ...mockReviews[index],
+                status: "rejected",
+                updatedAt: new Date().toISOString(),
+            };
+            return mockReviews[index];
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['reviews'] });
+            queryClient.invalidateQueries({ queryKey: ["reviews"] });
             setRejectModalOpen(false);
             setRejectReason("");
             toast({
@@ -161,16 +369,20 @@ export default function Reviews() {
     // Reply to review mutation
     const replyReviewMutation = useMutation({
         mutationFn: async ({ id, replyText }: { id: string; replyText: string }) => {
-            const response = await fetch(`/api/admin/reviews/${id}/reply`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ replyText, repliedBy: "Admin" }),
-            });
-            if (!response.ok) throw new Error('Failed to reply to review');
-            return response.json();
+            const index = mockReviews.findIndex((review) => review.id === id);
+            if (index === -1) throw new Error("Review not found");
+
+            mockReviews[index] = {
+                ...mockReviews[index],
+                replyText,
+                repliedBy: "Admin",
+                repliedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            return mockReviews[index];
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['reviews'] });
+            queryClient.invalidateQueries({ queryKey: ["reviews"] });
             setReplyModalOpen(false);
             setReplyText("");
             toast({
@@ -190,14 +402,14 @@ export default function Reviews() {
     // Delete review mutation
     const deleteReviewMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/reviews/${id}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete review');
-            return response.json();
+            const index = mockReviews.findIndex((review) => review.id === id);
+            if (index === -1) throw new Error("Review not found");
+
+            const deletedReview = mockReviews.splice(index, 1)[0];
+            return deletedReview;
         },
         onSuccess: (_, reviewId) => {
-            queryClient.invalidateQueries({ queryKey: ['reviews'] });
+            queryClient.invalidateQueries({ queryKey: ["reviews"] });
             setDeleteModalOpen(false);
             setReviewToDelete(null);
 
@@ -233,18 +445,26 @@ export default function Reviews() {
     // Bulk operations mutation
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            const response = await fetch('/api/admin/reviews/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ids }),
+            ids.forEach((id) => {
+                const index = mockReviews.findIndex((review) => review.id === id);
+                if (index === -1) throw new Error(`Review ${id} not found`);
+
+                if (action === "approve") {
+                    mockReviews[index].status = "approved";
+                    mockReviews[index].updatedAt = new Date().toISOString();
+                } else if (action === "reject") {
+                    mockReviews[index].status = "rejected";
+                    mockReviews[index].updatedAt = new Date().toISOString();
+                } else if (action === "delete") {
+                    mockReviews.splice(index, 1);
+                }
             });
-            if (!response.ok) throw new Error('Failed to perform bulk action');
-            return response.json();
+            return { action, ids };
         },
         onSuccess: (_, { action, ids }) => {
-            queryClient.invalidateQueries({ queryKey: ['reviews'] });
+            queryClient.invalidateQueries({ queryKey: ["reviews"] });
             setSelectedReviews([]);
-            const actionText = action === 'approve' ? 'duyệt' : action === 'reject' ? 'từ chối' : 'xóa';
+            const actionText = action === "approve" ? "duyệt" : action === "reject" ? "từ chối" : "xóa";
             toast({
                 title: `Thực hiện thành công`,
                 description: `Đã ${actionText} ${ids.length} đánh giá`,
@@ -270,10 +490,7 @@ export default function Reviews() {
             stars.push(
                 <Star
                     key={i}
-                    className={`${starSize} ${i <= rating
-                            ? "text-yellow-500 fill-current"
-                            : "text-gray-300"
-                        }`}
+                    className={`${starSize} ${i <= rating ? "text-yellow-500 fill-current" : "text-gray-300"}`}
                 />
             );
         }
@@ -306,7 +523,7 @@ export default function Reviews() {
                 <div>
                     <div className="font-medium">{record.serviceName}</div>
                     <Badge variant="outline" className="text-xs">
-                        {serviceTypes.find(t => t.value === record.serviceType)?.label}
+                        {serviceTypes.find((t) => t.value === record.serviceType)?.label}
                     </Badge>
                 </div>
             ),
@@ -354,13 +571,16 @@ export default function Reviews() {
             sortable: true,
             render: (value, record: Review) => (
                 <div className="space-y-1">
-                    <Badge className={
-                        value === "approved" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                            value === "rejected" ? "bg-red-100 text-red-800 hover:bg-red-100" :
-                                "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                    }>
-                        {value === "approved" ? "Đã duyệt" :
-                            value === "rejected" ? "Từ chối" : "Chờ duyệt"}
+                    <Badge
+                        className={
+                            value === "approved"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : value === "rejected"
+                                    ? "bg-red-100 text-red-800 hover:bg-red-100"
+                                    : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                        }
+                    >
+                        {value === "approved" ? "Đã duyệt" : value === "rejected" ? "Từ chối" : "Chờ duyệt"}
                     </Badge>
                     {record.replyText && (
                         <Badge variant="outline" className="text-xs">
@@ -377,12 +597,9 @@ export default function Reviews() {
             sortable: true,
             render: (value) => (
                 <div className="text-sm">
-                    <div>{new Date(value).toLocaleDateString('vi-VN')}</div>
+                    <div>{new Date(value).toLocaleDateString("vi-VN")}</div>
                     <div className="text-gray-500">
-                        {new Date(value).toLocaleTimeString('vi-VN', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        })}
+                        {new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
                     </div>
                 </div>
             ),
@@ -437,14 +654,14 @@ export default function Reviews() {
         {
             label: "Duyệt",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'approve', ids: keys });
+                bulkActionMutation.mutate({ action: "approve", ids: keys });
             },
             icon: <CheckCircle className="w-4 h-4 mr-2" />,
         },
         {
             label: "Từ chối",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'reject', ids: keys });
+                bulkActionMutation.mutate({ action: "reject", ids: keys });
             },
             icon: <XCircle className="w-4 h-4 mr-2" />,
             variant: "secondary" as const,
@@ -452,7 +669,7 @@ export default function Reviews() {
         {
             label: "Xóa",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'delete', ids: keys });
+                bulkActionMutation.mutate({ action: "delete", ids: keys });
             },
             icon: <Trash2 className="w-4 h-4 mr-2" />,
             variant: "destructive" as const,
@@ -497,7 +714,6 @@ export default function Reviews() {
 
         return (
             <div className="space-y-6">
-                {/* Review Header */}
                 <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-4">
                         <Avatar className="w-12 h-12">
@@ -510,25 +726,23 @@ export default function Reviews() {
                             <h3 className="text-lg font-semibold">{selectedReview.customerName}</h3>
                             <p className="text-gray-500">Đánh giá cho: {selectedReview.serviceName}</p>
                             <Badge variant="outline" className="text-xs mt-1">
-                                {serviceTypes.find(t => t.value === selectedReview.serviceType)?.label}
+                                {serviceTypes.find((t) => t.value === selectedReview.serviceType)?.label}
                             </Badge>
                         </div>
                     </div>
                     <div className="text-right">
                         {renderStarRating(selectedReview.rating, "lg")}
                         <p className="text-sm text-gray-500 mt-1">
-                            {new Date(selectedReview.createdAt).toLocaleDateString('vi-VN')}
+                            {new Date(selectedReview.createdAt).toLocaleDateString("vi-VN")}
                         </p>
                     </div>
                 </div>
 
-                {/* Review Content */}
                 <div>
                     <h4 className="font-medium text-lg mb-2">{selectedReview.title}</h4>
                     <p className="text-gray-900 leading-relaxed">{selectedReview.content}</p>
                 </div>
 
-                {/* Review Images */}
                 {selectedReview.images.length > 0 && (
                     <div>
                         <Label className="text-sm font-medium text-gray-700">Hình ảnh đính kèm</Label>
@@ -539,7 +753,7 @@ export default function Reviews() {
                                         src={image}
                                         alt={`Review image ${index + 1}`}
                                         className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
-                                        onClick={() => window.open(image, '_blank')}
+                                        onClick={() => window.open(image, "_blank")}
                                     />
                                 </div>
                             ))}
@@ -547,7 +761,6 @@ export default function Reviews() {
                     </div>
                 )}
 
-                {/* Helpful Stats */}
                 <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                         <ThumbsUp className="w-4 h-4 text-green-500" />
@@ -560,20 +773,18 @@ export default function Reviews() {
                     )}
                 </div>
 
-                {/* Admin Reply */}
                 {selectedReview.replyText && (
                     <div className="bg-blue-50 p-4 rounded-lg">
                         <div className="flex items-center justify-between mb-2">
                             <Label className="text-sm font-medium text-blue-800">Phản hồi từ {selectedReview.repliedBy}</Label>
                             <span className="text-xs text-blue-600">
-                                {selectedReview.repliedAt && new Date(selectedReview.repliedAt).toLocaleString('vi-VN')}
+                                {selectedReview.repliedAt && new Date(selectedReview.repliedAt).toLocaleString("vi-VN")}
                             </span>
                         </div>
                         <p className="text-blue-900">{selectedReview.replyText}</p>
                     </div>
                 )}
 
-                {/* Quick Actions */}
                 <div className="flex space-x-2 pt-4 border-t">
                     {selectedReview.status === "pending" && (
                         <>
@@ -610,18 +821,13 @@ export default function Reviews() {
                     <p className="text-gray-600 mt-1">Quản lý đánh giá, bình luận của khách hàng</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
-                        variant="outline"
-                        onClick={() => refetch()}
-                        disabled={isLoading}
-                    >
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
                     </Button>
                 </div>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                     <CardContent className="pt-4">
@@ -639,9 +845,7 @@ export default function Reviews() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Chờ duyệt</p>
-                                <p className="text-2xl font-bold">
-                                    {reviews.filter((r: Review) => r.status === "pending").length}
-                                </p>
+                                <p className="text-2xl font-bold">{reviews.filter((r: Review) => r.status === "pending").length}</p>
                             </div>
                             <MessageSquare className="w-8 h-8 text-yellow-500" />
                         </div>
@@ -652,9 +856,7 @@ export default function Reviews() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đã duyệt</p>
-                                <p className="text-2xl font-bold">
-                                    {reviews.filter((r: Review) => r.status === "approved").length}
-                                </p>
+                                <p className="text-2xl font-bold">{reviews.filter((r: Review) => r.status === "approved").length}</p>
                             </div>
                             <CheckCircle className="w-8 h-8 text-green-500" />
                         </div>
@@ -668,8 +870,7 @@ export default function Reviews() {
                                 <p className="text-2xl font-bold">
                                     {reviews.length > 0
                                         ? (reviews.reduce((sum: number, r: Review) => sum + r.rating, 0) / reviews.length).toFixed(1)
-                                        : "0.0"
-                                    }
+                                        : "0.0"}
                                 </p>
                             </div>
                             <Star className="w-8 h-8 text-yellow-500 fill-current" />
@@ -678,7 +879,6 @@ export default function Reviews() {
                 </Card>
             </div>
 
-            {/* Main Table */}
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
@@ -687,7 +887,7 @@ export default function Reviews() {
                             <CardDescription>Quản lý và kiểm duyệt đánh giá của khách hàng</CardDescription>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
+                            <Select value={filters.status} onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}>
                                 <SelectTrigger className="w-32">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -698,7 +898,10 @@ export default function Reviews() {
                                     <SelectItem value="rejected">Từ chối</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.serviceType} onValueChange={(value) => setFilters(prev => ({ ...prev, serviceType: value }))}>
+                            <Select
+                                value={filters.serviceType}
+                                onValueChange={(value) => setFilters((prev) => ({ ...prev, serviceType: value }))}
+                            >
                                 <SelectTrigger className="w-36">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -711,7 +914,7 @@ export default function Reviews() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.rating} onValueChange={(value) => setFilters(prev => ({ ...prev, rating: value }))}>
+                            <Select value={filters.rating} onValueChange={(value) => setFilters((prev) => ({ ...prev, rating: value }))}>
                                 <SelectTrigger className="w-24">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -736,9 +939,7 @@ export default function Reviews() {
                             pageSize: pagination.pageSize,
                             total: total,
                         }}
-                        onPaginationChange={(page, pageSize) =>
-                            setPagination({ current: page, pageSize })
-                        }
+                        onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
                         onSearch={setSearchQuery}
                         rowSelection={{
                             selectedRowKeys: selectedReviews,
@@ -753,7 +954,6 @@ export default function Reviews() {
                 </CardContent>
             </Card>
 
-            {/* Review Details Modal */}
             <ModalForm
                 open={modalOpen}
                 onOpenChange={setModalOpen}
@@ -765,7 +965,6 @@ export default function Reviews() {
                 {renderReviewDetails()}
             </ModalForm>
 
-            {/* Reject Modal */}
             <ModalForm
                 open={rejectModalOpen}
                 onOpenChange={setRejectModalOpen}
@@ -789,7 +988,6 @@ export default function Reviews() {
                 </div>
             </ModalForm>
 
-            {/* Reply Modal */}
             <ModalForm
                 open={replyModalOpen}
                 onOpenChange={setReplyModalOpen}
@@ -810,13 +1008,10 @@ export default function Reviews() {
                         placeholder="Cảm ơn bạn đã đánh giá. Chúng tôi rất vui vì..."
                         rows={4}
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                        Phản hồi sẽ được hiển thị công khai cùng với đánh giá
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Phản hồi sẽ được hiển thị công khai cùng với đánh giá</p>
                 </div>
             </ModalForm>
 
-            {/* Delete Confirmation */}
             <ConfirmModal
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}

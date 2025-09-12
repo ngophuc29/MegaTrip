@@ -1,6 +1,6 @@
-"use client"
+"use client";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Plus, Edit, Eye, Trash2, Calendar, DollarSign, Users, Star, Upload, RefreshCw, Globe, Settings, Image, Copy, ExternalLink, Save, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -111,12 +111,181 @@ const mockCategories = [
     { id: "cat_004", name: "Tour văn hóa" },
 ];
 
+// Mock data
+const mockTours: Tour[] = [
+    {
+        id: "tour_001",
+        title: "Du thuyền Vịnh Hạ Long 3N2Đ",
+        title_vn: "Du thuyền Vịnh Hạ Long 3 ngày 2 đêm",
+        slug: "du-thuyen-vinh-ha-long-3n2d",
+        summary: "Khám phá Vịnh Hạ Long hùng vĩ với hành trình 3 ngày 2 đêm trên du thuyền 5 sao.",
+        description: "Trải nghiệm du thuyền sang trọng, khám phá các hang động và thưởng thức ẩm thực địa phương.",
+        departure: "Hà Nội",
+        destination: "Vịnh Hạ Long",
+        startDate: "2025-10-01",
+        endDate: "2025-10-03",
+        duration: "3 ngày 2 đêm",
+        priceAdult: 6500000,
+        priceChild: 4500000,
+        seatsTotal: 30,
+        seatsBooked: 20,
+        minBooking: 2,
+        status: "active",
+        highlight: true,
+        visibility: "public",
+        categoryId: "cat_001",
+        tags: ["du thuyền", "biển đảo", "sang trọng"],
+        images: [
+            "https://example.com/images/halong1.jpg",
+            "https://example.com/images/halong2.jpg",
+        ],
+        videoUrl: "https://youtube.com/watch?v=abc123",
+        itinerary: [
+            {
+                dayNumber: 1,
+                title: "Khởi hành và khám phá hang Sửng Sốt",
+                details: "Đón khách tại Hà Nội, di chuyển đến Vịnh Hạ Long, tham quan hang Sửng Sốt.",
+            },
+            {
+                dayNumber: 2,
+                title: "Chèo thuyền kayak và làng chài",
+                details: "Tham gia chèo thuyền kayak và khám phá làng chài nổi trên vịnh.",
+            },
+            {
+                dayNumber: 3,
+                title: "Tham quan đảo Titop và trở về",
+                details: "Thăm đảo Titop, tắm biển và trở về Hà Nội.",
+            },
+        ],
+        inclusions: ["Vé du thuyền", "Ăn uống theo chương trình", "Hướng dẫn viên"],
+        exclusions: ["Chi phí cá nhân", "Đồ uống ngoài chương trình"],
+        pickupPoints: ["Hà Nội", "Hải Phòng"],
+        cancellationPolicy: "Hủy trước 7 ngày: hoàn 100%. Hủy trước 3 ngày: hoàn 50%.",
+        rating: 4.8,
+        reviewCount: 120,
+        metaTitle: "Du thuyền Vịnh Hạ Long 3N2Đ",
+        metaDescription: "Trải nghiệm du thuyền 5 sao tại Vịnh Hạ Long với hành trình 3 ngày 2 đêm.",
+        metaKeywords: "du thuyền, vịnh hạ long, tour biển đảo",
+        createdAt: "2025-09-01T10:00:00Z",
+        updatedAt: "2025-09-10T15:30:00Z",
+    },
+    {
+        id: "tour_002",
+        title: "Khám phá Sapa 2N1Đ",
+        title_vn: "Khám phá Sapa 2 ngày 1 đêm",
+        slug: "kham-pha-sapa-2n1d",
+        summary: "Hành trình khám phá Sapa với núi non hùng vĩ và văn hóa bản địa đặc sắc.",
+        description: "Tham quan núi Hàm Rồng, bản Cát Cát và trải nghiệm văn hóa dân tộc thiểu số.",
+        departure: "Hà Nội",
+        destination: "Sapa",
+        startDate: "2025-11-01",
+        endDate: "2025-11-02",
+        duration: "2 ngày 1 đêm",
+        priceAdult: 3500000,
+        priceChild: 2500000,
+        seatsTotal: 25,
+        seatsBooked: 10,
+        minBooking: 1,
+        status: "draft",
+        highlight: false,
+        visibility: "public",
+        categoryId: "cat_002",
+        tags: ["núi non", "văn hóa", "trekking"],
+        images: ["https://example.com/images/sapa1.jpg"],
+        videoUrl: "",
+        itinerary: [
+            {
+                dayNumber: 1,
+                title: "Khám phá núi Hàm Rồng",
+                details: "Đón khách tại Hà Nội, di chuyển đến Sapa, tham quan núi Hàm Rồng.",
+            },
+            {
+                dayNumber: 2,
+                title: "Thăm bản Cát Cát",
+                details: "Khám phá bản Cát Cát, trải nghiệm văn hóa dân tộc H'Mông.",
+            },
+        ],
+        inclusions: ["Vé tham quan", "Ăn uống", "Xe đưa đón"],
+        exclusions: ["Chi phí cá nhân", "Bảo hiểm du lịch"],
+        pickupPoints: ["Hà Nội"],
+        cancellationPolicy: "Hủy trước 5 ngày: hoàn 100%.",
+        rating: 4.5,
+        reviewCount: 80,
+        metaTitle: "Khám phá Sapa 2N1Đ",
+        metaDescription: "Hành trình khám phá Sapa với núi non và văn hóa dân tộc đặc sắc.",
+        metaKeywords: "sapa, núi non, văn hóa bản địa",
+        createdAt: "2025-08-15T09:00:00Z",
+        updatedAt: "2025-09-05T12:00:00Z",
+    },
+    {
+        id: "tour_003",
+        title: "Tour Đà Nẵng - Hội An 4N3Đ",
+        title_vn: "Tour Đà Nẵng - Hội An 4 ngày 3 đêm",
+        slug: "tour-da-nang-hoi-an-4n3d",
+        summary: "Khám phá Đà Nẵng hiện đại và phố cổ Hội An lãng mạn trong 4 ngày 3 đêm.",
+        description: "Tham quan cầu Rồng, Bà Nà Hills, phố cổ Hội An và bãi biển Mỹ Khê.",
+        departure: "TP. Hồ Chí Minh",
+        destination: "Đà Nẵng",
+        startDate: "2025-12-01",
+        endDate: "2025-12-04",
+        duration: "4 ngày 3 đêm",
+        priceAdult: 7500000,
+        priceChild: 5500000,
+        seatsTotal: 40,
+        seatsBooked: 35,
+        minBooking: 2,
+        status: "active",
+        highlight: true,
+        visibility: "public",
+        categoryId: "cat_003",
+        tags: ["thành phố", "biển", "văn hóa"],
+        images: [
+            "https://example.com/images/danang1.jpg",
+            "https://example.com/images/hoian1.jpg",
+        ],
+        videoUrl: "https://vimeo.com/123456789",
+        itinerary: [
+            {
+                dayNumber: 1,
+                title: "Đến Đà Nẵng - Cầu Rồng",
+                details: "Đón khách tại sân bay Đà Nẵng, tham quan cầu Rồng và bãi biển Mỹ Khê.",
+            },
+            {
+                dayNumber: 2,
+                title: "Bà Nà Hills",
+                details: "Khám phá khu du lịch Bà Nà Hills, cáp treo và cầu Vàng.",
+            },
+            {
+                dayNumber: 3,
+                title: "Phố cổ Hội An",
+                details: "Tham quan phố cổ Hội An, chùa Cầu và thưởng thức ẩm thực địa phương.",
+            },
+            {
+                dayNumber: 4,
+                title: "Tự do và trở về",
+                details: "Tự do mua sắm, tắm biển và trở về TP. Hồ Chí Minh.",
+            },
+        ],
+        inclusions: ["Vé máy bay", "Khách sạn 4 sao", "Vé tham quan"],
+        exclusions: ["Chi phí cá nhân", "Đồ uống"],
+        pickupPoints: ["TP. Hồ Chí Minh", "Hà Nội"],
+        cancellationPolicy: "Hủy trước 10 ngày: hoàn 100%. Hủy trước 5 ngày: hoàn 50%.",
+        rating: 4.9,
+        reviewCount: 150,
+        metaTitle: "Tour Đà Nẵng - Hội An 4N3Đ",
+        metaDescription: "Khám phá Đà Nẵng và Hội An với hành trình 4 ngày 3 đêm đầy thú vị.",
+        metaKeywords: "đà nẵng, hội an, tour thành phố",
+        createdAt: "2025-07-20T08:00:00Z",
+        updatedAt: "2025-09-12T10:00:00Z",
+    },
+];
+
 export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filters, setFilters] = useState<TourFilters>({
         status: "all",
-        category: "all"
+        category: "all",
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("create");
@@ -153,7 +322,7 @@ export default function Tours() {
         visibility: "public",
         metaTitle: "",
         metaDescription: "",
-        metaKeywords: ""
+        metaKeywords: "",
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);
@@ -166,37 +335,49 @@ export default function Tours() {
         pageSize: 10,
     });
 
-    // Fetch tours with React Query
-    const { data: toursData, isLoading, error, refetch } = useQuery({
-        queryKey: ['tours', pagination.current, pagination.pageSize, searchQuery, filters],
-        queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.status !== 'all' && { status: filters.status }),
-                ...(filters.category !== 'all' && { category: filters.category }),
-            });
+    // Fake data with filtering and pagination
+    const [tours, setTours] = useState<Tour[]>(mockTours);
+    const isLoading = false;
+    const error = null;
 
-            const response = await fetch(`/api/admin/tours?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch tours');
-            return response.json();
+    const filteredTours = mockTours
+        .filter((tour) => {
+            if (filters.status !== "all" && tour.status !== filters.status) return false;
+            if (filters.category !== "all" && tour.categoryId !== filters.category) return false;
+            if (searchQuery && !tour.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            return true;
+        })
+        .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
+
+    const toursData = {
+        data: filteredTours,
+        pagination: {
+            total: filteredTours.length,
         },
-    });
+    };
+
+    const refetch = () => {
+        setTours(mockTours); // Reset to original mock data
+        toast({ title: "Dữ liệu đã được làm mới" });
+    };
 
     // Create tour mutation
     const createTourMutation = useMutation({
         mutationFn: async (data: TourFormData) => {
-            const response = await fetch('/api/admin/tours', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to create tour');
-            return response.json();
+            const newTour: Tour = {
+                ...data,
+                id: `tour_${Math.random().toString(36).substr(2, 9)}`,
+                seatsBooked: 0,
+                rating: 0,
+                reviewCount: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            setTours((prev) => [...prev, newTour]);
+            return newTour;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
+            queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
             toast({
@@ -216,16 +397,15 @@ export default function Tours() {
     // Update tour mutation
     const updateTourMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<TourFormData> }) => {
-            const response = await fetch(`/api/admin/tours/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to update tour');
-            return response.json();
+            setTours((prev) =>
+                prev.map((tour) =>
+                    tour.id === id ? { ...tour, ...data, updatedAt: new Date().toISOString() } : tour
+                )
+            );
+            return { id, ...data };
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
+            queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
             toast({
@@ -245,14 +425,11 @@ export default function Tours() {
     // Delete tour mutation
     const deleteTourMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/tours/${id}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete tour');
-            return response.json();
+            setTours((prev) => prev.filter((tour) => tour.id !== id));
+            return { id };
         },
         onSuccess: (_, tourId) => {
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
+            queryClient.invalidateQueries({ queryKey: ["tours"] });
             setDeleteModalOpen(false);
             setTourToDelete(null);
 
@@ -288,18 +465,26 @@ export default function Tours() {
     // Bulk operations mutation
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            const response = await fetch('/api/admin/tours/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ids }),
-            });
-            if (!response.ok) throw new Error('Failed to perform bulk action');
-            return response.json();
+            setTours((prev) =>
+                prev.map((tour) =>
+                    ids.includes(tour.id)
+                        ? {
+                            ...tour,
+                            status:
+                                action === "publish" ? "active" : action === "unpublish" ? "hidden" : tour.status,
+                        }
+                        : tour
+                )
+            );
+            if (action === "delete") {
+                setTours((prev) => prev.filter((tour) => !ids.includes(tour.id)));
+            }
+            return { action, ids };
         },
         onSuccess: (_, { action, ids }) => {
-            queryClient.invalidateQueries({ queryKey: ['tours'] });
+            queryClient.invalidateQueries({ queryKey: ["tours"] });
             setSelectedTours([]);
-            const actionText = action === 'publish' ? 'xuất bản' : action === 'unpublish' ? 'ẩn' : 'xóa';
+            const actionText = action === "publish" ? "xuất bản" : action === "unpublish" ? "ẩn" : "xóa";
             toast({
                 title: `Thực hiện thành công`,
                 description: `Đã ${actionText} ${ids.length} tour`,
@@ -314,7 +499,6 @@ export default function Tours() {
         },
     });
 
-    const tours = toursData?.data || [];
     const total = toursData?.pagination?.total || 0;
 
     // Form validation
@@ -414,7 +598,7 @@ export default function Tours() {
             visibility: "public",
             metaTitle: "",
             metaDescription: "",
-            metaKeywords: ""
+            metaKeywords: "",
         });
         setFormErrors({});
         setIsFormDirty(false);
@@ -422,29 +606,30 @@ export default function Tours() {
     };
 
     const handleFormChange = (field: keyof TourFormData, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData((prev) => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
         // Auto-generate slug from title
-        if (field === 'title' && value) {
-            const slug = value.toLowerCase()
-                .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
-                .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
-                .replace(/[ìíịỉĩ]/g, 'i')
-                .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
-                .replace(/[ùúụủũưừứựửữ]/g, 'u')
-                .replace(/[ỳýỵỷỹ]/g, 'y')
-                .replace(/đ/g, 'd')
-                .replace(/[^a-z0-9\s-]/g, '')
-                .replace(/\s+/g, '-')
-                .replace(/-+/g, '-')
-                .trim('-');
-            setFormData(prev => ({ ...prev, slug }));
+        if (field === "title" && value) {
+            const slug = value
+                .toLowerCase()
+                .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, "a")
+                .replace(/[èéẹẻẽêềếệểễ]/g, "e")
+                .replace(/[ìíịỉĩ]/g, "i")
+                .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, "o")
+                .replace(/[ùúụủũưừứựửữ]/g, "u")
+                .replace(/[ỳýỵỷỹ]/g, "y")
+                .replace(/đ/g, "d")
+                .replace(/[^a-z0-9\s-]/g, "")
+                .replace(/\s+/g, "-")
+                .replace(/-+/g, "-")
+                .trim("-");
+            setFormData((prev) => ({ ...prev, slug }));
         }
 
         // Clear error for this field
         if (formErrors[field]) {
-            setFormErrors(prev => ({ ...prev, [field]: "" }));
+            setFormErrors((prev) => ({ ...prev, [field]: "" }));
         }
     };
 
@@ -452,15 +637,15 @@ export default function Tours() {
         const newDay = {
             dayNumber: formData.itinerary.length + 1,
             title: "",
-            details: ""
+            details: "",
         };
-        handleFormChange('itinerary', [...formData.itinerary, newDay]);
+        handleFormChange("itinerary", [...formData.itinerary, newDay]);
     };
 
-    const updateItineraryDay = (index: number, field: 'title' | 'details', value: string) => {
+    const updateItineraryDay = (index: number, field: "title" | "details", value: string) => {
         const updatedItinerary = [...formData.itinerary];
         updatedItinerary[index] = { ...updatedItinerary[index], [field]: value };
-        handleFormChange('itinerary', updatedItinerary);
+        handleFormChange("itinerary", updatedItinerary);
     };
 
     const removeItineraryDay = (index: number) => {
@@ -468,9 +653,9 @@ export default function Tours() {
         // Renumber days
         const renumberedItinerary = updatedItinerary.map((day, i) => ({
             ...day,
-            dayNumber: i + 1
+            dayNumber: i + 1,
         }));
-        handleFormChange('itinerary', renumberedItinerary);
+        handleFormChange("itinerary", renumberedItinerary);
     };
 
     const duplicateItineraryDay = (index: number) => {
@@ -478,9 +663,9 @@ export default function Tours() {
         const newDay = {
             ...dayToCopy,
             dayNumber: formData.itinerary.length + 1,
-            title: `${dayToCopy.title} (sao chép)`
+            title: `${dayToCopy.title} (sao chép)`,
         };
-        handleFormChange('itinerary', [...formData.itinerary, newDay]);
+        handleFormChange("itinerary", [...formData.itinerary, newDay]);
     };
 
     const columns: Column[] = [
@@ -512,7 +697,9 @@ export default function Tours() {
             render: (value, record: Tour) => (
                 <div className="max-w-xs">
                     <div className="font-medium truncate">{value}</div>
-                    <div className="text-sm text-gray-500">{record.departure} → {record.destination}</div>
+                    <div className="text-sm text-gray-500">
+                        {record.departure} → {record.destination}
+                    </div>
                     <div className="text-xs text-gray-400">{record.duration}</div>
                 </div>
             ),
@@ -525,10 +712,10 @@ export default function Tours() {
                 <div className="text-sm">
                     <div className="flex items-center">
                         <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(record.startDate).toLocaleDateString('vi-VN')}
+                        {new Date(record.startDate).toLocaleDateString("vi-VN")}
                     </div>
                     <div className="text-gray-500">
-                        đến {new Date(record.endDate).toLocaleDateString('vi-VN')}
+                        đến {new Date(record.endDate).toLocaleDateString("vi-VN")}
                     </div>
                 </div>
             ),
@@ -541,11 +728,11 @@ export default function Tours() {
                 <div className="text-sm">
                     <div className="font-medium flex items-center">
                         <DollarSign className="w-3 h-3 mr-1" />
-                        {new Intl.NumberFormat('vi-VN').format(value)} ₫
+                        {new Intl.NumberFormat("vi-VN").format(value)} ₫
                     </div>
                     {record.priceChild && (
                         <div className="text-gray-500 text-xs">
-                            Trẻ em: {new Intl.NumberFormat('vi-VN').format(record.priceChild)} ₫
+                            Trẻ em: {new Intl.NumberFormat("vi-VN").format(record.priceChild)} ₫
                         </div>
                     )}
                 </div>
@@ -561,9 +748,14 @@ export default function Tours() {
                         <Users className="w-3 h-3 mr-1" />
                         {record.seatsBooked}/{record.seatsTotal}
                     </div>
-                    <div className={`text-xs ${record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.2 ? 'text-orange-600' :
-                            record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
-                        }`}>
+                    <div
+                        className={`text-xs ${record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.2
+                                ? "text-orange-600"
+                                : record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.5
+                                    ? "text-yellow-600"
+                                    : "text-green-600"
+                            }`}
+                    >
                         {record.seatsTotal - record.seatsBooked} chỗ trống
                     </div>
                 </div>
@@ -579,9 +771,7 @@ export default function Tours() {
                         <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
                         {value}
                     </div>
-                    <div className="text-gray-500 text-xs">
-                        {record.reviewCount} đánh giá
-                    </div>
+                    <div className="text-gray-500 text-xs">{record.reviewCount} đánh giá</div>
                 </div>
             ),
         },
@@ -591,11 +781,15 @@ export default function Tours() {
             sortable: true,
             render: (value, record: Tour) => (
                 <div className="flex items-center space-x-1">
-                    <Badge className={
-                        value === "active" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                            value === "hidden" ? "bg-gray-100 text-gray-800 hover:bg-gray-100" :
-                                "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                    }>
+                    <Badge
+                        className={
+                            value === "active"
+                                ? "bg-green-100 text-green-800 hover:bg-green-100"
+                                : value === "hidden"
+                                    ? "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                                    : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
+                        }
+                    >
                         {value === "active" ? "Hoạt động" : value === "hidden" ? "Ẩn" : "Bản nháp"}
                     </Badge>
                     {record.highlight && (
@@ -646,7 +840,7 @@ export default function Tours() {
             visibility: tour.visibility,
             metaTitle: tour.metaTitle || "",
             metaDescription: tour.metaDescription || "",
-            metaKeywords: tour.metaKeywords || ""
+            metaKeywords: tour.metaKeywords || "",
         });
         setModalMode("edit");
         setModalOpen(true);
@@ -679,7 +873,7 @@ export default function Tours() {
         }
 
         if (modalMode === "create") {
-            createTourMutation.mutate({ ...formData, status: 'active' });
+            createTourMutation.mutate({ ...formData, status: "active" });
         } else if (modalMode === "edit" && selectedTour) {
             updateTourMutation.mutate({ id: selectedTour.id, data: formData });
         }
@@ -687,20 +881,18 @@ export default function Tours() {
 
     const handleSaveDraft = () => {
         if (modalMode === "create") {
-            createTourMutation.mutate({ ...formData, status: 'draft' });
+            createTourMutation.mutate({ ...formData, status: "draft" });
         } else if (modalMode === "edit" && selectedTour) {
-            updateTourMutation.mutate({ id: selectedTour.id, data: { ...formData, status: 'draft' } });
+            updateTourMutation.mutate({ id: selectedTour.id, data: { ...formData, status: "draft" } });
         }
     };
 
     const handlePreview = () => {
-        // Mock preview functionality
-        window.open(`/tours/${formData.slug}`, '_blank');
+        window.open(`/tours/${formData.slug}`, "_blank");
     };
 
     const confirmDelete = () => {
         if (tourToDelete) {
-            // Check if tour has paid orders
             if (tourToDelete.seatsBooked > 0) {
                 toast({
                     title: "Không thể xóa tour",
@@ -717,14 +909,14 @@ export default function Tours() {
         {
             label: "Xuất bản",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'publish', ids: keys });
+                bulkActionMutation.mutate({ action: "publish", ids: keys });
             },
             icon: <Eye className="w-4 h-4 mr-2" />,
         },
         {
             label: "Ẩn",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'unpublish', ids: keys });
+                bulkActionMutation.mutate({ action: "unpublish", ids: keys });
             },
             icon: <Eye className="w-4 h-4 mr-2" />,
             variant: "secondary" as const,
@@ -732,7 +924,7 @@ export default function Tours() {
         {
             label: "Xóa",
             action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'delete', ids: keys });
+                bulkActionMutation.mutate({ action: "delete", ids: keys });
             },
             icon: <Trash2 className="w-4 h-4 mr-2" />,
             variant: "destructive" as const,
@@ -757,7 +949,7 @@ export default function Tours() {
                     ...tour,
                     title: `${tour.title} (sao chép)`,
                     slug: `${tour.slug}-copy`,
-                    status: "draft" as const
+                    status: "draft" as const,
                 };
                 delete (duplicatedTour as any).id;
                 setFormData(duplicatedTour as any);
@@ -802,12 +994,16 @@ export default function Tours() {
                                 <p className="text-gray-500">{selectedTour.summary}</p>
                                 <div className="flex items-center mt-2">
                                     <Star className="w-4 h-4 text-yellow-500 fill-current mr-1" />
-                                    <span>{selectedTour.rating} ({selectedTour.reviewCount} đánh giá)</span>
+                                    <span>
+                                        {selectedTour.rating} ({selectedTour.reviewCount} đánh giá)
+                                    </span>
                                 </div>
                             </div>
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Tuyến</Label>
-                                <p className="mt-1">{selectedTour.departure} → {selectedTour.destination}</p>
+                                <p className="mt-1">
+                                    {selectedTour.departure} → {selectedTour.destination}
+                                </p>
                             </div>
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Thời gian</Label>
@@ -818,18 +1014,24 @@ export default function Tours() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <Label className="text-sm font-medium text-gray-700">Giá người lớn</Label>
-                                    <p className="mt-1 font-bold text-green-600">{new Intl.NumberFormat('vi-VN').format(selectedTour.priceAdult)} ₫</p>
+                                    <p className="mt-1 font-bold text-green-600">
+                                        {new Intl.NumberFormat("vi-VN").format(selectedTour.priceAdult)} ₫
+                                    </p>
                                 </div>
                                 {selectedTour.priceChild && (
                                     <div>
                                         <Label className="text-sm font-medium text-gray-700">Giá trẻ em</Label>
-                                        <p className="mt-1 font-bold text-green-600">{new Intl.NumberFormat('vi-VN').format(selectedTour.priceChild)} ₫</p>
+                                        <p className="mt-1 font-bold text-green-600">
+                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceChild)} ₫
+                                        </p>
                                     </div>
                                 )}
                             </div>
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Số chỗ</Label>
-                                <p className="mt-1">{selectedTour.seatsBooked}/{selectedTour.seatsTotal} đã đặt</p>
+                                <p className="mt-1">
+                                    {selectedTour.seatsBooked}/{selectedTour.seatsTotal} đã đặt
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -844,7 +1046,9 @@ export default function Tours() {
                         <div className="mt-2 space-y-3">
                             {selectedTour.itinerary.map((day, index) => (
                                 <div key={index} className="border rounded-lg p-3">
-                                    <h4 className="font-medium">Ngày {day.dayNumber}: {day.title}</h4>
+                                    <h4 className="font-medium">
+                                        Ngày {day.dayNumber}: {day.title}
+                                    </h4>
                                     <p className="mt-1 text-sm text-gray-600">{day.details}</p>
                                 </div>
                             ))}
@@ -856,7 +1060,9 @@ export default function Tours() {
                             <Label className="text-sm font-medium text-gray-700">Bao gồm</Label>
                             <ul className="mt-1 text-sm list-disc list-inside">
                                 {selectedTour.inclusions.map((item, index) => (
-                                    <li key={index} className="text-green-600">{item}</li>
+                                    <li key={index} className="text-green-600">
+                                        {item}
+                                    </li>
                                 ))}
                             </ul>
                         </div>
@@ -864,7 +1070,9 @@ export default function Tours() {
                             <Label className="text-sm font-medium text-gray-700">Không bao gồm</Label>
                             <ul className="mt-1 text-sm list-disc list-inside">
                                 {selectedTour.exclusions.map((item, index) => (
-                                    <li key={index} className="text-red-600">{item}</li>
+                                    <li key={index} className="text-red-600">
+                                        {item}
+                                    </li>
                                 ))}
                             </ul>
                         </div>
@@ -891,7 +1099,7 @@ export default function Tours() {
                             <Input
                                 id="title"
                                 value={formData.title}
-                                onChange={(e) => handleFormChange('title', e.target.value)}
+                                onChange={(e) => handleFormChange("title", e.target.value)}
                                 placeholder="Du thuyền Vịnh Hạ Long 3N2Đ"
                                 className={formErrors.title ? "border-red-500" : ""}
                             />
@@ -904,7 +1112,7 @@ export default function Tours() {
                             <Input
                                 id="title_vn"
                                 value={formData.title_vn}
-                                onChange={(e) => handleFormChange('title_vn', e.target.value)}
+                                onChange={(e) => handleFormChange("title_vn", e.target.value)}
                                 placeholder="Tên tiếng Việt"
                             />
                         </div>
@@ -915,7 +1123,7 @@ export default function Tours() {
                         <Input
                             id="slug"
                             value={formData.slug}
-                            onChange={(e) => handleFormChange('slug', e.target.value)}
+                            onChange={(e) => handleFormChange("slug", e.target.value)}
                             placeholder="du-thuyen-vinh-ha-long-3n2d"
                         />
                         <p className="text-xs text-gray-500 mt-1">Nếu để trống sẽ tự động tạo từ tiêu đề</p>
@@ -926,7 +1134,7 @@ export default function Tours() {
                         <Textarea
                             id="summary"
                             value={formData.summary}
-                            onChange={(e) => handleFormChange('summary', e.target.value)}
+                            onChange={(e) => handleFormChange("summary", e.target.value)}
                             placeholder="Mô tả ngắn về tour"
                             rows={2}
                             maxLength={300}
@@ -944,7 +1152,7 @@ export default function Tours() {
                         <Label htmlFor="categoryId">Danh mục *</Label>
                         <Select
                             value={formData.categoryId}
-                            onValueChange={(value) => handleFormChange('categoryId', value)}
+                            onValueChange={(value) => handleFormChange("categoryId", value)}
                         >
                             <SelectTrigger className={formErrors.categoryId ? "border-red-500" : ""}>
                                 <SelectValue placeholder="Chọn danh mục" />
@@ -966,8 +1174,16 @@ export default function Tours() {
                         <Label htmlFor="tags">Tags</Label>
                         <Input
                             id="tags"
-                            value={formData.tags.join(', ')}
-                            onChange={(e) => handleFormChange('tags', e.target.value.split(',').map(tag => tag.trim()).filter(Boolean))}
+                            value={formData.tags.join(", ")}
+                            onChange={(e) =>
+                                handleFormChange(
+                                    "tags",
+                                    e.target.value
+                                        .split(",")
+                                        .map((tag) => tag.trim())
+                                        .filter(Boolean)
+                                )
+                            }
                             placeholder="thiên nhiên, du thuyền, gia đình"
                         />
                     </div>
@@ -978,7 +1194,7 @@ export default function Tours() {
                         <Label htmlFor="description">Mô tả chi tiết</Label>
                         <RichTextEditor
                             value={formData.description}
-                            onChange={(value) => handleFormChange('description', value)}
+                            onChange={(value) => handleFormChange("description", value)}
                             placeholder="Mô tả chi tiết về tour"
                         />
                     </div>
@@ -1014,13 +1230,13 @@ export default function Tours() {
                                     <Input
                                         placeholder="Tiêu đề ngày"
                                         value={day.title}
-                                        onChange={(e) => updateItineraryDay(index, 'title', e.target.value)}
+                                        onChange={(e) => updateItineraryDay(index, "title", e.target.value)}
                                         className="mb-2"
                                     />
                                     <Textarea
                                         placeholder="Chi tiết hoạt động trong ngày"
                                         value={day.details}
-                                        onChange={(e) => updateItineraryDay(index, 'details', e.target.value)}
+                                        onChange={(e) => updateItineraryDay(index, "details", e.target.value)}
                                         rows={2}
                                     />
                                 </div>
@@ -1029,11 +1245,7 @@ export default function Tours() {
                             {formData.itinerary.length === 0 && (
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                                     <p className="text-gray-500">Chưa có lịch trình nào</p>
-                                    <Button
-                                        type="button"
-                                        onClick={addItineraryDay}
-                                        className="mt-2"
-                                    >
+                                    <Button type="button" onClick={addItineraryDay} className="mt-2">
                                         Thêm ngày đầu tiên
                                     </Button>
                                 </div>
@@ -1061,7 +1273,7 @@ export default function Tours() {
                             <Input
                                 id="departure"
                                 value={formData.departure}
-                                onChange={(e) => handleFormChange('departure', e.target.value)}
+                                onChange={(e) => handleFormChange("departure", e.target.value)}
                                 placeholder="Hà Nội"
                                 className={formErrors.departure ? "border-red-500" : ""}
                             />
@@ -1074,7 +1286,7 @@ export default function Tours() {
                             <Input
                                 id="destination"
                                 value={formData.destination}
-                                onChange={(e) => handleFormChange('destination', e.target.value)}
+                                onChange={(e) => handleFormChange("destination", e.target.value)}
                                 placeholder="Vịnh Hạ Long"
                                 className={formErrors.destination ? "border-red-500" : ""}
                             />
@@ -1091,7 +1303,7 @@ export default function Tours() {
                                 id="startDate"
                                 type="date"
                                 value={formData.startDate}
-                                onChange={(e) => handleFormChange('startDate', e.target.value)}
+                                onChange={(e) => handleFormChange("startDate", e.target.value)}
                                 className={formErrors.startDate ? "border-red-500" : ""}
                             />
                             {formErrors.startDate && (
@@ -1104,7 +1316,7 @@ export default function Tours() {
                                 id="endDate"
                                 type="date"
                                 value={formData.endDate}
-                                onChange={(e) => handleFormChange('endDate', e.target.value)}
+                                onChange={(e) => handleFormChange("endDate", e.target.value)}
                                 className={formErrors.endDate ? "border-red-500" : ""}
                             />
                             {formErrors.endDate && (
@@ -1116,7 +1328,7 @@ export default function Tours() {
                             <Input
                                 id="duration"
                                 value={formData.duration}
-                                onChange={(e) => handleFormChange('duration', e.target.value)}
+                                onChange={(e) => handleFormChange("duration", e.target.value)}
                                 placeholder="3 ngày 2 đêm"
                             />
                         </div>
@@ -1129,7 +1341,7 @@ export default function Tours() {
                                 id="priceAdult"
                                 type="number"
                                 value={formData.priceAdult || ""}
-                                onChange={(e) => handleFormChange('priceAdult', parseInt(e.target.value) || 0)}
+                                onChange={(e) => handleFormChange("priceAdult", parseInt(e.target.value) || 0)}
                                 placeholder="3500000"
                                 className={formErrors.priceAdult ? "border-red-500" : ""}
                             />
@@ -1143,7 +1355,7 @@ export default function Tours() {
                                 id="priceChild"
                                 type="number"
                                 value={formData.priceChild || ""}
-                                onChange={(e) => handleFormChange('priceChild', parseInt(e.target.value) || 0)}
+                                onChange={(e) => handleFormChange("priceChild", parseInt(e.target.value) || 0)}
                                 placeholder="2800000"
                             />
                         </div>
@@ -1157,7 +1369,7 @@ export default function Tours() {
                                 type="number"
                                 min="1"
                                 value={formData.seatsTotal || ""}
-                                onChange={(e) => handleFormChange('seatsTotal', parseInt(e.target.value) || 1)}
+                                onChange={(e) => handleFormChange("seatsTotal", parseInt(e.target.value) || 1)}
                                 placeholder="25"
                                 className={formErrors.seatsTotal ? "border-red-500" : ""}
                             />
@@ -1172,7 +1384,7 @@ export default function Tours() {
                                 type="number"
                                 min="1"
                                 value={formData.minBooking || ""}
-                                onChange={(e) => handleFormChange('minBooking', parseInt(e.target.value) || 1)}
+                                onChange={(e) => handleFormChange("minBooking", parseInt(e.target.value) || 1)}
                                 placeholder="1"
                                 className={formErrors.minBooking ? "border-red-500" : ""}
                             />
@@ -1186,8 +1398,16 @@ export default function Tours() {
                         <Label htmlFor="pickupPoints">Điểm đón</Label>
                         <Input
                             id="pickupPoints"
-                            value={formData.pickupPoints.join(', ')}
-                            onChange={(e) => handleFormChange('pickupPoints', e.target.value.split(',').map(point => point.trim()).filter(Boolean))}
+                            value={formData.pickupPoints.join(", ")}
+                            onChange={(e) =>
+                                handleFormChange(
+                                    "pickupPoints",
+                                    e.target.value
+                                        .split(",")
+                                        .map((point) => point.trim())
+                                        .filter(Boolean)
+                                )
+                            }
                             placeholder="Hà Nội, Hải Phòng"
                         />
                     </div>
@@ -1197,8 +1417,10 @@ export default function Tours() {
                             <Label htmlFor="inclusions">Dịch vụ bao gồm</Label>
                             <Textarea
                                 id="inclusions"
-                                value={formData.inclusions.join('\n')}
-                                onChange={(e) => handleFormChange('inclusions', e.target.value.split('\n').filter(Boolean))}
+                                value={formData.inclusions.join("\n")}
+                                onChange={(e) =>
+                                    handleFormChange("inclusions", e.target.value.split("\n").filter(Boolean))
+                                }
                                 placeholder="Mỗi dòng là một dịch vụ bao gồm"
                                 rows={4}
                             />
@@ -1207,8 +1429,10 @@ export default function Tours() {
                             <Label htmlFor="exclusions">Dịch vụ không bao gồm</Label>
                             <Textarea
                                 id="exclusions"
-                                value={formData.exclusions.join('\n')}
-                                onChange={(e) => handleFormChange('exclusions', e.target.value.split('\n').filter(Boolean))}
+                                value={formData.exclusions.join("\n")}
+                                onChange={(e) =>
+                                    handleFormChange("exclusions", e.target.value.split("\n").filter(Boolean))
+                                }
                                 placeholder="Mỗi dòng là một dịch vụ không bao gồm"
                                 rows={4}
                             />
@@ -1220,7 +1444,7 @@ export default function Tours() {
                         <Textarea
                             id="cancellationPolicy"
                             value={formData.cancellationPolicy}
-                            onChange={(e) => handleFormChange('cancellationPolicy', e.target.value)}
+                            onChange={(e) => handleFormChange("cancellationPolicy", e.target.value)}
                             placeholder="Mô tả chính sách hủy tour và hoàn tiền"
                             rows={3}
                         />
@@ -1235,7 +1459,7 @@ export default function Tours() {
                                 maxFiles={10}
                                 maxSizeMB={5}
                                 initialFiles={formData.images}
-                                onChange={(files) => handleFormChange('images', files)}
+                                onChange={(files) => handleFormChange("images", files)}
                                 hint="Kích thước tối đa 5MB/file, khuyến nghị 1920×1080"
                                 className={formErrors.images ? "border-red-500" : ""}
                             />
@@ -1253,7 +1477,7 @@ export default function Tours() {
                         <Input
                             id="videoUrl"
                             value={formData.videoUrl}
-                            onChange={(e) => handleFormChange('videoUrl', e.target.value)}
+                            onChange={(e) => handleFormChange("videoUrl", e.target.value)}
                             placeholder="https://youtube.com/watch?v=..."
                             className={formErrors.videoUrl ? "border-red-500" : ""}
                         />
@@ -1269,11 +1493,13 @@ export default function Tours() {
                         <Input
                             id="metaTitle"
                             value={formData.metaTitle}
-                            onChange={(e) => handleFormChange('metaTitle', e.target.value)}
+                            onChange={(e) => handleFormChange("metaTitle", e.target.value)}
                             placeholder="Title cho SEO (khuyến nghị 50-60 ký tự)"
                             maxLength={60}
                         />
-                        <p className="text-xs text-gray-500 mt-1">{formData.metaTitle.length}/60 ký tự</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.metaTitle.length}/60 ký tự
+                        </p>
                     </div>
 
                     <div>
@@ -1281,12 +1507,14 @@ export default function Tours() {
                         <Textarea
                             id="metaDescription"
                             value={formData.metaDescription}
-                            onChange={(e) => handleFormChange('metaDescription', e.target.value)}
+                            onChange={(e) => handleFormChange("metaDescription", e.target.value)}
                             placeholder="Mô tả cho SEO (khuyến nghị 150-160 ký tự)"
                             rows={3}
                             maxLength={160}
                         />
-                        <p className="text-xs text-gray-500 mt-1">{formData.metaDescription.length}/160 ký tự</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.metaDescription.length}/160 ký tự
+                        </p>
                     </div>
 
                     <div>
@@ -1294,7 +1522,7 @@ export default function Tours() {
                         <Input
                             id="metaKeywords"
                             value={formData.metaKeywords}
-                            onChange={(e) => handleFormChange('metaKeywords', e.target.value)}
+                            onChange={(e) => handleFormChange("metaKeywords", e.target.value)}
                             placeholder="keyword1, keyword2, keyword3"
                         />
                     </div>
@@ -1305,7 +1533,7 @@ export default function Tours() {
                         <Label htmlFor="status">Trạng thái</Label>
                         <Select
                             value={formData.status}
-                            onValueChange={(value) => handleFormChange('status', value)}
+                            onValueChange={(value) => handleFormChange("status", value)}
                         >
                             <SelectTrigger>
                                 <SelectValue />
@@ -1322,7 +1550,7 @@ export default function Tours() {
                         <Switch
                             id="highlight"
                             checked={formData.highlight}
-                            onCheckedChange={(checked) => handleFormChange('highlight', checked)}
+                            onCheckedChange={(checked) => handleFormChange("highlight", checked)}
                         />
                         <Label htmlFor="highlight">Tour nổi bật</Label>
                     </div>
@@ -1331,7 +1559,7 @@ export default function Tours() {
                         <Label htmlFor="visibility">Khả năng hiển thị</Label>
                         <Select
                             value={formData.visibility}
-                            onValueChange={(value) => handleFormChange('visibility', value)}
+                            onValueChange={(value) => handleFormChange("visibility", value)}
                         >
                             <SelectTrigger>
                                 <SelectValue />
@@ -1361,7 +1589,7 @@ export default function Tours() {
                         disabled={isLoading}
                         className="hover:bg-primary-600 hover:text-white"
                     >
-                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
                     </Button>
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
@@ -1389,7 +1617,9 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đang bán</p>
-                                <p className="text-2xl font-bold">{tours.filter((t: Tour) => t.status === "active").length}</p>
+                                <p className="text-2xl font-bold">
+                                    {tours.filter((t: Tour) => t.status === "active").length}
+                                </p>
                             </div>
                             <Eye className="w-8 h-8 text-green-500" />
                         </div>
@@ -1401,7 +1631,8 @@ export default function Tours() {
                             <div>
                                 <p className="text-sm text-gray-600">Sắp hết chỗ</p>
                                 <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => (t.seatsTotal - t.seatsBooked) <= t.seatsTotal * 0.2).length}
+                                    {tours.filter((t: Tour) => t.seatsTotal - t.seatsBooked <= t.seatsTotal * 0.2)
+                                        .length}
                                 </p>
                             </div>
                             <Users className="w-8 h-8 text-orange-500" />
@@ -1430,7 +1661,10 @@ export default function Tours() {
                             <CardDescription>Quản lý thông tin và trạng thái tour du lịch</CardDescription>
                         </div>
                         <div className="flex items-center space-x-2">
-                            <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
+                            <Select
+                                value={filters.status}
+                                onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
+                            >
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -1441,7 +1675,10 @@ export default function Tours() {
                                     <SelectItem value="draft">Bản nháp</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.category} onValueChange={(value) => setFilters(prev => ({ ...prev, category: value }))}>
+                            <Select
+                                value={filters.category}
+                                onValueChange={(value) => setFilters((prev) => ({ ...prev, category: value }))}
+                            >
                                 <SelectTrigger className="w-36">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -1466,9 +1703,7 @@ export default function Tours() {
                             pageSize: pagination.pageSize,
                             total: total,
                         }}
-                        onPaginationChange={(page, pageSize) =>
-                            setPagination({ current: page, pageSize })
-                        }
+                        onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
                         onSearch={setSearchQuery}
                         rowSelection={{
                             selectedRowKeys: selectedTours,
@@ -1477,7 +1712,9 @@ export default function Tours() {
                         bulkActions={bulkActions}
                         actions={actions}
                         exportable
-                        onExport={() => toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })}
+                        onExport={() =>
+                            toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })
+                        }
                         loading={isLoading}
                     />
                 </CardContent>
@@ -1488,14 +1725,18 @@ export default function Tours() {
                 open={modalOpen}
                 onOpenChange={handleModalClose}
                 title={
-                    modalMode === "create" ? "Tạo tour mới" :
-                        modalMode === "edit" ? "Chỉnh sửa tour" :
-                            "Chi tiết tour"
+                    modalMode === "create"
+                        ? "Tạo tour mới"
+                        : modalMode === "edit"
+                            ? "Chỉnh sửa tour"
+                            : "Chi tiết tour"
                 }
                 description={
-                    modalMode === "create" ? "Tạo tour du lịch mới với đầy đủ thông tin" :
-                        modalMode === "edit" ? "Cập nhật thông tin tour du lịch" :
-                            "Xem thông tin chi tiết tour du lịch"
+                    modalMode === "create"
+                        ? "Tạo tour du lịch mới với đầy đủ thông tin"
+                        : modalMode === "edit"
+                            ? "Cập nhật thông tin tour du lịch"
+                            : "Xem thông tin chi tiết tour du lịch"
                 }
                 mode={modalMode}
                 size="full"
@@ -1503,22 +1744,29 @@ export default function Tours() {
                 submitDisabled={isSubmitDisabled()}
                 submitText={modalMode === "create" ? "Tạo & Xuất bản" : "Cập nhật"}
                 cancelText="Hủy"
-                extraActions={modalMode !== "view" ? [
-                    {
-                        text: "Lưu nháp",
-                        onClick: handleSaveDraft,
-                        variant: "outline" as const,
-                        icon: <Save className="w-4 h-4 mr-2" />
-                    },
-                    {
-                        text: "Xem trước",
-                        onClick: handlePreview,
-                        variant: "outline" as const,
-                        icon: <ExternalLink className="w-4 h-4 mr-2" />
-                    }
-                ] : undefined}
+                extraActions={
+                    modalMode !== "view"
+                        ? [
+                            {
+                                text: "Lưu nháp",
+                                onClick: handleSaveDraft,
+                                variant: "outline" as const,
+                                icon: <Save className="w-4 h-4 mr-2" />,
+                            },
+                            {
+                                text: "Xem trước",
+                                onClick: handlePreview,
+                                variant: "outline" as const,
+                                icon: <ExternalLink className="w-4 h-4 mr-2" />,
+                            },
+                        ]
+                        : undefined
+                }
             >
-                {renderTourForm()}
+                {/* Bọc scroll chỉ phần nội dung form, không bọc toàn bộ ModalForm children */}
+                <div className="max-h-[60vh] overflow-y-auto pr-2">
+                    {renderTourForm()}
+                </div>
             </ModalForm>
 
             {/* Delete Confirmation */}
@@ -1526,7 +1774,8 @@ export default function Tours() {
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}
                 title="Xóa tour"
-                message={`Bạn có chắc chắn muốn xóa tour "${tourToDelete?.title}"?${tourToDelete?.seatsBooked ? ' Tour này có đơn hàng đã đặt.' : ''}`}
+                message={`Bạn có chắc chắn muốn xóa tour "${tourToDelete?.title}"?${tourToDelete?.seatsBooked ? " Tour này có đơn hàng đã đặt." : ""
+                    }`}
                 type="danger"
                 requireTyping={true}
                 typingText={tourToDelete?.seatsBooked ? "FORCE_DELETE" : "DELETE"}

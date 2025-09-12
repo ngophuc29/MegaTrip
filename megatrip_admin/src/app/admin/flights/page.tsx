@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plane, Plus, Edit, Eye, Trash2, Filter, Download, MapPin, Clock, Users, DollarSign, RefreshCw, Calendar, Ban, AlertTriangle } from "lucide-react";
@@ -86,6 +86,189 @@ const mockAirports = [
     { code: "DLI", name: "Sân bay Liên Khương", city: "Đà Lạt" },
 ];
 
+const mockFlights: Flight[] = [
+    {
+        id: "flight_001",
+        flightCode: "VN1234",
+        airline: { id: "airline_001", name: "Vietnam Airlines", code: "VN", logo: "/placeholder.svg" },
+        fromAirport: { code: "SGN", name: "Sân bay Tân Sơn Nhất", city: "TP.HCM" },
+        toAirport: { code: "HAN", name: "Sân bay Nội Bài", city: "Hà Nội" },
+        departureAt: "2025-09-15T08:00:00.000Z",
+        arrivalAt: "2025-09-15T10:15:00.000Z",
+        duration: "2h 15m",
+        cabinClass: ["Economy", "Business"],
+        price: 2850000,
+        seatsTotal: 180,
+        seatsAvailable: 120,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg, hành lý ký gửi 23kg",
+        createdAt: "2025-09-01T10:00:00.000Z",
+        updatedAt: "2025-09-01T10:00:00.000Z",
+    },
+    {
+        id: "flight_002",
+        flightCode: "VJ5678",
+        airline: { id: "airline_002", name: "VietJet Air", code: "VJ", logo: "/placeholder.svg" },
+        fromAirport: { code: "HAN", name: "Sân bay Nội Bài", city: "Hà Nội" },
+        toAirport: { code: "DAD", name: "Sân bay Đà Nẵng", city: "Đà Nẵng" },
+        departureAt: "2025-09-16T12:00:00.000Z",
+        arrivalAt: "2025-09-16T13:30:00.000Z",
+        duration: "1h 30m",
+        cabinClass: ["Economy"],
+        price: 1500000,
+        seatsTotal: 150,
+        seatsAvailable: 30,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg",
+        createdAt: "2025-09-02T09:00:00.000Z",
+        updatedAt: "2025-09-02T09:00:00.000Z",
+    },
+    {
+        id: "flight_003",
+        flightCode: "QH9012",
+        airline: { id: "airline_003", name: "Bamboo Airways", code: "QH", logo: "/placeholder.svg" },
+        fromAirport: { code: "SGN", name: "Sân bay Tân Sơn Nhất", city: "TP.HCM" },
+        toAirport: { code: "PQC", name: "Sân bay Phú Quốc", city: "Phú Quốc" },
+        departureAt: "2025-09-17T14:00:00.000Z",
+        arrivalAt: "2025-09-17T15:00:00.000Z",
+        duration: "1h 0m",
+        cabinClass: ["Economy", "Premium Economy"],
+        price: 2000000,
+        seatsTotal: 200,
+        seatsAvailable: 50,
+        status: "delayed",
+        baggageInfo: "Hành lý xách tay 7kg, hành lý ký gửi 20kg",
+        createdAt: "2025-09-03T11:00:00.000Z",
+        updatedAt: "2025-09-10T08:00:00.000Z",
+    },
+    {
+        id: "flight_004",
+        flightCode: "BL3456",
+        airline: { id: "airline_004", name: "Jetstar Pacific", code: "BL", logo: "/placeholder.svg" },
+        fromAirport: { code: "DAD", name: "Sân bay Đà Nẵng", city: "Đà Nẵng" },
+        toAirport: { code: "CXR", name: "Sân bay Cam Ranh", city: "Nha Trang" },
+        departureAt: "2025-09-18T09:00:00.000Z",
+        arrivalAt: "2025-09-18T10:00:00.000Z",
+        duration: "1h 0m",
+        cabinClass: ["Economy"],
+        price: 1200000,
+        seatsTotal: 120,
+        seatsAvailable: 20,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg",
+        createdAt: "2025-09-04T12:00:00.000Z",
+        updatedAt: "2025-09-04T12:00:00.000Z",
+    },
+    {
+        id: "flight_005",
+        flightCode: "VN7890",
+        airline: { id: "airline_001", name: "Vietnam Airlines", code: "VN", logo: "/placeholder.svg" },
+        fromAirport: { code: "HAN", name: "Sân bay Nội Bài", city: "Hà Nội" },
+        toAirport: { code: "DLI", name: "Sân bay Liên Khương", city: "Đà Lạt" },
+        departureAt: "2025-09-19T10:00:00.000Z",
+        arrivalAt: "2025-09-19T11:45:00.000Z",
+        duration: "1h 45m",
+        cabinClass: ["Economy", "Business", "First"],
+        price: 3500000,
+        seatsTotal: 250,
+        seatsAvailable: 180,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 12kg, hành lý ký gửi 32kg",
+        createdAt: "2025-09-05T14:00:00.000Z",
+        updatedAt: "2025-09-05T14:00:00.000Z",
+    },
+    {
+        id: "flight_006",
+        flightCode: "VJ2345",
+        airline: { id: "airline_002", name: "VietJet Air", code: "VJ", logo: "/placeholder.svg" },
+        fromAirport: { code: "SGN", name: "Sân bay Tân Sơn Nhất", city: "TP.HCM" },
+        toAirport: { code: "DAD", name: "Sân bay Đà Nẵng", city: "Đà Nẵng" },
+        departureAt: "2025-09-20T15:00:00.000Z",
+        arrivalAt: "2025-09-20T16:30:00.000Z",
+        duration: "1h 30m",
+        cabinClass: ["Economy"],
+        price: 1600000,
+        seatsTotal: 150,
+        seatsAvailable: 10,
+        status: "cancelled",
+        baggageInfo: "Hành lý xách tay 7kg",
+        createdAt: "2025-09-06T09:00:00.000Z",
+        updatedAt: "2025-09-10T10:00:00.000Z",
+    },
+    {
+        id: "flight_007",
+        flightCode: "QH4567",
+        airline: { id: "airline_003", name: "Bamboo Airways", code: "QH", logo: "/placeholder.svg" },
+        fromAirport: { code: "CXR", name: "Sân bay Cam Ranh", city: "Nha Trang" },
+        toAirport: { code: "HAN", name: "Sân bay Nội Bài", city: "Hà Nội" },
+        departureAt: "2025-09-21T11:00:00.000Z",
+        arrivalAt: "2025-09-21T12:45:00.000Z",
+        duration: "1h 45m",
+        cabinClass: ["Economy", "Premium Economy"],
+        price: 2200000,
+        seatsTotal: 200,
+        seatsAvailable: 150,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg, hành lý ký gửi 20kg",
+        createdAt: "2025-09-07T11:00:00.000Z",
+        updatedAt: "2025-09-07T11:00:00.000Z",
+    },
+    {
+        id: "flight_008",
+        flightCode: "BL6789",
+        airline: { id: "airline_004", name: "Jetstar Pacific", code: "BL", logo: "/placeholder.svg" },
+        fromAirport: { code: "PQC", name: "Sân bay Phú Quốc", city: "Phú Quốc" },
+        toAirport: { code: "SGN", name: "Sân bay Tân Sơn Nhất", city: "TP.HCM" },
+        departureAt: "2025-09-22T13:00:00.000Z",
+        arrivalAt: "2025-09-22T14:00:00.000Z",
+        duration: "1h 0m",
+        cabinClass: ["Economy"],
+        price: 1300000,
+        seatsTotal: 120,
+        seatsAvailable: 90,
+        status: "completed",
+        baggageInfo: "Hành lý xách tay 7kg",
+        createdAt: "2025-09-08T12:00:00.000Z",
+        updatedAt: "2025-09-08T12:00:00.000Z",
+    },
+    {
+        id: "flight_009",
+        flightCode: "VN9012",
+        airline: { id: "airline_001", name: "Vietnam Airlines", code: "VN", logo: "/placeholder.svg" },
+        fromAirport: { code: "DLI", name: "Sân bay Liên Khương", city: "Đà Lạt" },
+        toAirport: { code: "SGN", name: "Sân bay Tân Sơn Nhất", city: "TP.HCM" },
+        departureAt: "2025-09-23T16:00:00.000Z",
+        arrivalAt: "2025-09-23T17:00:00.000Z",
+        duration: "1h 0m",
+        cabinClass: ["Economy", "Business"],
+        price: 2800000,
+        seatsTotal: 180,
+        seatsAvailable: 100,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg, hành lý ký gửi 23kg",
+        createdAt: "2025-09-09T10:00:00.000Z",
+        updatedAt: "2025-09-09T10:00:00.000Z",
+    },
+    {
+        id: "flight_010",
+        flightCode: "VJ1234",
+        airline: { id: "airline_002", name: "VietJet Air", code: "VJ", logo: "/placeholder.svg" },
+        fromAirport: { code: "HAN", name: "Sân bay Nội Bài", city: "Hà Nội" },
+        toAirport: { code: "PQC", name: "Sân bay Phú Quốc", city: "Phú Quốc" },
+        departureAt: "2025-09-24T07:00:00.000Z",
+        arrivalAt: "2025-09-24T09:15:00.000Z",
+        duration: "2h 15m",
+        cabinClass: ["Economy"],
+        price: 1700000,
+        seatsTotal: 150,
+        seatsAvailable: 80,
+        status: "scheduled",
+        baggageInfo: "Hành lý xách tay 7kg",
+        createdAt: "2025-09-10T08:00:00.000Z",
+        updatedAt: "2025-09-10T08:00:00.000Z",
+    },
+];
+
 const cabinClassOptions = [
     { value: "Economy", label: "Economy" },
     { value: "Premium Economy", label: "Premium Economy" },
@@ -132,35 +315,68 @@ export default function Flights() {
         pageSize: 10,
     });
 
-    // Fetch flights with React Query
+    // Fetch flights with mock data
     const { data: flightsData, isLoading, error, refetch } = useQuery({
         queryKey: ['flights', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.airline !== 'all' && { airline: filters.airline }),
-                ...(filters.status !== 'all' && { status: filters.status }),
-                ...(filters.route !== 'all' && { route: filters.route }),
+            const filteredFlights = mockFlights.filter((flight) => {
+                const matchesSearch = flight.flightCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    flight.airline.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    flight.fromAirport.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    flight.toAirport.city.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchesAirline = filters.airline === 'all' || flight.airline.id === filters.airline;
+                const matchesStatus = filters.status === 'all' || flight.status === filters.status;
+                const matchesRoute = filters.route === 'all' ||
+                    `${flight.fromAirport.code}-${flight.toAirport.code}` === filters.route;
+                return matchesSearch && matchesAirline && matchesStatus && matchesRoute;
             });
 
-            const response = await fetch(`/api/admin/flights?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch flights');
-            return response.json();
+            const start = (pagination.current - 1) * pagination.pageSize;
+            const end = start + pagination.pageSize;
+            const paginatedFlights = filteredFlights.slice(start, end);
+
+            return {
+                data: paginatedFlights,
+                pagination: {
+                    total: filteredFlights.length,
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                },
+            };
         },
     });
 
-    // Create flight mutation
+    // Create flight mutation (mock implementation)
     const createFlightMutation = useMutation({
         mutationFn: async (data: FlightFormData) => {
-            const response = await fetch('/api/admin/flights', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to create flight');
-            return response.json();
+            const airline = mockAirlines.find(a => a.id === data.airlineId);
+            const fromAirport = mockAirports.find(a => a.code === data.fromAirport);
+            const toAirport = mockAirports.find(a => a.code === data.toAirport);
+
+            if (!airline || !fromAirport || !toAirport) {
+                throw new Error("Invalid airline or airport");
+            }
+
+            const newFlight: Flight = {
+                id: `flight_${Date.now()}`,
+                flightCode: data.flightCode,
+                airline,
+                fromAirport,
+                toAirport,
+                departureAt: data.departureAt,
+                arrivalAt: data.arrivalAt,
+                duration: data.duration,
+                cabinClass: data.cabinClass,
+                price: data.price,
+                seatsTotal: data.seatsTotal,
+                seatsAvailable: data.seatsAvailable,
+                status: data.status,
+                baggageInfo: data.baggageInfo,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+            };
+            mockFlights.push(newFlight);
+            return newFlight;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['flights'] });
@@ -180,16 +396,25 @@ export default function Flights() {
         },
     });
 
-    // Update flight mutation
+    // Update flight mutation (mock implementation)
     const updateFlightMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<FlightFormData> }) => {
-            const response = await fetch(`/api/admin/flights/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to update flight');
-            return response.json();
+            const index = mockFlights.findIndex(flight => flight.id === id);
+            if (index === -1) throw new Error('Flight not found');
+
+            const airline = mockAirlines.find(a => a.id === data.airlineId) || mockFlights[index].airline;
+            const fromAirport = mockAirports.find(a => a.code === data.fromAirport) || mockFlights[index].fromAirport;
+            const toAirport = mockAirports.find(a => a.code === data.toAirport) || mockFlights[index].toAirport;
+
+            mockFlights[index] = {
+                ...mockFlights[index],
+                ...data,
+                airline,
+                fromAirport,
+                toAirport,
+                updatedAt: new Date().toISOString(),
+            };
+            return mockFlights[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['flights'] });
@@ -209,14 +434,13 @@ export default function Flights() {
         },
     });
 
-    // Delete flight mutation
+    // Delete flight mutation (mock implementation)
     const deleteFlightMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/flights/${id}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete flight');
-            return response.json();
+            const index = mockFlights.findIndex(flight => flight.id === id);
+            if (index === -1) throw new Error('Flight not found');
+            const deletedFlight = mockFlights.splice(index, 1)[0];
+            return deletedFlight;
         },
         onSuccess: (_, flightId) => {
             queryClient.invalidateQueries({ queryKey: ['flights'] });
@@ -252,16 +476,22 @@ export default function Flights() {
         },
     });
 
-    // Bulk operations mutation
+    // Bulk operations mutation (mock implementation)
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            const response = await fetch('/api/admin/flights/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ids }),
+            ids.forEach(id => {
+                const index = mockFlights.findIndex(flight => flight.id === id);
+                if (index !== -1) {
+                    if (action === 'delete') {
+                        mockFlights.splice(index, 1);
+                    } else if (action === 'activate') {
+                        mockFlights[index].status = 'scheduled';
+                    } else if (action === 'cancel') {
+                        mockFlights[index].status = 'cancelled';
+                    }
+                }
             });
-            if (!response.ok) throw new Error('Failed to perform bulk action');
-            return response.json();
+            return { success: true };
         },
         onSuccess: (_, { action, ids }) => {
             queryClient.invalidateQueries({ queryKey: ['flights'] });
@@ -369,7 +599,6 @@ export default function Flights() {
         setFormData(prev => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
-        // Clear error for this field
         if (formErrors[field]) {
             setFormErrors(prev => ({ ...prev, [field]: "" }));
         }
@@ -505,7 +734,7 @@ export default function Flights() {
                         <span className="text-gray-500">/{record.seatsTotal}</span>
                     </div>
                     <div className={`text-xs ${record.seatsAvailable <= record.seatsTotal * 0.2 ? 'text-red-600' :
-                            record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
+                        record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
                         }`}>
                         {record.seatsAvailable} chỗ trống
                     </div>
@@ -544,7 +773,7 @@ export default function Flights() {
             airlineId: flight.airline.id,
             fromAirport: flight.fromAirport.code,
             toAirport: flight.toAirport.code,
-            departureAt: flight.departureAt.slice(0, 16), // Convert to datetime-local format
+            departureAt: flight.departureAt.slice(0, 16),
             arrivalAt: flight.arrivalAt.slice(0, 16),
             duration: flight.duration,
             cabinClass: flight.cabinClass,
@@ -593,7 +822,6 @@ export default function Flights() {
 
     const confirmDelete = () => {
         if (flightToDelete) {
-            // Check if flight has bookings
             const bookedSeats = flightToDelete.seatsTotal - flightToDelete.seatsAvailable;
             if (bookedSeats > 0) {
                 toast({
@@ -910,7 +1138,6 @@ export default function Flights() {
                             onChange={(e) => {
                                 const total = parseInt(e.target.value) || 0;
                                 handleFormChange('seatsTotal', total);
-                                // Auto-set available seats if not set
                                 if (modalMode === "create" && formData.seatsAvailable === 0) {
                                     handleFormChange('seatsAvailable', total);
                                 }
@@ -1008,7 +1235,6 @@ export default function Flights() {
                         onClick={() => refetch()}
                         disabled={isLoading}
                         className="hover:bg-primary-600 hover:text-white"
-
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
@@ -1020,7 +1246,6 @@ export default function Flights() {
                 </div>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                     <CardContent className="pt-4">
@@ -1062,7 +1287,9 @@ export default function Flights() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Doanh thu TB</p>
-                                <p className="text-2xl font-bold">2.3M</p>
+                                <p className="text-2xl font-bold">{flights.length > 0 ? new Intl.NumberFormat('vi-VN').format(
+                                    flights.reduce((sum: number, f: Flight) => sum + f.price, 0) / flights.length
+                                ) : '0'} ₫</p>
                             </div>
                             <DollarSign className="w-8 h-8 text-blue-500" />
                         </div>
@@ -1070,7 +1297,6 @@ export default function Flights() {
                 </Card>
             </div>
 
-            {/* Main Table */}
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
@@ -1104,6 +1330,23 @@ export default function Flights() {
                                     <SelectItem value="completed">Hoàn thành</SelectItem>
                                 </SelectContent>
                             </Select>
+                            <Select value={filters.route} onValueChange={(value) => setFilters(prev => ({ ...prev, route: value }))}>
+                                <SelectTrigger className="w-36">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tất cả tuyến</SelectItem>
+                                    {mockAirports.flatMap(from =>
+                                        mockAirports
+                                            .filter(to => to.code !== from.code)
+                                            .map(to => (
+                                                <SelectItem key={`${from.code}-${to.code}`} value={`${from.code}-${to.code}`}>
+                                                    {from.city} → {to.city}
+                                                </SelectItem>
+                                            ))
+                                    )}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardHeader>
@@ -1133,7 +1376,6 @@ export default function Flights() {
                 </CardContent>
             </Card>
 
-            {/* Flight Modal */}
             <ModalForm
                 open={modalOpen}
                 onOpenChange={handleModalClose}
@@ -1154,10 +1396,12 @@ export default function Flights() {
                 submitText={modalMode === "create" ? "Thêm chuyến bay" : "Cập nhật"}
                 cancelText="Hủy"
             >
-                {renderFlightForm()}
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
+
+                    {renderFlightForm()}
+                </div>
             </ModalForm>
 
-            {/* Delete Confirmation */}
             <ConfirmModal
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}

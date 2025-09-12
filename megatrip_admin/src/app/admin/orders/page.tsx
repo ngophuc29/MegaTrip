@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -96,6 +96,291 @@ const paymentStatuses = [
     { value: "refunded", label: "Đã hoàn tiền", color: "gray" },
 ];
 
+const mockOrders: Order[] = [
+    {
+        id: "order_001",
+        orderNumber: "ORD-20250912-001",
+        customerId: "cust_001",
+        customerName: "Nguyễn Văn A",
+        customerEmail: "vana@example.com",
+        customerPhone: "0901234567",
+        customerAddress: "123 Đường Láng, Hà Nội",
+        items: [
+            { id: "item_001", type: "flight", name: "Vé máy bay SGN-HAN", sku: "FLIGHT-VN1234", quantity: 2, unitPrice: 2850000, subtotal: 5700000 },
+            { id: "item_002", type: "tour", name: "Tour Hà Nội 3N2Đ", sku: "TOUR-HN32", quantity: 1, unitPrice: 5000000, subtotal: 5000000 },
+        ],
+        subtotal: 10700000,
+        discounts: [{ code: "PROMO10", name: "Giảm 10%", amount: 1070000 }],
+        fees: [{ name: "Phí dịch vụ", amount: 200000 }],
+        tax: 100000,
+        total: 9850000,
+        paymentMethod: "credit_card",
+        paymentStatus: "paid",
+        orderStatus: "confirmed",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T08:00:00.000Z" },
+            { status: "confirmed", note: "Đơn hàng đã được xác nhận", actor: "Admin", timestamp: "2025-09-12T09:00:00.000Z" },
+        ],
+        notes: [
+            { id: "note_001", content: "Khách hàng yêu cầu xuất hóa đơn VAT", author: "Admin", timestamp: "2025-09-12T09:30:00.000Z" },
+        ],
+        createdAt: "2025-09-12T08:00:00.000Z",
+        updatedAt: "2025-09-12T09:00:00.000Z",
+    },
+    {
+        id: "order_002",
+        orderNumber: "ORD-20250912-002",
+        customerId: "cust_002",
+        customerName: "Trần Thị B",
+        customerEmail: "thib@example.com",
+        customerPhone: "0912345678",
+        customerAddress: "456 Nguyễn Huệ, TP.HCM",
+        items: [
+            { id: "item_003", type: "bus", name: "Vé xe SGN-DAD", sku: "BUS-SD45", quantity: 1, unitPrice: 600000, subtotal: 600000 },
+        ],
+        subtotal: 600000,
+        discounts: [],
+        fees: [],
+        tax: 60000,
+        total: 660000,
+        paymentMethod: "cash",
+        paymentStatus: "pending",
+        orderStatus: "pending",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T10:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-12T10:00:00.000Z",
+        updatedAt: "2025-09-12T10:00:00.000Z",
+    },
+    {
+        id: "order_003",
+        orderNumber: "ORD-20250912-003",
+        customerId: "cust_003",
+        customerName: "Lê Văn C",
+        customerEmail: "vanc@example.com",
+        customerPhone: "0923456789",
+        customerAddress: "789 Lê Lợi, Đà Nẵng",
+        items: [
+            { id: "item_004", type: "tour", name: "Tour Phú Quốc 4N3Đ", sku: "TOUR-PQ43", quantity: 2, unitPrice: 7000000, subtotal: 14000000 },
+        ],
+        subtotal: 14000000,
+        discounts: [{ code: "SUMMER20", name: "Giảm 20%", amount: 2800000 }],
+        fees: [{ name: "Phí xử lý", amount: 300000 }],
+        tax: 140000,
+        total: 11440000,
+        paymentMethod: "e_wallet",
+        paymentStatus: "paid",
+        orderStatus: "completed",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-11T14:00:00.000Z" },
+            { status: "confirmed", actor: "Admin", timestamp: "2025-09-11T15:00:00.000Z" },
+            { status: "completed", note: "Đã hoàn thành", actor: "Admin", timestamp: "2025-09-12T08:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-11T14:00:00.000Z",
+        updatedAt: "2025-09-12T08:00:00.000Z",
+    },
+    {
+        id: "order_004",
+        orderNumber: "ORD-20250912-004",
+        customerId: "cust_004",
+        customerName: "Phạm Thị D",
+        customerEmail: "thid@example.com",
+        customerPhone: "0934567890",
+        customerAddress: "101 Hai Bà Trưng, Huế",
+        items: [
+            { id: "item_005", type: "flight", name: "Vé máy bay DAD-HAN", sku: "FLIGHT-VJ5678", quantity: 1, unitPrice: 1500000, subtotal: 1500000 },
+        ],
+        subtotal: 1500000,
+        discounts: [],
+        fees: [],
+        tax: 150000,
+        total: 1650000,
+        paymentMethod: "bank_transfer",
+        paymentStatus: "failed",
+        orderStatus: "pending",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T11:00:00.000Z" },
+            { status: "failed", note: "Thanh toán thất bại", actor: "System", timestamp: "2025-09-12T11:30:00.000Z" },
+        ],
+        notes: [
+            { id: "note_002", content: "Khách hàng cần hỗ trợ thanh toán", author: "Admin", timestamp: "2025-09-12T11:45:00.000Z" },
+        ],
+        createdAt: "2025-09-12T11:00:00.000Z",
+        updatedAt: "2025-09-12T11:30:00.000Z",
+    },
+    {
+        id: "order_005",
+        orderNumber: "ORD-20250912-005",
+        customerId: "cust_005",
+        customerName: "Hoàng Văn E",
+        customerEmail: "vane@example.com",
+        customerPhone: "0945678901",
+        customerAddress: "202 Trần Phú, Nha Trang",
+        items: [
+            { id: "item_006", type: "tour", name: "Tour Đà Lạt 3N2Đ", sku: "TOUR-DL32", quantity: 1, unitPrice: 4500000, subtotal: 4500000 },
+            { id: "item_007", type: "bus", name: "Vé xe SGN-DLI", sku: "BUS-SD12", quantity: 1, unitPrice: 500000, subtotal: 500000 },
+        ],
+        subtotal: 5000000,
+        discounts: [],
+        fees: [{ name: "Phí đặt chỗ", amount: 100000 }],
+        tax: 50000,
+        total: 5150000,
+        paymentMethod: "credit_card",
+        paymentStatus: "paid",
+        orderStatus: "processing",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T12:00:00.000Z" },
+            { status: "confirmed", actor: "Admin", timestamp: "2025-09-12T12:30:00.000Z" },
+            { status: "processing", note: "Đang xử lý", actor: "Admin", timestamp: "2025-09-12T13:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-12T12:00:00.000Z",
+        updatedAt: "2025-09-12T13:00:00.000Z",
+    },
+    {
+        id: "order_006",
+        orderNumber: "ORD-20250912-006",
+        customerId: "cust_006",
+        customerName: "Đỗ Thị F",
+        customerEmail: "thif@example.com",
+        customerPhone: "0956789012",
+        customerAddress: "303 Lý Thường Kiệt, Đà Nẵng",
+        items: [
+            { id: "item_008", type: "flight", name: "Vé máy bay SGN-DAD", sku: "FLIGHT-VJ2345", quantity: 2, unitPrice: 1600000, subtotal: 3200000 },
+        ],
+        subtotal: 3200000,
+        discounts: [],
+        fees: [],
+        tax: 320000,
+        total: 3520000,
+        paymentMethod: "e_wallet",
+        paymentStatus: "refunded",
+        orderStatus: "cancelled",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T14:00:00.000Z" },
+            { status: "cancelled", note: "Khách hủy đơn", actor: "Admin", timestamp: "2025-09-12T15:00:00.000Z" },
+            { status: "refunded", note: "Đã hoàn tiền", actor: "Admin", timestamp: "2025-09-12T15:30:00.000Z" },
+        ],
+        notes: [
+            { id: "note_003", content: "Hoàn tiền do khách hủy sớm", author: "Admin", timestamp: "2025-09-12T15:30:00.000Z" },
+        ],
+        createdAt: "2025-09-12T14:00:00.000Z",
+        updatedAt: "2025-09-12T15:30:00.000Z",
+    },
+    {
+        id: "order_007",
+        orderNumber: "ORD-20250912-007",
+        customerId: "cust_007",
+        customerName: "Bùi Văn G",
+        customerEmail: "vang@example.com",
+        customerPhone: "0967890123",
+        customerAddress: "404 Nguyễn Trãi, Hà Nội",
+        items: [
+            { id: "item_009", type: "tour", name: "Tour Sapa 2N1Đ", sku: "TOUR-SP21", quantity: 1, unitPrice: 3000000, subtotal: 3000000 },
+        ],
+        subtotal: 3000000,
+        discounts: [],
+        fees: [],
+        tax: 300000,
+        total: 3300000,
+        paymentMethod: "bank_transfer",
+        paymentStatus: "paid",
+        orderStatus: "confirmed",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T16:00:00.000Z" },
+            { status: "confirmed", actor: "Admin", timestamp: "2025-09-12T16:30:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-12T16:00:00.000Z",
+        updatedAt: "2025-09-12T16:30:00.000Z",
+    },
+    {
+        id: "order_008",
+        orderNumber: "ORD-20250912-008",
+        customerId: "cust_008",
+        customerName: "Ngô Thị H",
+        customerEmail: "thih@example.com",
+        customerPhone: "0978901234",
+        customerAddress: "505 Lê Văn Sỹ, TP.HCM",
+        items: [
+            { id: "item_010", type: "flight", name: "Vé máy bay PQC-SGN", sku: "FLIGHT-BL6789", quantity: 1, unitPrice: 1300000, subtotal: 1300000 },
+        ],
+        subtotal: 1300000,
+        discounts: [],
+        fees: [],
+        tax: 130000,
+        total: 1430000,
+        paymentMethod: "credit_card",
+        paymentStatus: "paid",
+        orderStatus: "completed",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-11T09:00:00.000Z" },
+            { status: "confirmed", actor: "Admin", timestamp: "2025-09-11T10:00:00.000Z" },
+            { status: "completed", note: "Đã hoàn thành", actor: "Admin", timestamp: "2025-09-12T08:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-11T09:00:00.000Z",
+        updatedAt: "2025-09-12T08:00:00.000Z",
+    },
+    {
+        id: "order_009",
+        orderNumber: "ORD-20250912-009",
+        customerId: "cust_009",
+        customerName: "Vũ Văn I",
+        customerEmail: "vani@example.com",
+        customerPhone: "0989012345",
+        customerAddress: "606 Phạm Văn Đồng, Hà Nội",
+        items: [
+            { id: "item_011", type: "tour", name: "Tour Hạ Long 2N1Đ", sku: "TOUR-HL21", quantity: 2, unitPrice: 3500000, subtotal: 7000000 },
+        ],
+        subtotal: 7000000,
+        discounts: [],
+        fees: [],
+        tax: 700000,
+        total: 7700000,
+        paymentMethod: "e_wallet",
+        paymentStatus: "pending",
+        orderStatus: "pending",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T17:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-12T17:00:00.000Z",
+        updatedAt: "2025-09-12T17:00:00.000Z",
+    },
+    {
+        id: "order_010",
+        orderNumber: "ORD-20250912-010",
+        customerId: "cust_010",
+        customerName: "Lý Thị K",
+        customerEmail: "thik@example.com",
+        customerPhone: "0990123456",
+        customerAddress: "707 Nguyễn Văn Cừ, Đà Nẵng",
+        items: [
+            { id: "item_012", type: "flight", name: "Vé máy bay HAN-PQC", sku: "FLIGHT-VJ1234", quantity: 1, unitPrice: 1700000, subtotal: 1700000 },
+            { id: "item_013", type: "tour", name: "Tour Phú Quốc 3N2Đ", sku: "TOUR-PQ32", quantity: 1, unitPrice: 6000000, subtotal: 6000000 },
+        ],
+        subtotal: 7700000,
+        discounts: [{ code: "PROMO5", name: "Giảm 5%", amount: 385000 }],
+        fees: [],
+        tax: 770000,
+        total: 8085000,
+        paymentMethod: "bank_transfer",
+        paymentStatus: "paid",
+        orderStatus: "processing",
+        timeline: [
+            { status: "pending", actor: "System", timestamp: "2025-09-12T18:00:00.000Z" },
+            { status: "confirmed", actor: "Admin", timestamp: "2025-09-12T18:30:00.000Z" },
+            { status: "processing", note: "Đang xử lý", actor: "Admin", timestamp: "2025-09-12T19:00:00.000Z" },
+        ],
+        notes: [],
+        createdAt: "2025-09-12T18:00:00.000Z",
+        updatedAt: "2025-09-12T19:00:00.000Z",
+    },
+];
+
 export default function Orders() {
     const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -107,8 +392,6 @@ export default function Orders() {
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-    const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
     const [refundModalOpen, setRefundModalOpen] = useState(false);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -128,35 +411,53 @@ export default function Orders() {
         pageSize: 10,
     });
 
-    // Fetch orders with React Query
+    // Fetch orders with mock data
     const { data: ordersData, isLoading, error, refetch } = useQuery({
         queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.paymentStatus !== 'all' && { paymentStatus: filters.paymentStatus }),
-                ...(filters.orderStatus !== 'all' && { orderStatus: filters.orderStatus }),
-                ...(filters.paymentMethod !== 'all' && { paymentMethod: filters.paymentMethod }),
+            const filteredOrders = mockOrders.filter((order) => {
+                const matchesSearch = order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    order.customerPhone.includes(searchQuery);
+                const matchesPaymentStatus = filters.paymentStatus === 'all' || order.paymentStatus === filters.paymentStatus;
+                const matchesOrderStatus = filters.orderStatus === 'all' || order.orderStatus === filters.orderStatus;
+                const matchesPaymentMethod = filters.paymentMethod === 'all' || order.paymentMethod === filters.paymentMethod;
+                return matchesSearch && matchesPaymentStatus && matchesOrderStatus && matchesPaymentMethod;
             });
 
-            const response = await fetch(`/api/admin/orders?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch orders');
-            return response.json();
+            const start = (pagination.current - 1) * pagination.pageSize;
+            const end = start + pagination.pageSize;
+            const paginatedOrders = filteredOrders.slice(start, end);
+
+            return {
+                data: paginatedOrders,
+                pagination: {
+                    total: filteredOrders.length,
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                },
+            };
         },
     });
 
-    // Update order status mutation
+    // Update order status mutation (mock implementation)
     const updateOrderMutation = useMutation({
         mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
-            const response = await fetch(`/api/admin/orders/${id}/status`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status, note }),
-            });
-            if (!response.ok) throw new Error('Failed to update order');
-            return response.json();
+            const index = mockOrders.findIndex(order => order.id === id);
+            if (index === -1) throw new Error('Order not found');
+
+            mockOrders[index] = {
+                ...mockOrders[index],
+                orderStatus: status as any,
+                paymentStatus: status === 'cancelled' && mockOrders[index].paymentStatus === 'paid' ? 'refunded' : mockOrders[index].paymentStatus,
+                timeline: [
+                    ...mockOrders[index].timeline,
+                    { status, note, actor: 'Admin', timestamp: new Date().toISOString() },
+                ],
+                updatedAt: new Date().toISOString(),
+            };
+            return mockOrders[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -174,16 +475,28 @@ export default function Orders() {
         },
     });
 
-    // Refund mutation
+    // Refund mutation (mock implementation)
     const refundMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: any }) => {
-            const response = await fetch(`/api/admin/orders/${id}/refund`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to process refund');
-            return response.json();
+            const index = mockOrders.findIndex(order => order.id === id);
+            if (index === -1) throw new Error('Order not found');
+            if (mockOrders[index].paymentStatus !== 'paid') throw new Error('Order is not eligible for refund');
+
+            mockOrders[index] = {
+                ...mockOrders[index],
+                paymentStatus: 'refunded',
+                orderStatus: mockOrders[index].orderStatus === 'completed' ? 'completed' : 'cancelled',
+                timeline: [
+                    ...mockOrders[index].timeline,
+                    { status: 'refunded', note: `Hoàn tiền: ${data.reason}`, actor: 'Admin', timestamp: new Date().toISOString() },
+                ],
+                notes: [
+                    ...mockOrders[index].notes,
+                    { id: `note_${Date.now()}`, content: `Hoàn tiền: ${data.reason}`, author: 'Admin', timestamp: new Date().toISOString() },
+                ],
+                updatedAt: new Date().toISOString(),
+            };
+            return mockOrders[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -203,16 +516,21 @@ export default function Orders() {
         },
     });
 
-    // Add note mutation
+    // Add note mutation (mock implementation)
     const addNoteMutation = useMutation({
         mutationFn: async ({ id, note }: { id: string; note: string }) => {
-            const response = await fetch(`/api/admin/orders/${id}/notes`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: note, author: "Admin" }),
-            });
-            if (!response.ok) throw new Error('Failed to add note');
-            return response.json();
+            const index = mockOrders.findIndex(order => order.id === id);
+            if (index === -1) throw new Error('Order not found');
+
+            mockOrders[index] = {
+                ...mockOrders[index],
+                notes: [
+                    ...mockOrders[index].notes,
+                    { id: `note_${Date.now()}`, content: note, author: 'Admin', timestamp: new Date().toISOString() },
+                ],
+                updatedAt: new Date().toISOString(),
+            };
+            return mockOrders[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -402,7 +720,6 @@ export default function Orders() {
     };
 
     const handleExportInvoice = (order: Order) => {
-        // Mock invoice export
         toast({
             title: "Đang xuất hóa đơn",
             description: `Hóa đơn ${order.orderNumber} sẽ được tải xuống`,
@@ -410,7 +727,6 @@ export default function Orders() {
     };
 
     const handlePrintInvoice = (order: Order) => {
-        // Mock print invoice
         toast({
             title: "Đang in hóa đơn",
             description: `Hóa đơn ${order.orderNumber} đang được in`,
@@ -552,7 +868,7 @@ export default function Orders() {
 
                 {/* Customer Information */}
                 <div>
-                    <Label className="text-sm font-medium text-gray-700">Th��ng tin khách hàng</Label>
+                    <Label className="text-sm font-medium text-gray-700">Thông tin khách hàng</Label>
                     <div className="mt-2 grid grid-cols-2 gap-4">
                         <div>
                             <div className="font-medium">{selectedOrder.customerName}</div>
@@ -642,7 +958,7 @@ export default function Orders() {
 
                 {/* Payment Information */}
                 <div>
-                    <Label className="text-sm font-medium text-gray-700">Th��ng tin thanh toán</Label>
+                    <Label className="text-sm font-medium text-gray-700">Thông tin thanh toán</Label>
                     <div className="mt-2">
                         <div className="flex justify-between">
                             <span>Phương thức:</span>
@@ -822,6 +1138,19 @@ export default function Orders() {
                                     ))}
                                 </SelectContent>
                             </Select>
+                            <Select value={filters.paymentMethod} onValueChange={(value) => setFilters(prev => ({ ...prev, paymentMethod: value }))}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tất cả phương thức</SelectItem>
+                                    {paymentMethods.map((method) => (
+                                        <SelectItem key={method.value} value={method.value}>
+                                            {method.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardHeader>
@@ -860,7 +1189,10 @@ export default function Orders() {
                 mode="view"
                 size="large"
             >
-                {renderOrderDetails()}
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
+
+                    {renderOrderDetails()}
+                </div>
             </ModalForm>
 
             {/* Refund Modal */}
@@ -887,7 +1219,7 @@ export default function Orders() {
                     </div>
 
                     <div>
-                        <Label htmlFor="refundAmount">Số ti��n hoàn *</Label>
+                        <Label htmlFor="refundAmount">Số tiền hoàn *</Label>
                         <Input
                             id="refundAmount"
                             type="number"

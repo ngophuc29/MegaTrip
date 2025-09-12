@@ -42,7 +42,7 @@ import {
   Edit,
   Eye,
   CheckCircle,
-  XCircle
+  XCircle,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 
@@ -66,7 +66,7 @@ export interface DataTableProps {
     showSizeChanger?: boolean;
   };
   onPaginationChange?: (page: number, pageSize: number) => void;
-  onSortChange?: (field: string, direction: 'asc' | 'desc' | null) => void;
+  onSortChange?: (field: string, direction: "asc" | "desc" | null) => void;
   onFilterChange?: (filters: Record<string, any>) => void;
   onSearch?: (query: string) => void;
   rowSelection?: {
@@ -78,19 +78,20 @@ export interface DataTableProps {
     label: string;
     action: (selectedKeys: string[]) => void;
     icon?: React.ReactNode;
-    variant?: 'default' | 'destructive';
+    variant?: "default" | "destructive";
   }[];
   actions?: {
     label: string;
     action: (record: any) => void;
     icon?: React.ReactNode;
-    variant?: 'default' | 'destructive';
+    variant?: "default" | "destructive";
   }[];
   emptyState?: React.ReactNode;
   title?: string;
   description?: string;
   exportable?: boolean;
   onExport?: () => void;
+  rowKey?: string; // <--- thêm dòng này
 }
 
 export function DataTable({
@@ -110,26 +111,27 @@ export function DataTable({
   description,
   exportable = false,
   onExport,
+  rowKey = "id", // <--- mặc định là "id"
 }: DataTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc' | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
   const [filters, setFilters] = useState<Record<string, any>>({});
   const [showFilters, setShowFilters] = useState(false);
 
   const hasSelection = rowSelection && rowSelection.selectedRowKeys.length > 0;
 
   const handleSort = (field: string) => {
-    let newDirection: 'asc' | 'desc' | null = 'asc';
-    
+    let newDirection: "asc" | "desc" | null = "asc";
+
     if (sortField === field) {
-      if (sortDirection === 'asc') {
-        newDirection = 'desc';
-      } else if (sortDirection === 'desc') {
+      if (sortDirection === "asc") {
+        newDirection = "desc";
+      } else if (sortDirection === "desc") {
         newDirection = null;
       }
     }
-    
+
     setSortField(newDirection ? field : null);
     setSortDirection(newDirection);
     onSortChange?.(field, newDirection);
@@ -150,9 +152,11 @@ export function DataTable({
     if (sortField !== field) {
       return <ArrowUpDown className="w-4 h-4" />;
     }
-    return sortDirection === 'asc' ? 
-      <ArrowUp className="w-4 h-4" /> : 
-      <ArrowDown className="w-4 h-4" />;
+    return sortDirection === "asc" ? (
+      <ArrowUp className="w-4 h-4" />
+    ) : (
+      <ArrowDown className="w-4 h-4" />
+    );
   };
 
   const renderPagination = () => {
@@ -204,7 +208,7 @@ export function DataTable({
           >
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          
+
           <div className="flex items-center space-x-1">
             {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pageNum;
@@ -253,7 +257,9 @@ export function DataTable({
     );
   };
 
-  const allSelected = rowSelection && data.length > 0 && 
+  const allSelected =
+    rowSelection &&
+    data.length > 0 &&
     rowSelection.selectedRowKeys.length === data.length;
   const someSelected = rowSelection && rowSelection.selectedRowKeys.length > 0;
 
@@ -283,7 +289,7 @@ export function DataTable({
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className="  hover:bg-primary-600 hover:text-white"
+            className="hover:bg-primary-600 hover:text-white"
           >
             <Filter className="w-4 h-4 mr-2" />
             Lọc
@@ -292,7 +298,12 @@ export function DataTable({
 
         <div className="flex items-center space-x-2">
           {exportable && (
-            <Button variant="outline" size="sm" onClick={onExport} className="  hover:bg-primary-600 hover:text-white" >
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onExport}
+              className="hover:bg-primary-600 hover:text-white"
+            >
               <Download className="w-4 h-4 mr-2" />
               Xuất
             </Button>
@@ -310,7 +321,7 @@ export function DataTable({
             {bulkActions.map((action, index) => (
               <Button
                 key={index}
-                variant={action.variant === 'destructive' ? 'destructive' : 'default'}
+                variant={action.variant === "destructive" ? "destructive" : "default"}
                 size="sm"
                 onClick={() => action.action(rowSelection.selectedRowKeys)}
               >
@@ -326,18 +337,20 @@ export function DataTable({
       {showFilters && (
         <div className="p-4 bg-gray-50 rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {columns.filter(col => col.filterable).map((column) => (
-              <div key={column.key}>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">
-                  {column.title}
-                </label>
-                <Input
-                  placeholder={`Lọc theo ${column.title.toLowerCase()}`}
-                  value={filters[column.key] || ''}
-                  onChange={(e) => handleFilterChange(column.key, e.target.value)}
-                />
-              </div>
-            ))}
+            {columns
+              .filter((col) => col.filterable)
+              .map((column) => (
+                <div key={column.key}>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">
+                    {column.title}
+                  </label>
+                  <Input
+                    placeholder={`Lọc theo ${column.title.toLowerCase()}`}
+                    value={filters[column.key] || ""}
+                    onChange={(e) => handleFilterChange(column.key, e.target.value)}
+                  />
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -353,7 +366,9 @@ export function DataTable({
                     checked={allSelected ? true : someSelected ? "indeterminate" : false}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        rowSelection.onChange(data.map((_, index) => index.toString()));
+                        rowSelection.onChange(
+                          data.map((_, index) => index.toString())
+                        );
                       } else {
                         rowSelection.onChange([]);
                       }
@@ -361,9 +376,9 @@ export function DataTable({
                   />
                 </TableHead>
               )}
-              {columns.map((column) => (
+              {columns.map((column, colIdx) => (
                 <TableHead
-                  key={column.key}
+                  key={column.key || colIdx}
                   className={cn(
                     "font-medium",
                     column.sortable && "cursor-pointer hover:bg-gray-50",
@@ -383,19 +398,32 @@ export function DataTable({
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={index}>
-                  {rowSelection && <TableCell><div className="w-4 h-4 bg-gray-200 rounded animate-pulse" /></TableCell>}
-                  {columns.map((column) => (
-                    <TableCell key={column.key}>
+                <TableRow key={`loading-${Date.now()}-${index}`}>
+                  {rowSelection && (
+                    <TableCell>
+                      <div className="w-4 h-4 bg-gray-200 rounded animate-pulse" />
+                    </TableCell>
+                  )}
+                  {columns.map((column, colIdx) => (
+                    <TableCell key={`loading-${column.key || colIdx}-${index}`}>
                       <div className="w-20 h-4 bg-gray-200 rounded animate-pulse" />
                     </TableCell>
                   ))}
-                  {actions && <TableCell><div className="w-8 h-4 bg-gray-200 rounded animate-pulse" /></TableCell>}
+                  {actions && (
+                    <TableCell>
+                      <div className="w-8 h-4 bg-gray-200 rounded animate-pulse" />
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length + (rowSelection ? 1 : 0) + (actions ? 1 : 0)} className="h-24">
+                <TableCell
+                  colSpan={
+                    columns.length + (rowSelection ? 1 : 0) + (actions ? 1 : 0)
+                  }
+                  className="h-24"
+                >
                   {emptyState || (
                     <div className="text-center text-gray-500">
                       <p>Không có dữ liệu</p>
@@ -405,27 +433,30 @@ export function DataTable({
               </TableRow>
             ) : (
               data.map((record, index) => (
-                <TableRow key={index}>
+                <TableRow key={record[rowKey] ?? record.id ?? record.key ?? `row-${index}`}>
                   {rowSelection && (
                     <TableCell>
                       <Checkbox
-                        checked={rowSelection.selectedRowKeys.includes(index.toString())}
+                        checked={rowSelection.selectedRowKeys.includes(
+                          index.toString()
+                        )}
                         onCheckedChange={(checked) => {
                           const newSelection = checked
                             ? [...rowSelection.selectedRowKeys, index.toString()]
-                            : rowSelection.selectedRowKeys.filter(key => key !== index.toString());
+                            : rowSelection.selectedRowKeys.filter(
+                              (key) => key !== index.toString()
+                            );
                           rowSelection.onChange(newSelection);
                         }}
                         {...rowSelection.getCheckboxProps?.(record)}
                       />
                     </TableCell>
                   )}
-                  {columns.map((column) => (
-                    <TableCell key={column.key}>
-                      {column.render 
+                  {columns.map((column, colIdx) => (
+                    <TableCell key={`${column.key || colIdx}-${record[rowKey] ?? record.id ?? record.key ?? index}`}>
+                      {column.render
                         ? column.render(record[column.key], record)
-                        : record[column.key]
-                      }
+                        : record[column.key]}
                     </TableCell>
                   ))}
                   {actions && (
@@ -441,7 +472,11 @@ export function DataTable({
                             <DropdownMenuItem
                               key={actionIndex}
                               onClick={() => action.action(record)}
-                              className={action.variant === 'destructive' ? 'text-red-600' : ''}
+                              className={
+                                action.variant === "destructive"
+                                  ? "text-red-600"
+                                  : ""
+                              }
                             >
                               {action.icon}
                               {action.label}

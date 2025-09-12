@@ -1,4 +1,4 @@
-"use client"
+"use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, Plus, Edit, Eye, Trash2, UserCheck, Mail, Phone, Calendar, CreditCard, Filter, FileDown, Upload, Ban, RefreshCw } from "lucide-react";
@@ -52,6 +52,159 @@ interface CustomerFilters {
     dateRange?: [string, string];
 }
 
+const mockCustomers: Customer[] = [
+    {
+        id: "cus_001",
+        name: "Nguyễn Văn An",
+        email: "an.nguyen@example.com",
+        phone: "0901234567",
+        avatar: "/avatars/an.jpg",
+        type: "VIP",
+        status: "active",
+        registeredAt: "2025-01-15T10:00:00.000Z",
+        totalOrders: 12,
+        totalSpent: 7200000,
+        lastOrderAt: "2025-09-10T14:30:00.000Z",
+        address: "123 Lê Lợi, Q1, TP.HCM",
+        notes: "Khách hàng thân thiết, thường xuyên đặt vé VIP",
+    },
+    {
+        id: "cus_002",
+        name: "Trần Thị Bình",
+        email: "binh.tran@example.com",
+        phone: "0912345678",
+        avatar: "/avatars/binh.jpg",
+        type: "Normal",
+        status: "active",
+        registeredAt: "2025-03-22T09:00:00.000Z",
+        totalOrders: 5,
+        totalSpent: 2500000,
+        lastOrderAt: "2025-08-20T11:00:00.000Z",
+        address: "45 Nguyễn Huệ, Huế",
+        notes: "Thích đặt vé ghế ngồi",
+    },
+    {
+        id: "cus_003",
+        name: "Lê Minh Châu",
+        email: "chau.le@example.com",
+        phone: "0923456789",
+        avatar: "/avatars/chau.jpg",
+        type: "Normal",
+        status: "blocked",
+        registeredAt: "2025-05-10T15:00:00.000Z",
+        totalOrders: 3,
+        totalSpent: 1500000,
+        lastOrderAt: "2025-07-15T10:00:00.000Z",
+        address: "78 Trần Phú, Đà Nẵng",
+        notes: "Tài khoản bị khóa do vi phạm chính sách",
+    },
+    {
+        id: "cus_004",
+        name: "Phạm Quốc Đạt",
+        email: "dat.pham@example.com",
+        phone: "0934567890",
+        avatar: "/avatars/dat.jpg",
+        type: "VIP",
+        status: "active",
+        registeredAt: "2025-02-18T12:00:00.000Z",
+        totalOrders: 15,
+        totalSpent: 9500000,
+        lastOrderAt: "2025-09-05T16:00:00.000Z",
+        address: "56 Nguyễn Trãi, Hà Nội",
+        notes: "Khách hàng ưu tiên, đặt vé Limousine",
+    },
+    {
+        id: "cus_005",
+        name: "Hoàng Thị Mai",
+        email: "mai.hoang@example.com",
+        phone: "0945678901",
+        avatar: "/avatars/mai.jpg",
+        type: "Normal",
+        status: "active",
+        registeredAt: "2025-06-01T08:00:00.000Z",
+        totalOrders: 8,
+        totalSpent: 4000000,
+        lastOrderAt: "2025-09-01T09:00:00.000Z",
+        address: "12 Phạm Văn Đồng, Đà Nẵng",
+        notes: "",
+    },
+    {
+        id: "cus_006",
+        name: "Vũ Văn Hùng",
+        email: "hung.vu@example.com",
+        phone: "0956789012",
+        avatar: "/avatars/hung.jpg",
+        type: "Normal",
+        status: "blocked",
+        registeredAt: "2025-04-12T11:00:00.000Z",
+        totalOrders: 2,
+        totalSpent: 1000000,
+        lastOrderAt: "2025-06-20T13:00:00.000Z",
+        address: "34 Lê Duẩn, TP.HCM",
+        notes: "Tài khoản bị khóa do không thanh toán",
+    },
+    {
+        id: "cus_007",
+        name: "Đỗ Thị Lan",
+        email: "lan.do@example.com",
+        phone: "0967890123",
+        avatar: "/avatars/lan.jpg",
+        type: "VIP",
+        status: "active",
+        registeredAt: "2025-07-05T14:00:00.000Z",
+        totalOrders: 10,
+        totalSpent: 6000000,
+        lastOrderAt: "2025-09-08T15:00:00.000Z",
+        address: "89 Hai Bà Trưng, Hà Nội",
+        notes: "Khách hàng tiềm năng",
+    },
+    {
+        id: "cus_008",
+        name: "Bùi Minh Tuấn",
+        email: "tuan.bui@example.com",
+        phone: "0978901234",
+        avatar: "/avatars/tuan.jpg",
+        type: "Normal",
+        status: "active",
+        registeredAt: "2025-08-15T10:00:00.000Z",
+        totalOrders: 4,
+        totalSpent: 2000000,
+        lastOrderAt: "2025-09-02T12:00:00.000Z",
+        address: "23 Nguyễn Văn Cừ, Huế",
+        notes: "",
+    },
+    {
+        id: "cus_009",
+        name: "Ngô Thị Hà",
+        email: "ha.ngo@example.com",
+        phone: "0989012345",
+        avatar: "/avatars/ha.jpg",
+        type: "VIP",
+        status: "active",
+        registeredAt: "2025-01-25T09:00:00.000Z",
+        totalOrders: 20,
+        totalSpent: 12000000,
+        lastOrderAt: "2025-09-11T17:00:00.000Z",
+        address: "67 Trần Hưng Đạo, TP.HCM",
+        notes: "Khách hàng thân thiết, ưu tiên hỗ trợ",
+    },
+    {
+        id: "cus_010",
+        name: "Trương Văn Long",
+        email: "long.truong@example.com",
+        phone: "0990123456",
+        avatar: "/avatars/long.jpg",
+        type: "Normal",
+        status: "active",
+        registeredAt: "2025-09-01T08:00:00.000Z",
+        totalOrders: 1,
+        totalSpent: 500000,
+        lastOrderAt: "2025-09-01T08:00:00.000Z",
+        address: "45 Lý Thường Kiệt, Đà Nẵng",
+        notes: "Khách hàng mới",
+    },
+];
+
 export default function Customers() {
     const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -85,34 +238,53 @@ export default function Customers() {
         pageSize: 10,
     });
 
-    // Fetch customers with React Query
+    // Fetch customers with mock data
     const { data: customersData, isLoading, error, refetch } = useQuery({
         queryKey: ['customers', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                limit: pagination.pageSize.toString(),
-                ...(searchQuery && { q: searchQuery }),
-                ...(filters.status !== 'all' && { status: filters.status }),
-                ...(filters.type !== 'all' && { type: filters.type }),
+            const filteredCustomers = mockCustomers.filter((customer) => {
+                const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    customer.phone.includes(searchQuery);
+                const matchesStatus = filters.status === 'all' || customer.status === filters.status;
+                const matchesType = filters.type === 'all' || customer.type === filters.type;
+                return matchesSearch && matchesStatus && matchesType;
             });
 
-            const response = await fetch(`/api/admin/customers?${params}`);
-            if (!response.ok) throw new Error('Failed to fetch customers');
-            return response.json();
+            const start = (pagination.current - 1) * pagination.pageSize;
+            const end = start + pagination.pageSize;
+            const paginatedCustomers = filteredCustomers.slice(start, end);
+
+            return {
+                data: paginatedCustomers,
+                pagination: {
+                    total: filteredCustomers.length,
+                    current: pagination.current,
+                    pageSize: pagination.pageSize,
+                },
+            };
         },
     });
 
-    // Create customer mutation
+    // Create customer mutation (mock implementation)
     const createCustomerMutation = useMutation({
         mutationFn: async (data: CustomerFormData) => {
-            const response = await fetch('/api/admin/customers', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to create customer');
-            return response.json();
+            const newCustomer: Customer = {
+                id: `cus_${Date.now()}`,
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                avatar: data.avatar || "/avatars/default.jpg",
+                type: data.type,
+                status: data.status,
+                registeredAt: new Date().toISOString(),
+                totalOrders: 0,
+                totalSpent: 0,
+                address: data.address || undefined,
+                notes: data.notes || undefined,
+            };
+            mockCustomers.push(newCustomer); // Add to mock data
+            return newCustomer;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -132,16 +304,19 @@ export default function Customers() {
         },
     });
 
-    // Update customer mutation
+    // Update customer mutation (mock implementation)
     const updateCustomerMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<CustomerFormData> }) => {
-            const response = await fetch(`/api/admin/customers/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-            });
-            if (!response.ok) throw new Error('Failed to update customer');
-            return response.json();
+            const index = mockCustomers.findIndex(customer => customer.id === id);
+            if (index === -1) throw new Error('Customer not found');
+            mockCustomers[index] = {
+                ...mockCustomers[index],
+                ...data,
+                avatar: data.avatar || mockCustomers[index].avatar,
+                address: data.address || mockCustomers[index].address,
+                notes: data.notes || mockCustomers[index].notes,
+            };
+            return mockCustomers[index];
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -161,20 +336,18 @@ export default function Customers() {
         },
     });
 
-    // Delete customer mutation
+    // Delete customer mutation (mock implementation)
     const deleteCustomerMutation = useMutation({
         mutationFn: async (id: string) => {
-            const response = await fetch(`/api/admin/customers/${id}`, {
-                method: 'DELETE',
-            });
-            if (!response.ok) throw new Error('Failed to delete customer');
-            return response.json();
+            const index = mockCustomers.findIndex(customer => customer.id === id);
+            if (index === -1) throw new Error('Customer not found');
+            const deletedCustomer = mockCustomers.splice(index, 1)[0];
+            return deletedCustomer;
         },
         onSuccess: (_, customerId) => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
             setDeleteModalOpen(false);
             setCustomerToDelete(null);
-
             const customer = customersData?.data?.find((c: Customer) => c.id === customerId);
             toast({
                 title: "Đã xóa khách hàng",
@@ -184,7 +357,6 @@ export default function Customers() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            // Implement undo functionality here
                             toast({
                                 title: "Khôi phục thành công",
                                 description: "Khách hàng đã được khôi phục",
@@ -205,16 +377,22 @@ export default function Customers() {
         },
     });
 
-    // Bulk operations mutation
+    // Bulk operations mutation (mock implementation)
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            const response = await fetch('/api/admin/customers/bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action, ids }),
+            ids.forEach(id => {
+                const index = mockCustomers.findIndex(customer => customer.id === id);
+                if (index !== -1) {
+                    if (action === 'delete') {
+                        mockCustomers.splice(index, 1);
+                    } else if (action === 'unblock') {
+                        mockCustomers[index].status = 'active';
+                    } else if (action === 'block') {
+                        mockCustomers[index].status = 'blocked';
+                    }
+                }
             });
-            if (!response.ok) throw new Error('Failed to perform bulk action');
-            return response.json();
+            return { success: true };
         },
         onSuccess: (_, { action, ids }) => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -285,7 +463,6 @@ export default function Customers() {
         setFormData(prev => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
-        // Clear error for this field
         if (formErrors[field]) {
             setFormErrors(prev => ({ ...prev, [field]: "" }));
         }
@@ -574,7 +751,6 @@ export default function Customers() {
                         </div>
                     )}
 
-                    {/* Last 10 orders section would go here */}
                     <div>
                         <Label className="text-sm font-medium text-gray-700">Đơn hàng gần đây</Label>
                         <div className="mt-2 text-sm text-gray-500">
@@ -587,7 +763,6 @@ export default function Customers() {
 
         return (
             <div className="space-y-4">
-                {/* Avatar Upload */}
                 <div>
                     <Label>Ảnh đại diện</Label>
                     <div className="mt-2">
@@ -767,7 +942,6 @@ export default function Customers() {
                         onClick={() => refetch()}
                         disabled={isLoading}
                         className="hover:bg-primary-600 hover:text-white"
-
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
@@ -779,7 +953,6 @@ export default function Customers() {
                 </div>
             </div>
 
-            {/* Stats */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                     <CardContent className="pt-4">
@@ -819,7 +992,7 @@ export default function Customers() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Mới tháng này</p>
-                                <p className="text-2xl font-bold">12</p>
+                                <p className="text-2xl font-bold">{customers.filter((c: Customer) => new Date(c.registeredAt).getMonth() === new Date().getMonth()).length}</p>
                             </div>
                             <Plus className="w-8 h-8 text-blue-500" />
                         </div>
@@ -827,7 +1000,6 @@ export default function Customers() {
                 </Card>
             </div>
 
-            {/* Main Table */}
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">
@@ -885,7 +1057,6 @@ export default function Customers() {
                 </CardContent>
             </Card>
 
-            {/* Customer Modal */}
             <ModalForm
                 open={modalOpen}
                 onOpenChange={handleModalClose}
@@ -898,10 +1069,12 @@ export default function Customers() {
                 submitText={modalMode === "create" ? "Thêm khách hàng" : "Cập nhật"}
                 cancelText="Hủy"
             >
-                {renderCustomerForm()}
+                {/* Bọc phần form bằng div scroll */}
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
+                    {renderCustomerForm()}
+                </div>
             </ModalForm>
 
-            {/* Delete Confirmation */}
             <ConfirmModal
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}

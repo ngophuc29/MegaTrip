@@ -562,7 +562,10 @@ export default function Reports() {
                 size="medium"
                 onSubmit={handleScheduleReport}
             >
-                {renderScheduleModal()}
+                <div className="max-h-[70vh] overflow-y-auto pr-2">
+
+                    {renderScheduleModal()}
+                </div>  
             </ModalForm>
         </div>
     );
