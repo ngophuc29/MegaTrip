@@ -65,10 +65,11 @@ const tourDetails = {
     reviews: 245,
     description: `Tour Đà Nẵng - Hội An - Bà Nà Hills 3N2Đ là hành trình khám phá vẻ đẹp miền Trung Việt Nam với những điểm đến nổi tiếng nhất. Bạn sẽ được trải nghiệm Cầu Vàng Bà Nà Hills - kỳ quan mới của thế giới, khám phá phố cổ Hội An - di sản văn hóa thế giới, thưởng thức ẩm thực đặc sắc và tắm biển tại bãi biển Mỹ Khê xinh đẹp.`,
     images: [
-        { url: '/placeholder.svg', title: 'Cầu Vàng Bà Nà Hills', type: 'image' },
-        { url: '/placeholder.svg', title: 'Phố cổ Hội An', type: 'image' },
-        { url: '/placeholder.svg', title: 'Bãi biển Mỹ Khê', type: 'image' },
-        { url: '/placeholder.svg', title: 'Chùa Cầu Nhật Bản', type: 'image' },
+        { url: 'https://media-cdn-v2.laodong.vn/Storage/NewsPortal/2022/2/26/1017919/Sun-World-Ba-Na-Hill-01.jpg', title: 'Sun World Ba Na Hills', type: 'image' },
+        { url: 'https://centralvietnamguide.com/wp-content/uploads/2022/02/ba-na-hill-station_2-1024x683.jpg', title: 'Ba Na Hill Station', type: 'image' },
+        { url: 'https://vietnam.travel/sites/default/files/inline-images/shutterstock_1346056832.jpg', title: 'Cầu Vàng Bà Nà', type: 'image' },
+        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1580803905738.jpg', title: 'Bà Nà Hill 1', type: 'image' },
+        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1580803905738.jpg', title: 'Bà Nà Hill 2', type: 'image' },
         { url: '/placeholder.svg', title: 'Video tour overview', type: 'video' },
         { url: '/placeholder.svg', title: 'Khách sạn 4 sao', type: 'image' },
     ],
@@ -254,6 +255,8 @@ export default function ChiTietTour() {
         title: '',
         content: ''
     });
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [modalImageIndex, setModalImageIndex] = useState(0);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -339,20 +342,19 @@ export default function ChiTietTour() {
                 {/* Tour Header with Enhanced Image Gallery */}
                 <Card>
                     <CardContent className="p-0">
-                        <div className="grid grid-cols-1 lg:grid-cols-2">
+                        <div className="grid grid-cols-1">
                             {/* Enhanced Image Gallery */}
                             <div className="relative">
-                                <div className="relative h-80">
+                                <div className="relative h-80 md:h-[480px]">
                                     <img
                                         src={tourDetails.images[activeImage].url}
                                         alt={tourDetails.images[activeImage].title}
-                                        className="w-full h-full object-cover"
+                                        className="w-full h-full object-cover cursor-pointer"
+                                        onClick={() => { setModalImageIndex(activeImage); setShowImageModal(true); }}
                                     />
-                                    {tourDetails.images[activeImage].type === 'video' && (
-                                        <div className="absolute inset-0 flex items-center justify-center">
-                                            <PlayCircle className="h-16 w-16 text-white opacity-80" />
-                                        </div>
-                                    )}
+                                    {/* Tour Info Overlay */}
+                                 
+                                    {/* Sale badge, like, share, gallery button giữ nguyên */}
                                     <div className="absolute top-4 left-4">
                                         <Badge variant="destructive">Sale 20%</Badge>
                                     </div>
@@ -379,15 +381,13 @@ export default function ChiTietTour() {
                                         </Button>
                                     </div>
                                 </div>
-
                                 {/* Image Thumbnails */}
                                 <div className="flex gap-2 p-4 overflow-x-auto">
                                     {tourDetails.images.slice(0, 5).map((image, index) => (
                                         <button
                                             key={index}
                                             onClick={() => setActiveImage(index)}
-                                            className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 ${activeImage === index ? 'border-primary' : 'border-transparent'
-                                                }`}
+                                            className={`flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 ${activeImage === index ? 'border-primary' : 'border-transparent'}`}
                                         >
                                             <img
                                                 src={image.url}
@@ -445,8 +445,9 @@ export default function ChiTietTour() {
                                             {formatPrice(tourDetails.originalPrice)}
                                         </div>
                                     )}
-                                    <div className="text-2xl lg:text-3xl font-bold text-primary">
+                                    <div className="flex gap-2 text-2xl lg:text-3xl font-bold text-[hsl(var(--primary))]">
                                         Từ {formatPrice(tourDetails.priceFrom)}
+                                       
                                     </div>
                                     <div className="text-sm text-muted-foreground">Giá cho 1 người lớn</div>
                                 </div>
@@ -892,33 +893,18 @@ export default function ChiTietTour() {
                                 {/* Date Selection */}
                                 <div>
                                     <Label className="text-base font-medium mb-3 block">Chọn ngày khởi hành</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button
-                                                variant="outline"
-                                                className={cn(
-                                                    "w-full justify-start text-left font-normal",
-                                                    !selectedDate && "text-muted-foreground"
-                                                )}
-                                            >
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {selectedDate ? (
-                                                    selectedDate.toLocaleDateString('vi-VN')
-                                                ) : (
-                                                    <span>Chọn ngày</span>
-                                                )}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0">
-                                            <Calendar
-                                                mode="single"
-                                                selected={selectedDate}
-                                                onSelect={setSelectedDate}
-                                                initialFocus
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
-
+                                    {/* Không cho click mở popover nữa, chỉ hiển thị ngày đã chọn */}
+                                    <div className={cn(
+                                        "w-full justify-start text-left font-normal flex items-center border rounded-md px-3 py-2 h-10 bg-white",
+                                        !selectedDate && "text-muted-foreground"
+                                    )}>
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {selectedDate ? (
+                                            selectedDate.toLocaleDateString('vi-VN')
+                                        ) : (
+                                            <span>Chọn ngày</span>
+                                        )}
+                                    </div>
                                     {selectedDate && getSelectedDateInfo() && (
                                         <div className="mt-2 p-2 bg-[hsl(var(--success))/0.1] rounded text-sm">
                                             <div className="flex justify-between">
@@ -1142,6 +1128,23 @@ export default function ChiTietTour() {
                     </div>
                 </div>
             </div>
+
+            {/* Image Modal */}
+            {showImageModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowImageModal(false)}>
+                    <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                        <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow" onClick={() => setShowImageModal(false)}>
+                            <XCircle className="h-6 w-6 text-black" />
+                        </button>
+                        <img
+                            src={tourDetails.images[modalImageIndex].url}
+                            alt={tourDetails.images[modalImageIndex].title}
+                            className="w-full max-h-[80vh] object-contain rounded"
+                        />
+                        <div className="text-center text-white mt-2">{tourDetails.images[modalImageIndex].title}</div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

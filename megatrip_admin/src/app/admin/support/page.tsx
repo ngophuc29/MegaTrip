@@ -402,6 +402,8 @@ const Support: React.FC = () => {
     ];
 
     return (
+        <div className="p-6 space-y-6 bg-gray-50">
+
         <div className="flex flex-col gap-6">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -855,6 +857,7 @@ const Support: React.FC = () => {
                 description="Bạn có chắc chắn muốn xóa ticket này? Hành động này không thể hoàn tác."
                 loading={deleteTicketMutation.isPending}
             />
+        </div>
         </div>
     );
 };

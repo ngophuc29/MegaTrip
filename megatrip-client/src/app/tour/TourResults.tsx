@@ -109,7 +109,7 @@ export default function TourResults({
                         )}
                         <div className="text-sm text-[hsl(var(--muted-foreground))]">Từ</div>
                         <div className="text-lg font-bold text-[hsl(var(--primary))]">
-                          {formatPrice(tour.priceFrom)}
+                          {formatPrice(tour.priceFrom)} / khách
                         </div>
                       </div>
                       <div className="text-right space-y-1">
