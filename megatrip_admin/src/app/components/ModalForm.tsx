@@ -89,6 +89,9 @@ export function ModalForm({
     }
   };
 
+  // Determine if footer actions should be hidden (for view-only mode)
+  const hideFooterActions = mode === "view" && !onSubmit && !onSaveAndClose && (!extraActions || extraActions.length === 0);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
@@ -143,7 +146,7 @@ export function ModalForm({
             </div>
 
             {/* Footer for large modals */}
-            {!isReadOnly && (
+            {!hideFooterActions && !isReadOnly && (
               <div className="p-6 border-t bg-gray-50">
                 <div className="flex items-center justify-end space-x-3">
                   <Button
@@ -219,49 +222,54 @@ export function ModalForm({
               )}
             </div>
 
-            <DialogFooter>
-              <div className="flex items-center justify-end space-x-3 w-full">
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenChange?.(false)}
-                  disabled={submitDisabled}
-                >
-                  {isReadOnly ? "Đóng" : cancelText}
-                </Button>
-                {extraActions.map((action, index) => (
-                  <Button
-                    key={index}
-                    variant={action.variant || "outline"}
-                    onClick={action.onClick}
-                    disabled={submitDisabled}
-                  >
-                    {action.icon}
-                    {action.text}
-                  </Button>
-                ))}
-                {!isReadOnly && (
-                  <>
-                    {onSaveAndClose && mode === "create" && (
-                      <Button
-                        variant="outline"
-                        onClick={onSaveAndClose}
-                        disabled={submitDisabled}
-                      >
-                        Lưu nháp
-                      </Button>
-                    )}
+            {/* Footer for small/medium modals */}
+            {!hideFooterActions && (
+              <DialogFooter>
+                <div className="flex items-center justify-end space-x-3 w-full">
+                  {!isReadOnly && (
                     <Button
-                      onClick={handleSubmit}
+                      variant="outline"
+                      onClick={() => onOpenChange?.(false)}
                       disabled={submitDisabled}
-                      loading={submitDisabled}
                     >
-                      <Save className="w-4 h-4 mr-2" />
-                      {submitText || getButtonText()}
+                      {isReadOnly ? "Đóng" : cancelText}
                     </Button>
-                  </>
-                )}
-              </div>
-            </DialogFooter>
+                  )}
+                  {extraActions.map((action, index) => (
+                    <Button
+                      key={index}
+                      variant={action.variant || "outline"}
+                      onClick={action.onClick}
+                      disabled={submitDisabled}
+                    >
+                      {action.icon}
+                      {action.text}
+                    </Button>
+                  ))}
+                  {!isReadOnly && (
+                    <>
+                      {onSaveAndClose && mode === "create" && (
+                        <Button
+                          variant="outline"
+                          onClick={onSaveAndClose}
+                          disabled={submitDisabled}
+                        >
+                          Lưu nháp
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleSubmit}
+                        disabled={submitDisabled}
+                        loading={submitDisabled}
+                      >
+                        <Save className="w-4 h-4 mr-2" />
+                        {submitText || getButtonText()}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </DialogFooter>
+            )}
           </>
         )}
       </DialogContent>

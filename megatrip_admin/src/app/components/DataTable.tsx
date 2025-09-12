@@ -279,13 +279,13 @@ export function DataTable({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Tìm kiếm..."
+              placeholder="Nhập tên tour ..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               className="pl-10"
             />
           </div>
-          <Button
+          {/* <Button
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
@@ -293,7 +293,7 @@ export function DataTable({
           >
             <Filter className="w-4 h-4 mr-2" />
             Lọc
-          </Button>
+          </Button> */}
         </div>
 
         <div className="flex items-center space-x-2">

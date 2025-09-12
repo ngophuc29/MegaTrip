@@ -682,6 +682,10 @@ const Support: React.FC = () => {
     const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
     const [viewModalOpen, setViewModalOpen] = useState(false);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [confirmAssignment, setConfirmAssignment] = useState<{
+        ticketId: string;
+        newAssignedTo: string;
+    } | null>(null);
     const [filters, setFilters] = useState<TicketFilters>({
         status: "all",
         priority: "all",
@@ -724,8 +728,6 @@ const Support: React.FC = () => {
 
             const start = (pagination.current - 1) * pagination.pageSize;
             const end = start + pagination.pageSize;
-            // Xóa dòng log sau khi debug xong
-            // console.log("Filtered tickets:", filteredTickets);
             return {
                 data: filteredTickets.slice(start, end),
                 total: filteredTickets.length,
@@ -767,7 +769,12 @@ const Support: React.FC = () => {
                 attachments: [],
                 responses: [],
                 orderId: `ORDER${mockTickets.length + 1}`.padStart(8, "0"),
-                serviceType: data.category === "billing" || data.category === "technical" ? "flight" : data.category === "complaint" ? "bus" : "tour",
+                serviceType:
+                    data.category === "billing" || data.category === "technical"
+                        ? "flight"
+                        : data.category === "complaint"
+                            ? "bus"
+                            : "tour",
             };
             mockTickets.push(newTicket);
             return newTicket;
@@ -927,7 +934,13 @@ const Support: React.FC = () => {
     const handleAssignmentChange = (ticketId: string, assignedTo: string) => {
         updateTicketMutation.mutate({
             id: ticketId,
-            data: { assignedTo: assignedTo === "unassigned" ? undefined : assignedTo },
+            data: {
+                assignedTo: assignedTo === "unassigned" ? undefined : assignedTo,
+                assignedToName:
+                    assignedTo === "unassigned"
+                        ? undefined
+                        : admins.find((a) => a.id === assignedTo)?.name || "",
+            },
         });
     };
 
@@ -1048,14 +1061,43 @@ const Support: React.FC = () => {
         {
             key: "assignedToName",
             title: "Người xử lý",
-            render: (value) => value || "Chưa phân công",
+            render: (_value, record) => (
+                <Select
+                    value={record.assignedTo ?? "unassigned"}
+                    onValueChange={(value) => {
+                        handleAssignmentChange(record.id, value);
+                    }}
+                >
+                    <SelectTrigger className="w-40">
+                        <SelectValue
+                            placeholder="Chọn phân công"
+                            // Hiển thị đúng label theo giá trị select
+                        >
+                            {
+                                record.assignedTo
+                                    ? admins.find((a) => a.id === record.assignedTo)?.name || "Chưa phân công"
+                                    : "Chưa phân công"
+                            }
+                        </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="unassigned">Chưa phân công</SelectItem>
+                        {admins.map((admin: any) => (
+                            <SelectItem key={admin.id} value={admin.id}>
+                                {admin.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            ),
         },
         {
             key: "createdAt",
             title: "Ngày tạo",
             sortable: true,
             render: (value) => new Date(value).toLocaleDateString("vi-VN"),
-        }, {
+        },
+        {
             key: "actions",
             title: "Thao tác",
             render: (_value, record) => (
@@ -1068,15 +1110,6 @@ const Support: React.FC = () => {
                         type="button"
                     >
                         <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(record)}
-                        title="Chỉnh sửa"
-                        type="button"
-                    >
-                        <MessageCircle className="h-4 w-4" />
                     </Button>
                     <Select
                         value={record.status}
@@ -1095,7 +1128,7 @@ const Support: React.FC = () => {
                     </Select>
                 </div>
             ),
-        }
+        },
     ];
 
     return (
@@ -1174,7 +1207,10 @@ const Support: React.FC = () => {
                                     className="pl-10"
                                 />
                             </div>
-                            <Select value={filters.status} onValueChange={(value) => setFilters({ ...filters, status: value })}>
+                            <Select
+                                value={filters.status}
+                                onValueChange={(value) => setFilters({ ...filters, status: value })}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Trạng thái" />
                                 </SelectTrigger>
@@ -1187,7 +1223,10 @@ const Support: React.FC = () => {
                                     <SelectItem value="closed">Đã đóng</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.priority} onValueChange={(value) => setFilters({ ...filters, priority: value })}>
+                            <Select
+                                value={filters.priority}
+                                onValueChange={(value) => setFilters({ ...filters, priority: value })}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Ưu tiên" />
                                 </SelectTrigger>
@@ -1199,7 +1238,10 @@ const Support: React.FC = () => {
                                     <SelectItem value="urgent">Khẩn cấp</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.category} onValueChange={(value) => setFilters({ ...filters, category: value })}>
+                            <Select
+                                value={filters.category}
+                                onValueChange={(value) => setFilters({ ...filters, category: value })}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Loại" />
                                 </SelectTrigger>
@@ -1212,7 +1254,10 @@ const Support: React.FC = () => {
                                     <SelectItem value="complaint">Khiếu nại</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.assignedTo} onValueChange={(value) => setFilters({ ...filters, assignedTo: value })}>
+                            <Select
+                                value={filters.assignedTo}
+                                onValueChange={(value) => setFilters({ ...filters, assignedTo: value })}
+                            >
                                 <SelectTrigger>
                                     <SelectValue placeholder="Người xử lý" />
                                 </SelectTrigger>
@@ -1229,7 +1274,12 @@ const Support: React.FC = () => {
                             <Button
                                 variant="outline"
                                 onClick={() => {
-                                    setFilters({ status: "all", priority: "all", category: "all", assignedTo: "all" });
+                                    setFilters({
+                                        status: "all",
+                                        priority: "all",
+                                        category: "all",
+                                        assignedTo: "all",
+                                    });
                                     setSearchTerm("");
                                     setPagination({ current: 1, pageSize: 10, total: mockTickets.length });
                                 }}
@@ -1259,7 +1309,7 @@ const Support: React.FC = () => {
                                     current: pagination.current,
                                     pageSize: pagination.pageSize,
                                     total: tickets.total || 0,
-                                    showSizeChanger: true, // Cho phép chọn số dòng/trang nếu muốn
+                                    showSizeChanger: true,
                                 }}
                                 onPaginationChange={(page, pageSize) => {
                                     setPagination({
@@ -1275,152 +1325,6 @@ const Support: React.FC = () => {
                 </Card>
 
                 <ModalForm
-                    open={modalOpen}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setModalOpen(false);
-                            resetForm();
-                        } else {
-                            setModalOpen(true);
-                        }
-                    }}
-                    title={editTicket ? "Chỉnh sửa ticket" : "Tạo ticket mới"}
-                    size="large"
-                    onSubmit={(formData) => {
-                        const data = {
-                            title: formData.get("title") as string,
-                            content: formData.get("content") as string,
-                            customerId: formData.get("customerId") as string,
-                            category: formData.get("category") as string,
-                            priority: formData.get("priority") as string,
-                            assignedTo: formData.get("assignedTo") === "unassigned" ? undefined : (formData.get("assignedTo") as string),
-                            tags: (formData.get("tags") as string)?.split(",").map((t) => t.trim()).filter(Boolean) || [],
-                        };
-
-                        if (editTicket) {
-                            updateTicketMutation.mutate({ id: editTicket.id, data });
-                        } else {
-                            createTicketMutation.mutate(data);
-                        }
-                    }}
-                    loading={createTicketMutation.isPending || updateTicketMutation.isPending}
-                >
-                    <div className="max-h-[70vh] overflow-y-auto pr-2">
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="title">Tiêu đề</Label>
-                                <Input
-                                    id="title"
-                                    name="title"
-                                    defaultValue={editTicket?.title}
-                                    placeholder="Nhập tiêu đề ticket..."
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="customerId">Khách hàng</Label>
-                                <Select name="customerId" defaultValue={editTicket?.customerId}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Chọn khách hàng" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {customers.map((customer: any) => (
-                                            <SelectItem key={customer.id} value={customer.id}>
-                                                {customer.name} - {customer.email}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="category">Loại</Label>
-                                <Select name="category" defaultValue={editTicket?.category}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Chọn loại" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="technical">Kỹ thuật</SelectItem>
-                                        <SelectItem value="billing">Thanh toán</SelectItem>
-                                        <SelectItem value="account">Tài khoản</SelectItem>
-                                        <SelectItem value="general">Chung</SelectItem>
-                                        <SelectItem value="complaint">Khiếu nại</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="priority">Ưu tiên</Label>
-                                <Select name="priority" defaultValue={editTicket?.priority}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Chọn mức ưu tiên" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="low">Thấp</SelectItem>
-                                        <SelectItem value="medium">Trung bình</SelectItem>
-                                        <SelectItem value="high">Cao</SelectItem>
-                                        <SelectItem value="urgent">Khẩn cấp</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="assignedTo">Phân công cho</Label>
-                                <Select name="assignedTo" defaultValue={editTicket?.assignedTo || "unassigned"}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Chọn người xử lý" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="unassigned">Chưa phân công</SelectItem>
-                                        {admins.map((admin: any) => (
-                                            <SelectItem key={admin.id} value={admin.id}>
-                                                {admin.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="tags">Tags (phân cách bằng dấu phẩy)</Label>
-                                <Input
-                                    id="tags"
-                                    name="tags"
-                                    defaultValue={editTicket?.tags?.join(", ")}
-                                    placeholder="urgent, payment, technical..."
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="content">Nội dung</Label>
-                            <Textarea
-                                id="content"
-                                name="content"
-                                defaultValue={editTicket?.content}
-                                placeholder="Mô tả chi tiết vấn đề..."
-                                rows={4}
-                                required
-                            />
-                        </div>
-                    </div>
-                    <div className="flex justify-end mt-4 gap-2">
-                        {editTicket && (
-                            <Button
-                                variant="outline"
-                                type="button"
-                                onClick={() => {
-                                    setEditTicket(null);
-                                    setModalOpen(false);
-                                    resetForm();
-                                }}
-                            >
-                                Hủy chỉnh sửa
-                            </Button>
-                        )}
-                        <Button type="submit" loading={createTicketMutation.isPending || updateTicketMutation.isPending}>
-                            {editTicket ? "Lưu thay đổi" : "Tạo mới"}
-                        </Button>
-                    </div>
-                </ModalForm>
-
-                <ModalForm
                     open={viewModalOpen}
                     onOpenChange={(open) => {
                         if (!open) {
@@ -1434,11 +1338,10 @@ const Support: React.FC = () => {
                     }}
                     title="Chi tiết ticket"
                     size="large"
-                    hideActions
+                    mode="view"
                 >
                     {selectedTicket && (
                         <div className="max-h-[70vh] overflow-y-auto pr-2">
-
                             <div className="space-y-6">
                                 <div className="flex items-start justify-between">
                                     <div>
@@ -1570,7 +1473,12 @@ const Support: React.FC = () => {
                 <ConfirmModal
                     isOpen={!!deleteId}
                     onClose={() => setDeleteId(null)}
-                    onConfirm={() => deleteId && deleteTicketMutation.mutate(deleteId)}
+                    onConfirm={() => {
+                        if (deleteId) {
+                            deleteTicketMutation.mutate(deleteId);
+                            setDeleteId(null);
+                        }
+                    }}
                     title="Xóa ticket"
                     description="Bạn có chắc chắn muốn xóa ticket này? Hành động này không thể hoàn tác."
                     loading={deleteTicketMutation.isPending}

@@ -1198,7 +1198,7 @@ export default function Promotions() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">Tất cả dịch vụ</SelectItem>
+                                    
                                     {applyToOptions.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
                                             {option.label}

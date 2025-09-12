@@ -394,7 +394,7 @@ export default function Reports() {
                                 </SelectContent>
                             </Select>
                         </div>
-
+{/* 
                         <div>
                             <Label htmlFor="operator">Đối tác</Label>
                             <Select value={operator} onValueChange={setOperator}>
@@ -408,7 +408,7 @@ export default function Reports() {
                                     <SelectItem value="qh">Bamboo Airways</SelectItem>
                                 </SelectContent>
                             </Select>
-                        </div>
+                        </div> */}
                     </div>
                 </CardContent>
             </Card>
