@@ -23,6 +23,7 @@ import { DatePickerWithRange } from "../../components/ui/date-range-picker";
 import { ModalForm } from "../../components/ModalForm";
 import { useToast } from "../../components/ui/use-toast";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { DateRange } from "react-day-picker";
 
 // Mock data for reports
 const revenueData = [
@@ -67,10 +68,10 @@ const promoStats = [
 
 export default function Reports() {
     const [reportType, setReportType] = useState("revenue");
-    const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
-        from: new Date(2024, 0, 1),
-        to: new Date(2024, 5, 30)
-    });
+    // const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | undefined>({
+    //     from: new Date(2024, 0, 1),
+    //     to: new Date(2024, 5, 30)
+    // });
     const [granularity, setGranularity] = useState("month");
     const [serviceType, setServiceType] = useState("all");
     const [operator, setOperator] = useState("all");
@@ -311,7 +312,10 @@ export default function Reports() {
             </div>
         </div>
     );
-
+    const [dateRange, setDateRange] = useState<DateRange | undefined>({
+        from: new Date(2025, 5, 17),
+        to: new Date(2025, 5, 20),
+    })
     return (
         <div className="p-6 space-y-6 bg-gray-50">
             {/* Page Header */}
@@ -338,18 +342,15 @@ export default function Reports() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-                        <div>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        {/* Loại báo cáo */}
+                        <div className="lg:col-span-3">
                             <Label htmlFor="reportType">Loại báo cáo</Label>
-                            
-                            <Select value={reportType} onValueChange={setReportType}
-                            >
+                            <Select value={reportType} onValueChange={setReportType}>
                                 <SelectTrigger className="bg-white">
                                     <SelectValue />
                                 </SelectTrigger>
-                                <SelectContent
-                                
-                                >
+                                <SelectContent>
                                     <SelectItem value="revenue">Doanh thu</SelectItem>
                                     <SelectItem value="orders">Đơn hàng</SelectItem>
                                     <SelectItem value="customers">Khách hàng</SelectItem>
@@ -358,15 +359,38 @@ export default function Reports() {
                             </Select>
                         </div>
 
-                        <div>
+                        {/* Khoảng thời gian */}
+                        <div className="lg:col-span-4">
                             <Label>Khoảng thời gian</Label>
-                            <DatePickerWithRange
-                                date={dateRange}
-                                onDateChange={setDateRange}
-                            />
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    type="date"
+                                    value={dateRange?.from ? dateRange.from.toISOString().slice(0, 10) : ""}
+                                    onChange={e => {
+                                        setDateRange({
+                                            from: e.target.value ? new Date(e.target.value) : undefined,
+                                            to: dateRange?.to,
+                                        });
+                                    }}
+                                    className="w-[200px]"
+                                />
+                                <span className="mx-1">-</span>
+                                <Input
+                                    type="date"
+                                    value={dateRange?.to ? dateRange.to.toISOString().slice(0, 10) : ""}
+                                    onChange={e => {
+                                        setDateRange({
+                                            from: dateRange?.from,
+                                            to: e.target.value ? new Date(e.target.value) : undefined,
+                                        });
+                                    }}
+                                    className="w-[200px]"
+                                />
+                            </div>
                         </div>
 
-                        <div>
+                        {/* Theo */}
+                        <div className="lg:col-span-2">
                             <Label htmlFor="granularity">Theo</Label>
                             <Select value={granularity} onValueChange={setGranularity}>
                                 <SelectTrigger className="bg-white">
@@ -380,7 +404,8 @@ export default function Reports() {
                             </Select>
                         </div>
 
-                        <div>
+                        {/* Loại dịch vụ */}
+                        <div className="lg:col-span-3">
                             <Label htmlFor="serviceType">Loại dịch vụ</Label>
                             <Select value={serviceType} onValueChange={setServiceType}>
                                 <SelectTrigger className="bg-white">
@@ -394,23 +419,10 @@ export default function Reports() {
                                 </SelectContent>
                             </Select>
                         </div>
-{/* 
-                        <div>
-                            <Label htmlFor="operator">Đối tác</Label>
-                            <Select value={operator} onValueChange={setOperator}>
-                                <SelectTrigger className="bg-white">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Tất cả</SelectItem>
-                                    <SelectItem value="vn">Vietnam Airlines</SelectItem>
-                                    <SelectItem value="vj">VietJet Air</SelectItem>
-                                    <SelectItem value="qh">Bamboo Airways</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div> */}
                     </div>
                 </CardContent>
+
+
             </Card>
 
             {/* Summary Cards */}

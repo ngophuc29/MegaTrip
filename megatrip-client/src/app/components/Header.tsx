@@ -40,6 +40,7 @@ import { usePathname } from 'next/navigation';
 export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function Header() {
 
   return (
     <header className={`sticky top-0 z-50 w-full  bg-white transition-shadow ${scrolled ? 'shadow-2xl' : ''}`}>
-      <div className="container">
+      <div className="2xl:container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
@@ -201,26 +202,28 @@ export default function Header() {
             </DropdownMenu>
 
             {/* Mobile menu */}
-            <Sheet>
+            <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="sm" className="lg:hidden">
                   <Menu className="h-5 w-5" />
                   <span className="sr-only">Menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
+              <SheetContent side="right" className="w-[300px] sm:w-[400px] bg-white">
                 <SheetHeader>
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col space-y-4 mt-4">
                   <Link 
                     href="/"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <span>Trang chủ</span>
                   </Link>
                   <Link 
                     href="/ve-may-bay"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Plane className="h-4 w-4" />
@@ -228,6 +231,7 @@ export default function Header() {
                   </Link>
                   <Link 
                     href="/xe-du-lich"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Bus className="h-4 w-4" />
@@ -235,6 +239,7 @@ export default function Header() {
                   </Link>
                   <Link 
                     href="/tour"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Map className="h-4 w-4" />
@@ -242,6 +247,7 @@ export default function Header() {
                   </Link>
                   <Link 
                     href="/khuyen-mai"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Percent className="h-4 w-4" />
@@ -249,6 +255,7 @@ export default function Header() {
                   </Link>
                   <Link 
                     href="/tin-tuc"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <Newspaper className="h-4 w-4" />
@@ -256,6 +263,7 @@ export default function Header() {
                   </Link>
                   <Link 
                     href="/ho-tro"
+                    onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <HelpCircle className="h-4 w-4" />
