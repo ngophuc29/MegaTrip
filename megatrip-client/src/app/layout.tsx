@@ -14,6 +14,25 @@ interface LayoutProps {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+
+  // Hàm lấy title động theo route
+  const getTitle = () => {
+    if (pathname === "/") return "MegaTrip - Đặt vé máy bay, xe du lịch, tour giá tốt";
+    if (pathname.startsWith("/ve-may-bay")) return "Vé máy bay giá rẻ | MegaTrip";
+    if (pathname.startsWith("/xe-du-lich")) return "Xe du lịch | MegaTrip";
+    if (pathname.startsWith("/tour")) return "Tour du lịch | MegaTrip";
+    if (pathname.startsWith("/khuyen-mai")) return "Khuyến mãi | MegaTrip";
+    if (pathname.startsWith("/tin-tuc")) return "Tin tức du lịch | MegaTrip";
+    if (pathname.startsWith("/gio-hang")) return "Giỏ hàng | MegaTrip";
+    if (pathname.startsWith("/thanh-toan")) return "Thanh toán | MegaTrip";
+    if (pathname.startsWith("/tai-khoan")) return "Tài khoản của tôi | MegaTrip";
+    if (pathname.startsWith("/ho-tro")) return "Hỗ trợ khách hàng | MegaTrip";
+    if (pathname.startsWith("/dang-nhap")) return "Đăng nhập | MegaTrip";
+    if (pathname.startsWith("/dang-ky")) return "Đăng ký | MegaTrip";
+    if (pathname.startsWith("/thanh-toan-thanh-cong")) return "Đặt chỗ thành công | MegaTrip";
+    return "MegaTrip";
+  };
+
   useEffect(() => {
     startLoading();
     const timer = setTimeout(() => stopLoading(), 400); // loading ngắn khi đổi route
@@ -24,6 +43,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="vi">
+      <head>
+        <title>{getTitle()}</title>
+        {/* ...có thể thêm meta tags khác ở đây nếu muốn... */}
+      </head>
       <body>
         {hideLayout ? (
           <main className="min-h-screen">{children}</main>
