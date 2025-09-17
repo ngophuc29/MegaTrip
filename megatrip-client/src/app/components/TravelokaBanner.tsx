@@ -24,6 +24,7 @@ import {
   Minus
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { Label } from 'recharts';
 
 const tabs = [
   {
@@ -114,12 +115,15 @@ export default function TravelokaBanner() {
   const [fromDate, setFromDate] = useState<Date>(new Date());
   const [toDate, setToDate] = useState<Date>(new Date());
   const [passengers, setPassengers] = useState(1);
-  const [tripType, setTripType] = useState('roundtrip');
+  const [tripType, setTripType] = useState('oneway');
   const [headerSolid, setHeaderSolid] = useState(false);
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [passengerCounts, setPassengerCounts] = useState({ adults: 1, children: 0, infants: 0 });
   const totalPassengers = passengerCounts.adults + passengerCounts.children + passengerCounts.infants;
   const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
+  const [airports, setAirports] = useState<any[]>([]);
+  // travel class for flights
+  const [travelClass, setTravelClass] = useState<'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'>('ECONOMY');
   // Thêm state cho fromProvince và toProvince
   const [fromProvince, setFromProvince] = useState<string>("");
   const [toProvince, setToProvince] = useState<string>("");
@@ -141,12 +145,21 @@ export default function TravelokaBanner() {
   useEffect(() => {
     fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
       setProvinces(data);
-      // Gán mặc định nếu chưa có
-      // if (data.length > 0 && !fromProvince && !toProvince) {
-      //   setFromProvince(data[0].code);
-      //   setToProvince(data[1]?.code || "");
-      // }
     });
+
+    // load airport list for flight selects
+    fetch('http://localhost:7700/airports')
+      .then(res => res.json())
+      .then(data => {
+        const list = data?.airports ? Object.values(data.airports) : [];
+        setAirports(list);
+        // optional defaults if not selected yet
+        if (list.length > 0 && !fromProvince && !toProvince) {
+          setFromProvince(list[0].icao);
+          setToProvince(list[1]?.icao || list[0].icao);
+        }
+      })
+      .catch(() => setAirports([]));
   }, []);
 
   useEffect(() => {
@@ -157,21 +170,133 @@ export default function TravelokaBanner() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const updatePassengerCount = (type, increment) => {
-    setPassengerCounts(prev => ({
-      ...prev,
-      [type]: Math.max(type === 'adults' ? 1 : 0, prev[type] + (increment ? 1 : -1))
-    }));
+  const updatePassengerCount = (type: 'adults' | 'children' | 'infants', increment: boolean) => {
+    setPassengerCounts(prev => {
+      let adults = prev.adults;
+      let children = prev.children;
+      let infants = prev.infants;
+
+//       adults >= 1: luôn cần ít nhất một hành khách lớn.
+//         infants ≤ adults: em bé phải đi kèm với người lớn(không thể nhiều hơn số người lớn).
+//           seated = adults + children ≤ 9: nhiều API vé(ví dụ Amadeus) giới hạn số hành khách có ghế là 9; infants thường không tính ghế.
+// Khi tăng / decrease:
+// Tăng adults có thể cho phép tăng infants sau đó; nếu adults tăng làm vượt giới hạn ghế thì giảm children để giữ seated ≤ 9.
+// Giảm adults sẽ tự động giảm infants nếu cần để giữ infants ≤ adults và giữ adults ≥ 1.
+// Tăng children chỉ cho phép khi seated < 9 để không vượt giới hạn.
+      if (type === 'adults') {
+        adults = Math.max(1, adults + (increment ? 1 : -1));
+        // ensure infants <= adults
+        if (infants > adults) infants = adults;
+        // ensure seated (adults + children) <= 9
+        if (adults + children > 9) {
+          const overflow = adults + children - 9;
+          children = Math.max(0, children - overflow);
+        }
+      } else if (type === 'children') {
+        if (increment) {
+          // adding a child: only allow if seated < 9
+          if (adults + children < 9) {
+            children = children + 1;
+          } // otherwise ignore the increment
+        } else {
+          children = Math.max(0, children - 1);
+        }
+      } else if (type === 'infants') {
+        if (increment) {
+          // cannot have more infants than adults
+          if (infants < adults) infants = infants + 1;
+        } else {
+          infants = Math.max(0, infants - 1);
+        }
+      }
+
+      return { adults, children, infants };
+    });
   };
 
   // Hàm chuyển route và truyền query
   const handleSearch = () => {
     if (activeTab === 'flights') {
-      router.push(`/ve-may-bay?from=${fromProvince}&to=${toProvince}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}&return=${toDate ? toDate.toISOString().split('T')[0] : ''}&adults=${passengerCounts.adults}&children=${passengerCounts.children}&infants=${passengerCounts.infants}`);
+      const originAirport = airports.find(a => a.icao === fromProvince || a.iata === fromProvince);
+      const destAirport = airports.find(a => a.icao === toProvince || a.iata === toProvince);
+      const originCode = originAirport?.iata || originAirport?.icao || fromProvince || '';
+      const destCode = destAirport?.iata || destAirport?.icao || toProvince || '';
+
+      const departureDate = fromDate ? fromDate.toISOString().split('T')[0] : '';
+      const returnDate = (tripType === 'roundtrip' && toDate) ? toDate.toISOString().split('T')[0] : '';
+
+      // Validate passenger counts per Amadeus rules and normalize state so UI reflects changes
+      let adults = passengerCounts.adults || 1;
+      let children = passengerCounts.children || 0;
+      let infants = passengerCounts.infants || 0;
+
+      // Normalize according to same rules before sending:
+      // - infants cannot exceed adults
+      if (infants > adults) infants = adults;
+
+      // - seated = adults + children must be <= 9; reduce children first
+      if (adults + children > 9) {
+        const overflow = adults + children - 9;
+        children = Math.max(0, children - overflow);
+      }
+
+      // - ensure adults >= 1
+      adults = Math.max(1, adults);
+
+      // Update UI state if normalization changed numbers so user sees final values
+      if (adults !== passengerCounts.adults || children !== passengerCounts.children || infants !== passengerCounts.infants) {
+        setPassengerCounts({ adults, children, infants });
+      }
+
+      const payload: Record<string, string> = {
+        originLocationCode: originCode,
+        destinationLocationCode: destCode,
+        departureDate,
+        adults: String(adults),
+        children: String(children),
+        infants: String(infants),
+        travelClass: travelClass,
+        nonStop: 'false',
+        currencyCode: 'VND',
+        max: String(3)
+      };
+      if (returnDate) payload.returnDate = returnDate;
+
+      console.log('Flight search payload (Amadeus params) Traveloka Banner:', payload);
+      const qs = new URLSearchParams(payload);
+
+     // Ensure SearchTabs can pre-fill "from" / "to" selects:
+     // SearchTabs reads params['from'] and params['to'], so include them (IATA preferred).
+     if (originCode) qs.set('from', originCode);
+     if (destCode) qs.set('to', destCode);
+     // include explicit total (optional) so pages that only read total can prefill
+     qs.set('total', String(totalPassengers));
+
+      router.push(`/ve-may-bay?${qs.toString()}`);
     } else if (activeTab === 'buses') {
-      router.push(`/xe-du-lich?from=${busFrom}&to=${busTo}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}`);
+      const payload = {
+        type: 'bus',
+        from: busFrom,
+        to: busTo,
+        departure: fromDate ? fromDate.toISOString().split('T')[0] : ''
+      };
+      console.log('Search clicked:', payload);
+      router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (activeTab === 'tours') {
-      router.push(`/tour?from=${tourFrom}&to=${tourTo}&departure=${fromDate ? fromDate.toISOString().split('T')[0] : ''}&passengers=${passengers}`);
+      const departure = fromDate ? fromDate.toISOString().split('T')[0] : '';
+      // include passenger breakdown and total so SearchTabs can prefill correctly
+      const qs = new URLSearchParams({
+        from: tourFrom || '',
+        to: tourTo || '',
+        departure,
+        adults: String(passengerCounts.adults || 1),
+        children: String(passengerCounts.children || 0),
+        infants: String(passengerCounts.infants || 0),
+        total: String(totalPassengers), // explicit total
+        travelClass: travelClass // optional for tours, kept for consistency
+      });
+      console.log('Tour search params:', Object.fromEntries(qs.entries()));
+      router.push(`/tour?${qs.toString()}`);
     }
   };
 
@@ -273,17 +398,6 @@ export default function TravelokaBanner() {
                       <input
                         type="radio"
                         name="tripType"
-                        value="roundtrip"
-                        checked={tripType === 'roundtrip'}
-                        onChange={(e) => setTripType(e.target.value)}
-                        className="text-blue-600"
-                      />
-                      <span className="text-sm font-medium text-white">Khứ hồi</span>
-                    </label>
-                    <label className="flex items-center space-x-2">
-                      <input
-                        type="radio"
-                        name="tripType"
                         value="oneway"
                         checked={tripType === 'oneway'}
                         onChange={(e) => setTripType(e.target.value)}
@@ -291,6 +405,18 @@ export default function TravelokaBanner() {
                       />
                       <span className="text-sm font-medium text-white">Một chiều</span>
                     </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="tripType"
+                        value="roundtrip"
+                        checked={tripType === 'roundtrip'}
+                        onChange={(e) => setTripType(e.target.value)}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm font-medium text-white">Khứ hồi</span>
+                    </label>
+                    
                  
                   </div>
 
@@ -301,11 +427,13 @@ export default function TravelokaBanner() {
                       <label className="block text-sm font-semibold text-white mb-1">Từ</label>
                       <Select value={fromProvince} onValueChange={setFromProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="Chọn điểm đi" />
+                          <SelectValue placeholder="Chọn sân bay" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.filter(prov => prov.code !== toProvince).map((prov) => (
-                            <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                          {airports.filter(a => a.icao !== toProvince).map((a) => (
+                            <SelectItem key={a.icao} value={a.icao}>
+                              {a.name} {a.iata ? `(${a.iata})` : `(${a.icao})`} — {a.state}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -323,11 +451,13 @@ export default function TravelokaBanner() {
                       <label className="block text-sm font-semibold text-white mb-1">Đến</label>
                       <Select value={toProvince} onValueChange={setToProvince}>
                         <SelectTrigger className="h-12 bg-white shadow-md text-black">
-                          <SelectValue placeholder="Chọn điểm đến" />
+                          <SelectValue placeholder="Chọn sân bay" />
                         </SelectTrigger>
                         <SelectContent>
-                          {provinces.filter(prov => prov.code !== fromProvince).map((prov) => (
-                            <SelectItem key={prov.code} value={prov.code}>{prov.name}</SelectItem>
+                          {airports.filter(a => a.icao !== fromProvince).map((a) => (
+                            <SelectItem key={a.icao} value={a.icao}>
+                              {a.name} {a.iata ? `(${a.iata})` : `(${a.icao})`} — {a.state}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -447,6 +577,23 @@ export default function TravelokaBanner() {
                         </PopoverContent>
                       </Popover>
                     </div>
+
+                    {/* Travel class select */}
+                    <div className="w-56">
+                      <Label className="block text-sm font-semibold text-white mb-1">Hạng vé</Label>
+                      <Select value={travelClass} onValueChange={(v) => setTravelClass(v as any)}>
+                        <SelectTrigger className="h-12 bg-white shadow-md text-black">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ECONOMY">Phổ thông</SelectItem>
+                          <SelectItem value="PREMIUM_ECONOMY">Premium Economy</SelectItem>
+                          <SelectItem value="BUSINESS">Thương gia</SelectItem>
+                          <SelectItem value="FIRST">Hạng nhất</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     <Button size="lg" className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white shadow-md" onClick={handleSearch}>
                       <Search className="mr-2 h-5 w-5" />
                       Tìm chuyến bay

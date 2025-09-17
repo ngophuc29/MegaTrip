@@ -34,7 +34,7 @@ interface SearchTabsProps {
 }
 
 export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
-  const [flightType, setFlightType] = useState<'roundtrip' | 'oneway' | 'multicity'>('roundtrip');
+  const [flightType, setFlightType] = useState<'roundtrip' | 'oneway' | 'multicity'>('oneway');
   const [passengers, setPassengers] = useState<PassengerCount>({
     adults: 1,
     children: 0,
@@ -46,16 +46,30 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   const [tourDeparture, setTourDeparture] = useState<Date>(new Date());
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  // Thêm state cho from/to các loại search
+  const [airports, setAirports] = useState<any[]>([]);
+  // travel class for flights (Amadeus values)
+  const [travelClass, setTravelClass] = useState<'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'>('ECONOMY');
+  // from/to state for each search type
   const [flightFrom, setFlightFrom] = useState<string>('');
   const [flightTo, setFlightTo] = useState<string>('');
   const [busFrom, setBusFrom] = useState<string>('');
   const [busTo, setBusTo] = useState<string>('');
   const [tourFrom, setTourFrom] = useState<string>('');
   const [tourTo, setTourTo] = useState<string>('');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
+  // load airports for flight selects (only)
+  useEffect(() => {
+    fetch('http://localhost:7700/airports')
+      .then(res => res.json())
+      .then(data => {
+        const list = data?.airports ? Object.values(data.airports) : [];
+        setAirports(list);
+      })
+      .catch(() => setAirports([]));
+  }, []);
+  
 
   useEffect(() => {
     fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
@@ -63,61 +77,185 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     });
   }, []);
 
+  // normalize helper: enforce rules
+  // - adults >= 1
+  // - infants <= adults
+  // - seated = adults + children <= 9 (reduce children first)
+  const normalizePassengers = (p: PassengerCount): PassengerCount => {
+    let adults = Math.max(1, Number.isFinite(p.adults) ? p.adults : 1);
+    let children = Math.max(0, Number.isFinite(p.children) ? p.children : 0);
+    let infants = Math.max(0, Number.isFinite(p.infants) ? p.infants : 0);
+
+    // infants cannot exceed adults
+    if (infants > adults) infants = adults;
+
+    // seated constraint (adults + children) <= 9
+    if (adults + children > 9) {
+      const overflow = adults + children - 9;
+      children = Math.max(0, children - overflow);
+    }
+
+    return { adults, children, infants };
+  };
+
+  // resolve incoming code (IATA or ICAO) to the ICAO value used by our Selects.
+  // - If airports list contains matching IATA, return its ICAO (so Select value matches)
+  // - If it's already an ICAO present in list, return it
+  // - Otherwise return the original string (fallback)
+  const resolveAirportIcao = (code?: string | null) => {
+    if (!code) return '';
+    const key = String(code).trim();
+    if (!key) return '';
+    const byIata = airports.find(a => a.iata === key);
+    if (byIata) return byIata.icao;
+    const byIcao = airports.find(a => a.icao === key);
+    if (byIcao) return byIcao.icao;
+    return key;
+  };
+
+  // If airports load after we already set flightFrom/flightTo from query (and query used IATA),
+  // remap them to ICAO so the Select shows correct selection.
   useEffect(() => {
-    if (searchParams) {
-      if (activeTab === 'flight') {
-        const from = searchParams.get('from');
-        const to = searchParams.get('to');
-        const departure = searchParams.get('departure');
-        const returnDate = searchParams.get('return');
-        const adults = searchParams.get('adults');
-        const children = searchParams.get('children');
-        const infants = searchParams.get('infants');
-        if (from !== null) setFlightFrom(String(from));
-        if (to !== null) setFlightTo(String(to));
-        if (departure) setFlightDeparture(new Date(departure));
-        if (returnDate) setFlightReturn(new Date(returnDate));
-        if (adults || children || infants) {
-          setPassengers({
-            adults: adults ? Number(adults) : 1,
-            children: children ? Number(children) : 0,
-            infants: infants ? Number(infants) : 0,
-          });
-        }
-        if (from && to && departure) {
-          onSearch?.();
-        }
+    if (!airports || airports.length === 0) return;
+
+    // If no selection yet, default to first two airports (same logic as TravelokaBanner)
+    setFlightFrom(prev => {
+      if (!prev) {
+        return airports[0].icao;
       }
-      if (activeTab === 'bus') {
-        const from = searchParams.get('from');
-        const to = searchParams.get('to');
-        const departure = searchParams.get('departure');
-        if (from !== null) setBusFrom(String(from));
-        if (to !== null) setBusTo(String(to));
-        if (departure) setBusDeparture(new Date(departure));
-        if (from && to && departure) {
-          onSearch?.();
-        }
+      const foundByIata = airports.find(a => a.iata === prev);
+      const foundByIcao = airports.find(a => a.icao === prev);
+      return foundByIata ? foundByIata.icao : (foundByIcao ? foundByIcao.icao : prev);
+    });
+
+    setFlightTo(prev => {
+      if (!prev) {
+        return airports[1]?.icao || airports[0].icao;
       }
-      if (activeTab === 'tour') {
-        const from = searchParams.get('from');
-        const to = searchParams.get('to');
-        const departure = searchParams.get('departure');
-        if (from !== null) setTourFrom(String(from));
-        if (to !== null) setTourTo(String(to));
-        if (departure) setTourDeparture(new Date(departure));
-        if (from && to && departure) {
-          onSearch?.();
-        }
+      const foundByIata = airports.find(a => a.iata === prev);
+      const foundByIcao = airports.find(a => a.icao === prev);
+      return foundByIata ? foundByIata.icao : (foundByIcao ? foundByIcao.icao : prev);
+    });
+  }, [airports]);
+
+  // For flight tab: fill fields from query params if present
+  useEffect(() => {
+    if (!searchParams) return;
+
+    // read all params once
+    const params = Object.fromEntries(searchParams.entries());
+    const from = params['from'];
+    const to = params['to'];
+    const departure = params['departure'] || params['date'] || params['departureDate'];
+    const returnDate = params['return'] || params['returnDate'];
+    const travelClassParam = params['travelClass'];
+
+    // accept explicit total if provided
+    const hasTotalParam = Object.prototype.hasOwnProperty.call(params, 'total');
+    const totalVal = hasTotalParam ? parseInt(params['total'] || '0', 10) : undefined;
+
+    // parse passenger params robustly (accept "0" values)
+    const hasAdultsParam = Object.prototype.hasOwnProperty.call(params, 'adults');
+    const hasChildrenParam = Object.prototype.hasOwnProperty.call(params, 'children');
+    const hasInfantsParam = Object.prototype.hasOwnProperty.call(params, 'infants');
+
+    const adultsVal = hasAdultsParam ? parseInt(params['adults'] || '0', 10) : undefined;
+    const childrenVal = hasChildrenParam ? parseInt(params['children'] || '0', 10) : undefined;
+    const infantsVal = hasInfantsParam ? parseInt(params['infants'] || '0', 10) : undefined;
+
+    // Fill from/to for all relevant controls so redirect always pre-fills UI.
+    // Resolve incoming code (IATA or ICAO) to ICAO for Select value.
+    if (from !== undefined && from !== null && from !== '') {
+      const resolvedFrom = resolveAirportIcao(String(from));
+      setFlightFrom(resolvedFrom);
+      setBusFrom(String(from));
+      setTourFrom(String(from));
+    }
+    if (to !== undefined && to !== null && to !== '') {
+      const resolvedTo = resolveAirportIcao(String(to));
+      setFlightTo(resolvedTo);
+      setBusTo(String(to));
+      setTourTo(String(to));
+    }
+
+    // Dates
+    if (departure) {
+      const d = new Date(departure);
+      if (!Number.isNaN(d.getTime())) {
+        setFlightDeparture(d);
+        setBusDeparture(d);
+        setTourDeparture(d);
       }
+    }
+    if (returnDate) {
+      const r = new Date(returnDate);
+      if (!Number.isNaN(r.getTime())) {
+        setFlightReturn(r);
+        setFlightType('roundtrip');
+      }
+    } else {
+      setFlightType('oneway');
+    }
+
+    // Update passengers:
+    // Prefer explicit breakdown (adults/children/infants) if any provided.
+    // Otherwise if an explicit total is provided, apply it (assign to adults by default so total shows correctly).
+    if (hasAdultsParam || hasChildrenParam || hasInfantsParam) {
+      const candidate = {
+        adults: adultsVal !== undefined ? Math.max(1, adultsVal) : passengers.adults,
+        children: childrenVal !== undefined ? Math.max(0, childrenVal) : passengers.children,
+        infants: infantsVal !== undefined ? Math.max(0, infantsVal) : passengers.infants,
+      };
+      setPassengers(normalizePassengers(candidate));
+    } else if (hasTotalParam && totalVal !== undefined && !Number.isNaN(totalVal)) {
+      // If total exists but breakdown missing, set adults = total (user can adjust later)
+      setPassengers(normalizePassengers({
+        adults: Math.max(1, totalVal),
+        children: 0,
+        infants: 0,
+      }));
+    }
+
+    // travel class
+    if (travelClassParam && ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'].includes(travelClassParam)) {
+      setTravelClass(travelClassParam as any);
     }
   }, [searchParams, activeTab]);
 
+  // Use normalized update to enforce constraints when user clicks +/-.
   const updatePassengerCount = (type: keyof PassengerCount, increment: boolean) => {
-    setPassengers(prev => ({
-      ...prev,
-      [type]: Math.max(0, prev[type] + (increment ? 1 : -1))
-    }));
+    setPassengers(prev => {
+      let adults = prev.adults;
+      let children = prev.children;
+      let infants = prev.infants;
+
+      if (type === 'adults') {
+        adults = Math.max(1, adults + (increment ? 1 : -1));
+        // after changing adults, ensure infants <= adults
+        if (infants > adults) infants = adults;
+        // enforce seated limit by reducing children if needed
+        if (adults + children > 9) {
+          const overflow = adults + children - 9;
+          children = Math.max(0, children - overflow);
+        }
+      } else if (type === 'children') {
+        if (increment) {
+          // only allow if seated < 9
+          if (adults + children < 9) children = children + 1;
+        } else {
+          children = Math.max(0, children - 1);
+        }
+      } else if (type === 'infants') {
+        if (increment) {
+          // infants cannot exceed adults
+          if (infants < adults) infants = infants + 1;
+        } else {
+          infants = Math.max(0, infants - 1);
+        }
+      }
+
+      return normalizePassengers({ adults, children, infants });
+    });
   };
 
   const totalPassengers = passengers.adults + passengers.children + passengers.infants;
@@ -125,11 +263,68 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   // Hàm chuyển route và truyền query
   const handleSearch = (type: 'flight' | 'bus' | 'tour') => {
     if (type === 'flight') {
-      router.push(`/ve-may-bay?from=${flightFrom}&to=${flightTo}&departure=${flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}&return=${flightReturn ? flightReturn.toISOString().split('T')[0] : ''}&adults=${passengers.adults}&children=${passengers.children}&infants=${passengers.infants}`);
+      // resolve IATA (fallback to ICAO) for origin/destination
+      const originAirport = airports.find(a => a.icao === flightFrom || a.iata === flightFrom);
+      const destAirport = airports.find(a => a.icao === flightTo || a.iata === flightTo);
+      const originCode = originAirport?.iata || originAirport?.icao || flightFrom || '';
+      const destCode = destAirport?.iata || destAirport?.icao || flightTo || '';
+
+      const departureDate = flightDeparture ? flightDeparture.toISOString().split('T')[0] : '';
+      const returnDate = (flightType === 'roundtrip' && flightReturn) ? flightReturn.toISOString().split('T')[0] : '';
+
+      // Normalize passengers before building payload so UI and payload match rules
+      const norm = normalizePassengers(passengers);
+      if (norm.adults !== passengers.adults || norm.children !== passengers.children || norm.infants !== passengers.infants) {
+        setPassengers(norm);
+      }
+      const adults = norm.adults;
+      const children = norm.children;
+      const infants = norm.infants;
+
+      const payload: Record<string, string> = {
+        originLocationCode: originCode,
+        destinationLocationCode: destCode,
+        departureDate,
+        adults: String(adults),
+        children: String(children),
+        infants: String(infants),
+        travelClass: travelClass,
+        nonStop: 'false',
+        currencyCode: 'VND',
+        max: String(3)
+      };
+      // include returnDate only for roundtrip
+      if (returnDate) payload.returnDate = returnDate;
+
+      console.log('Flight search payload (Amadeus params) SearchTabs :', payload);
+      const qs = new URLSearchParams(payload);
+      // keep 'from'/'to' keys so TravelokaBanner/SearchTabs (and other pages) can prefill selects consistently.
+      if (originCode) qs.set('from', originCode);
+      if (destCode) qs.set('to', destCode);
+      // include explicit total and breakdown so landing page can prefill reliably
+      qs.set('total', String(totalPassengers));
+      qs.set('adults', String(adults));
+      qs.set('children', String(children));
+      qs.set('infants', String(infants));
+      router.push(`/ve-may-bay?${qs.toString()}`);
     } else if (type === 'bus') {
-      router.push(`/xe-du-lich?from=${busFrom}&to=${busTo}&departure=${busDeparture ? busDeparture.toISOString().split('T')[0] : ''}`);
+      const payload = {
+        type: 'bus',
+        from: busFrom,
+        to: busTo,
+        departure: busDeparture ? busDeparture.toISOString().split('T')[0] : ''
+      };
+      console.log('Search clicked:', payload);
+      router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (type === 'tour') {
-      router.push(`/tour?from=${tourFrom}&to=${tourTo}&departure=${tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''}`);
+      const payload = {
+        type: 'tour',
+        from: tourFrom,
+        to: tourTo,
+        departure: tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''
+      };
+      console.log('Search clicked:', payload);
+      router.push(`/tour?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     }
   };
 
@@ -159,17 +354,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
             <div className="bg-white rounded-lg  p-6 shadow-sm">
               {/* Flight Type */}
               <div className="flex items-center space-x-4 mb-4">
-                <Label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="flightType"
-                    value="roundtrip"
-                    checked={flightType === 'roundtrip'}
-                    onChange={() => setFlightType('roundtrip')}
-                    className="text-primary"
-                  />
-                  <span>Khứ hồi</span>
-                </Label>
+                
                 <Label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="radio"
@@ -180,6 +365,17 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     className="text-primary"
                   />
                   <span>Một chiều</span>
+                </Label>
+                <Label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="flightType"
+                    value="roundtrip"
+                    checked={flightType === 'roundtrip'}
+                    onChange={() => setFlightType('roundtrip')}
+                    className="text-primary"
+                  />
+                  <span>Khứ hồi</span>
                 </Label>
                 {/* <Label className="flex items-center space-x-2 cursor-pointer">
                   <input
@@ -200,11 +396,13 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                   <Label htmlFor="from">Từ</Label>
                   <Select value={flightFrom} onValueChange={setFlightFrom}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Thành phố hoặc sân bay" />
+                      <SelectValue placeholder="Chọn sân bay" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.filter(prov => prov.code.toString() !== flightTo).map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
+                      {airports.filter(a => a.icao !== flightTo).map((a) => (
+                        <SelectItem key={a.icao} value={a.icao}>
+                          {a.name} {a.iata ? `(${a.iata})` : `(${a.icao})`} — {a.state}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -215,11 +413,13 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                   <Label htmlFor="to">Đến</Label>
                   <Select value={flightTo} onValueChange={setFlightTo}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Thành phố hoặc sân bay" />
+                      <SelectValue placeholder="Chọn sân bay" />
                     </SelectTrigger>
                     <SelectContent>
-                      {provinces.filter(prov => prov.code.toString() !== flightFrom).map((prov) => (
-                        <SelectItem key={prov.code} value={prov.code.toString()}>{prov.name}</SelectItem>
+                      {airports.filter(a => a.icao !== flightFrom).map((a) => (
+                        <SelectItem key={a.icao} value={a.icao}>
+                          {a.name} {a.iata ? `(${a.iata})` : `(${a.icao})`} — {a.state}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -354,13 +554,15 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                 {/* Class */}
                 <div className="space-y-2">
                   <Label>Hạng vé</Label>
-                  <Select defaultValue="economy">
+                  <Select value={travelClass} onValueChange={(v) => setTravelClass(v as any)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="economy">Phổ thông</SelectItem>
-                      <SelectItem value="business">Thương gia</SelectItem>
+                      <SelectItem value="ECONOMY">Phổ thông</SelectItem>
+                      <SelectItem value="PREMIUM_ECONOMY">Premium Economy</SelectItem>
+                      <SelectItem value="BUSINESS">Thương gia</SelectItem>
+                      <SelectItem value="FIRST">Hạng nhất</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
