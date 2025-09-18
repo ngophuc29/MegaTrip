@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import SearchTabs from '../components/SearchTabs';
@@ -40,6 +40,7 @@ import {
     Headphones,
 } from 'lucide-react';
 import FlightResults from './FlightResults';
+import { useSearchParams } from 'next/navigation';
 
 const airlines = [
     { code: 'VN', name: 'Vietnam Airlines', logo: '/placeholder.svg' },
@@ -219,6 +220,8 @@ export default function VeMayBay() {
         to: 'Hà Nội (HAN)'
     });
     const [isLoading, setIsLoading] = useState(false);
+    const [apiFlights, setApiFlights] = useState<any[]>([]); // mapped flights returned from Amadeus
+    const searchParams = useSearchParams();
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -282,8 +285,139 @@ export default function VeMayBay() {
         ];
     };
 
+    // Helper: convert ISO duration (e.g. PT2H10M) => '2h 10m'
+    const convertDuration = (iso: string | undefined) => {
+        if (!iso) return '';
+        const matchH = iso.match(/(\d+)H/);
+        const matchM = iso.match(/(\d+)M/);
+        const h = matchH ? `${matchH[1]}h` : '';
+        const m = matchM ? `${matchM[1]}m` : '';
+        return [h, m].filter(Boolean).join(' ');
+    };
+
+    // Map Amadeus response 'offer' -> local sampleFlight-like object
+    const mapOfferToFlight = (offer: any, dictionaries: any, idx: number) => {
+        const itineraries = offer.itineraries || [];
+        const firstItin = itineraries[0] || {};
+        const firstSeg = firstItin.segments?.[0] || {};
+        const depAt: string = firstSeg.departure?.at || '';
+        const arrAt: string = firstSeg.arrival?.at || '';
+        const depDate = depAt.split('T')[0] || '';
+        const arrDate = arrAt.split('T')[0] || '';
+        const depTime = depAt.split('T')[1]?.slice(0,5) || '';
+        const arrTime = arrAt.split('T')[1]?.slice(0,5) || '';
+        const carrier = firstSeg.carrierCode || offer.validatingAirlineCodes?.[0] || '';
+        const aircraftCode = firstSeg.aircraft?.code;
+        const aircraftName = dictionaries?.aircraft?.[aircraftCode] || aircraftCode || '';
+        const airlineName = dictionaries?.carriers?.[carrier] || carrier || 'Unknown';
+        const priceEUR = parseFloat(offer.price?.total || offer.price?.grandTotal || '0');
+        const priceVND = Math.round(priceEUR * 25000); // approx conversion for display
+
+        return {
+            id: Number(offer.id) || (1000 + idx),
+            airline: airlineName,
+            flightNumber: `${carrier}${firstSeg.number || ''}`,
+            departure: { time: depTime, airport: firstSeg.departure?.iataCode || '', city: firstSeg.departure?.iataCode || '', date: depDate },
+            arrival: { time: arrTime, airport: firstSeg.arrival?.iataCode || '', city: firstSeg.arrival?.iataCode || '', date: arrDate },
+            duration: convertDuration(firstItin.duration),
+            aircraft: aircraftName,
+            price: priceVND,
+            originalPrice: priceVND + 300000,
+            class: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin || 'Phổ thông',
+            baggage: {
+                handbag: {
+                    // Amadeus may provide includedCabinBags as weight or quantity -> keep whichever exists
+                    weight: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.weight || offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.quantity || undefined,
+                    size: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.weightUnit || offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.quantity || undefined,
+                },
+                checkin: {
+                    weight: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags?.weight || undefined,
+                    pieces: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags?.weightUnit || undefined
+                }
+            },
+            amenities: {
+                wifi: { available: false },
+                meal: { included: false, available: true, price: 'Từ 120.000đ' },
+                entertainment: { available: false },
+                power: { available: false },
+                priority: false
+            },
+            policies: {
+                cancellable: false,
+                changeable: false,
+                refundable: 'Không hoàn tiền, không đổi lịch'
+            },
+            availableSeats: offer.numberOfBookableSeats || 0,
+            discount: undefined, // not present in API response
+            promotions: [], // not present in this response
+            benefits: [] // not present in this response
+        };
+    };
+
+    // Fetch Amadeus token + flight offers when URL query changes (SearchTabs pushes query)
+    useEffect(() => {
+        const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+        const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
+        const destination = q['destinationLocationCode'] || q['to'] || q['destination'];
+        const departure = q['departureDate'] || q['departure'] || q['date'];
+        if (!origin || !destination || !departure) {
+            return;
+        }
+
+        const fetchAmadeus = async () => {
+            setIsLoading(true);
+            setApiFlights([]);
+            try {
+                // 1) get token
+                const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        grant_type: 'client_credentials',
+                        client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut', // provided by user (demo)
+                        client_secret: '9fcdtMUicUy6ZAGm' // provided by user (demo)
+                    })
+                });
+                const tokenJson = await tokenRes.json();
+                const token = tokenJson.access_token;
+
+                if (!token) throw new Error('No token from Amadeus');
+
+                // 2) build offers URL
+                const params = new URLSearchParams();
+                params.set('originLocationCode', origin);
+                params.set('destinationLocationCode', destination);
+                params.set('departureDate', departure);
+                if (q['returnDate']) params.set('returnDate', q['returnDate']);
+                params.set('adults', q['adults'] || '1');
+                params.set('nonStop', q['nonStop'] || 'false');
+                params.set('max', q['max'] || '3');
+
+                const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const offersJson = await offersRes.json();
+                const dicts = offersJson.dictionaries || {};
+                const data = offersJson.data || [];
+                // map offers
+                const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
+                setApiFlights(mapped);
+                setHasSearched(true);
+                setShowPromotions(false);
+            } catch (err) {
+                console.error('Amadeus fetch error', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchAmadeus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams ? searchParams.toString() : '']);
+
     const routeFlights = selectedRoute ? generateRouteFlights() : [];
-    const allFlights = selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights;
+    // If API returned flights, prefer them. Otherwise fallback to generated + sample flights.
+    const allFlights = apiFlights && apiFlights.length > 0 ? apiFlights : (selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights);
 
     const filteredFlights = allFlights.filter(flight => {
         const matchesPrice = flight.price >= priceRange[0] && flight.price <= priceRange[1];
@@ -861,7 +995,7 @@ export default function VeMayBay() {
                                     ))}
                             </div>
 
-                            {sortedFlights.length === 0 && (
+                            {/* {sortedFlights.length === 0 && (
                                 <Card className="text-center py-12">
                                     <CardContent>
                                         <Plane className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
@@ -872,7 +1006,7 @@ export default function VeMayBay() {
                                         <Button variant="outline">Điều chỉnh tìm kiếm</Button>
                                     </CardContent>
                                 </Card>
-                            )}
+                            )} */}
                         </div>
                     </div>
                 </div>

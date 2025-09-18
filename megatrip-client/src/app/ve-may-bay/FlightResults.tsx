@@ -3,7 +3,7 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
-import { Plane, Wifi, Utensils, Luggage, ChevronUp, ChevronDown, Gift, CheckCircle, Shield, X, RefreshCw, Tv, Battery, ArrowRight } from 'lucide-react';
+import { Plane, Wifi, Utensils, Luggage, ChevronUp, ChevronDown, Gift, CheckCircle, Shield, X, RefreshCw, Tv, Battery, ArrowRight, Info } from 'lucide-react';
 import Link from 'next/link';
 
 function CardSkeleton() {
@@ -123,7 +123,8 @@ export default function FlightResults({
                       )}
                       <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
                         <Luggage className="h-3 w-3" />
-                        {flight.baggage.checkin.weight}
+                        {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`} 
+
                       </div>
                     </div>
                   </div>
@@ -193,7 +194,7 @@ export default function FlightResults({
                                   <div>
                                     <div className="font-medium">Ký gửi</div>
                                     <div className="text-muted-foreground">
-                                      {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces} kiện
+                                      {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`} 
                                     </div>
                                   </div>
                                 </div>
