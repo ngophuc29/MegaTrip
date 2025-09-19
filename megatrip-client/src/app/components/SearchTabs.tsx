@@ -291,7 +291,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         travelClass: travelClass,
         nonStop: 'false',
         currencyCode: 'VND',
-        max: String(3)
+        max: String(5)
       };
       // include returnDate only for roundtrip
       if (returnDate) payload.returnDate = returnDate;
@@ -301,6 +301,11 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       // keep 'from'/'to' keys so TravelokaBanner/SearchTabs (and other pages) can prefill selects consistently.
       if (originCode) qs.set('from', originCode);
       if (destCode) qs.set('to', destCode);
+      // also include the airport "state" for both from/to so landing page can display state names
+      const originState = originAirport?.state || '';
+      const destState = destAirport?.state || '';
+      if (originState) qs.set('fromState', originState);
+      if (destState) qs.set('toState', destState);
       // include explicit total and breakdown so landing page can prefill reliably
       qs.set('total', String(totalPassengers));
       qs.set('adults', String(adults));
