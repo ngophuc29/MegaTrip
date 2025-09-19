@@ -289,9 +289,11 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         children: String(children),
         infants: String(infants),
         travelClass: travelClass,
-        nonStop: 'false',
+        nonStop: 'true',
         currencyCode: 'VND',
-        max: String(5)
+        max: String(5),
+        // always prefer VN by default
+        includedAirlineCodes: 'VN'
       };
       // include returnDate only for roundtrip
       if (returnDate) payload.returnDate = returnDate;

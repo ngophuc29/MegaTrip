@@ -483,9 +483,9 @@ export default function ChiTietVeMayBay() {
                             <CardHeader>
                                 <CardTitle>Đặt vé máy bay</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-1">
                                 {/* Số lượng khách */}
-                                <div>
+                                {/* <div>
                                     <Label className="text-base font-medium mb-3 block">Số lượng khách</Label>
                                     <div className="space-y-3">
                                         <div className="flex items-center justify-between">
@@ -561,7 +561,7 @@ export default function ChiTietVeMayBay() {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </div> */}
                                 <Separator />
                                 {/* Flight Summary */}
                                 <div>

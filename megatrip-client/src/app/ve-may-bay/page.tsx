@@ -281,55 +281,80 @@ export default function VeMayBay() {
         return [h, m].filter(Boolean).join(' ');
     };
 
-    // Map Amadeus response 'offer' -> local sampleFlight-like object
+    // Map Amadeus response 'offer' -> local sampleFlight-like object (handles multi-segment itineraries)
     const mapOfferToFlight = (offer: any, dictionaries: any, idx: number) => {
         const itineraries = offer.itineraries || [];
+        // flatten segments from first itinerary (most offers are single-itinerary)
         const firstItin = itineraries[0] || {};
-        const firstSeg = firstItin.segments?.[0] || {};
+        const segments = firstItin.segments || [];
+        const firstSeg = segments[0] || {};
+        const lastSeg = segments[segments.length - 1] || firstSeg;
+
         const depAt: string = firstSeg.departure?.at || '';
-        const arrAt: string = firstSeg.arrival?.at || '';
+        const arrAt: string = lastSeg.arrival?.at || '';
         const depDate = depAt.split('T')[0] || '';
         const arrDate = arrAt.split('T')[0] || '';
         const depTime = depAt.split('T')[1]?.slice(0, 5) || '';
         const arrTime = arrAt.split('T')[1]?.slice(0, 5) || '';
-        const carrier = firstSeg.carrierCode || offer.validatingAirlineCodes?.[0] || '';
-        const aircraftCode = firstSeg.aircraft?.code;
-        const aircraftName = dictionaries?.aircraft?.[aircraftCode] || aircraftCode || '';
+
+        // airline: prefer validatingAirlineCodes or segment carrier
+        const carrier = (offer.validatingAirlineCodes && offer.validatingAirlineCodes[0]) || firstSeg.carrierCode || '';
         const airlineName = dictionaries?.carriers?.[carrier] || carrier || 'Unknown';
 
-        // Handle currency correctly: if API returns VND use it directly; otherwise convert approx.
+        // aircraft: combine segment aircraft names or pick first
+        const aircraftCodes = [...new Set(segments.map((s: any) => s.aircraft?.code).filter(Boolean))];
+        const aircraft = aircraftCodes.map((c: string) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
+
+        // stops
+        const stopsCount = Math.max(0, segments.length - 1);
+        const stopsText = stopsCount === 0 ? 'Bay thẳng' : `${stopsCount} dừng`;
+
+        // cabin(s) from travelerPricings -> join per-segment cabin info
+        const traveler = offer.travelerPricings?.[0] || {};
+        const cabins = (traveler.fareDetailsBySegment || []).map((f: any) => f.cabin).filter(Boolean);
+        const cabinText = cabins.length > 0 ? cabins.join('/') : (traveler.travelerType || '');
+
+        // baggage: try to read includedCheckedBags quantity/weight and includedCabinBags
+        const fareSeg = traveler.fareDetailsBySegment?.[0] || {};
+        const includedChecked = fareSeg.includedCheckedBags;
+        const includedCabin = fareSeg.includedCabinBags;
+        const checkin = {
+            pieces: includedChecked?.quantity ?? undefined,
+            weight: includedChecked?.weight ?? undefined,
+            unit: includedChecked?.weightUnit ?? (includedChecked?.quantity ? undefined : undefined)
+        };
+        const handbag = {
+            pieces: includedCabin?.quantity ?? undefined,
+            weight: includedCabin?.weight ?? undefined,
+            unit: includedCabin?.weightUnit ?? (includedCabin?.quantity ? undefined : undefined)
+        };
+
+        // price and currency (use total/grandTotal as provided)
         const priceStr = String(offer.price?.total || offer.price?.grandTotal || '0');
-        const currency = offer.price?.currency || '';
-        let priceVND = Math.round(Number(priceStr) || 0);
-        if (currency && currency !== 'VND') {
-            // approximate conversions; adjust rates if needed
-            if (currency === 'EUR') priceVND = Math.round(Number(priceStr || 0) * 25000);
-            else if (currency === 'USD') priceVND = Math.round(Number(priceStr || 0) * 23000);
-            else priceVND = Math.round(Number(priceStr || 0)); // fallback
-        }
+        const currency = offer.price?.currency || 'VND';
+        let priceNumeric = Number(priceStr) || 0;
+        // if currency isn't VND keep numeric as-is (formatting will show currency)
 
         return {
-            id: Number(offer.id) || (1000 + idx),
+            id: String(offer.id) || `offer-${idx}`,
             airline: airlineName,
-            flightNumber: `${carrier}${firstSeg.number || ''}`,
+            airlineCode: carrier,
+            flightNumber: `${firstSeg.carrierCode || ''}${firstSeg.number || ''}`,
             departure: { time: depTime, airport: firstSeg.departure?.iataCode || '', city: firstSeg.departure?.iataCode || '', date: depDate },
-            arrival: { time: arrTime, airport: firstSeg.arrival?.iataCode || '', city: firstSeg.arrival?.iataCode || '', date: arrDate },
+            arrival: { time: arrTime, airport: lastSeg.arrival?.iataCode || '', city: lastSeg.arrival?.iataCode || '', date: arrDate },
             duration: convertDuration(firstItin.duration),
-            aircraft: aircraftName,
-            price: priceVND,
-            originalPrice: priceVND + 300000,
-            class: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.cabin || 'Phổ thông',
+            aircraft,
+            price: priceNumeric,
+            currency,
+            originalPrice: priceNumeric + 300000,
+            class: cabinText || 'ECONOMY',
             baggage: {
-                handbag: {
-                    // Amadeus may provide includedCabinBags as weight or quantity -> keep whichever exists
-                    weight: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.weight || offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.quantity || undefined,
-                    size: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.weightUnit || offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCabinBags?.quantity || undefined,
-                },
-                checkin: {
-                    weight: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags?.weight || undefined,
-                    pieces: offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.includedCheckedBags?.weightUnit || undefined
-                }
+                handbag,
+                checkin
             },
+            // Ensure these arrays exist so UI can safely iterate
+            benefits: offer.benefits || [],
+            promotions: offer.promotions || [],
             amenities: {
                 wifi: { available: false },
                 meal: { included: false, available: true, price: 'Từ 120.000đ' },
@@ -343,9 +368,9 @@ export default function VeMayBay() {
                 refundable: 'Không hoàn tiền, không đổi lịch'
             },
             availableSeats: offer.numberOfBookableSeats || 0,
-            discount: undefined, // not present in API response
-            promotions: [], // not present in this response
-            benefits: [] // not present in this response
+            stopsCount,
+            stopsText,
+            raw: offer // keep raw for debugging if needed
         };
     };
 
@@ -392,10 +417,11 @@ export default function VeMayBay() {
                 params.set('infants', q['infants'] || '0');
                 // Class, airline filter, currency and other useful params
                 if (q['travelClass']) params.set('travelClass', q['travelClass']);
-                if (q['includedAirlineCodes']) params.set('includedAirlineCodes', q['includedAirlineCodes']);
+                // default to VN when not provided
+                params.set('includedAirlineCodes', q['includedAirlineCodes'] || 'VN');
                 // fallback currency and nonStop
                 params.set('currencyCode', q['currencyCode'] || 'VND');
-                params.set('nonStop', q['nonStop'] || 'false');
+                params.set('nonStop', q['nonStop'] || 'true');
                 // request more results by default (match example)
                 params.set('max', q['max'] || '5');
 

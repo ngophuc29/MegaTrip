@@ -256,7 +256,7 @@ export default function TravelokaBanner() {
         children: String(children),
         infants: String(infants),
         travelClass: travelClass,
-        nonStop: 'false',
+        nonStop: 'true',
         currencyCode: 'VND',
         max: String(3)
       };

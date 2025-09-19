@@ -108,23 +108,40 @@ export default function FlightResults({
                       </div>
                     </div>
                     {/* Quick amenities */}
-                    <div className="flex items-center gap-4 mt-3">
-                      {flight.amenities.wifi.available && (
-                        <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                          <Wifi className="h-3 w-3" />
-                          {flight.amenities.wifi.free ? 'WiFi miễn phí' : 'WiFi có phí'}
-                        </div>
-                      )}
-                      {flight.amenities.meal.included && (
-                        <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                          <Utensils className="h-3 w-3" />
-                          Bữa ăn
-                        </div>
-                      )}
-                      <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                        <Luggage className="h-3 w-3" />
-                        {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`} 
+                    <div className="flex items-center gap-3 mt-3 text-sm text-[hsl(var(--muted-foreground))]">
+                      {/* Stops / direct */}
+                      <div className="inline-flex items-center gap-1">
+                        <span className="px-2 py-1 bg-slate-100 rounded text-xs">{flight.stopsText || 'Bay thẳng'}</span>
+                      </div>
 
+                      {/* Class / cabin */}
+                      <div className="inline-flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">Hạng</span>
+                        <div className="px-2 py-0.5 bg-slate-50 rounded text-xs font-medium">{flight.class}</div>
+                      </div>
+
+                      {/* Baggage */}
+                      <div className="inline-flex items-center gap-1">
+                        <Luggage className="h-3 w-3" />
+                        <div className="text-xs">
+                          {flight.baggage.checkin?.pieces ? `${flight.baggage.checkin.pieces} kiện` :
+                           flight.baggage.checkin?.weight ? `${flight.baggage.checkin.weight}${flight.baggage.checkin.unit ?? ''}` :
+                           'Ký gửi: -'}
+                        </div>
+                      </div>
+
+                      {/* Cabin bag */}
+                      <div className="inline-flex items-center gap-1">
+                        <div className="text-xs">
+                          {flight.baggage.handbag?.pieces ? `Xách tay: ${flight.baggage.handbag.pieces}` :
+                           flight.baggage.handbag?.weight ? `Xách tay: ${flight.baggage.handbag.weight}${flight.baggage.handbag.unit ?? ''}` :
+                           ''}
+                        </div>
+                      </div>
+
+                      {/* Seats available */}
+                      <div className="ml-auto text-right text-xs">
+                        <div>Số ghế: <span className="font-medium">{flight.availableSeats ?? '-'}</span></div>
                       </div>
                     </div>
                   </div>
@@ -137,13 +154,14 @@ export default function FlightResults({
                         </div>
                       )}
                       <div className="text-xl font-bold text-[hsl(var(--primary))]">
-                        {formatPrice(flight.price)}
+                        {/* price respects currency returned by API; formatPrice expects VND number, if other currency show raw */}
+                        {flight.currency === 'VND' ? formatPrice(flight.price) : `${flight.price.toLocaleString()} ${flight.currency}`}
                       </div>
                       <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá cho 1 khách</div>
                     </div>
                     <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
                       <Button className="w-full lg:w-auto" asChild>
-                        <Link prefetch={false} href={`/ve-may-bay/${flight.id}`}>
+                        <Link prefetch={false} href={`/ve-may-bay/${encodeURIComponent(String(flight.id))}`}>
                           Chọn chuyến bay
                         </Link>
                       </Button>
@@ -185,7 +203,7 @@ export default function FlightResults({
                                   <div>
                                     <div className="font-medium">Xách tay</div>
                                     <div className="text-muted-foreground">
-                                      {flight.baggage.handbag.weight} • {flight.baggage.handbag.size}
+                                      {(flight.baggage?.handbag?.weight ?? flight.baggage?.handbag?.pieces ?? '-')} {flight.baggage?.handbag?.unit ?? ''} {flight.baggage?.handbag?.size ? `• ${flight.baggage.handbag.size}` : ''}
                                     </div>
                                   </div>
                                 </div>
@@ -194,7 +212,7 @@ export default function FlightResults({
                                   <div>
                                     <div className="font-medium">Ký gửi</div>
                                     <div className="text-muted-foreground">
-                                      {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`} 
+                                      {(flight.baggage?.checkin?.weight ?? flight.baggage?.checkin?.pieces ?? '-')}{flight.baggage?.checkin?.unit ? flight.baggage.checkin.unit : ''} {flight.baggage?.checkin?.pieces ? '• kiện' : ''}
                                     </div>
                                   </div>
                                 </div>
@@ -236,21 +254,21 @@ export default function FlightResults({
                                     )}
                                   </div>
                                 </div>
-                                {flight.amenities.entertainment.available && (
+                                {flight.amenities?.entertainment?.available && (
                                   <div className="flex items-center gap-2">
                                     <Tv className="h-4 w-4" />
                                     <div>
                                       <div className="font-medium">Giải trí</div>
-                                      <div className="text-muted-foreground">{flight.amenities.entertainment.screens}</div>
+                                      <div className="text-muted-foreground">{flight.amenities.entertainment?.screens ?? '-'}</div>
                                     </div>
                                   </div>
                                 )}
-                                {flight.amenities.power.available && (
+                                {flight.amenities?.power?.available && (
                                   <div className="flex items-center gap-2">
                                     <Battery className="h-4 w-4" />
                                     <div>
                                       <div className="font-medium">Sạc điện</div>
-                                      <div className="text-muted-foreground">{flight.amenities.power.type}</div>
+                                      <div className="text-muted-foreground">{flight.amenities.power?.type ?? '-'}</div>
                                     </div>
                                   </div>
                                 )}
@@ -275,7 +293,7 @@ export default function FlightResults({
                         <TabsContent value="benefits" className="space-y-3">
                           <h4 className="font-medium">Lợi ích đi kèm</h4>
                           <div className="space-y-2">
-                            {flight.benefits.map((benefit, index) => (
+                            {(flight.benefits || []).map((benefit: string, index: number) => (
                               <div key={index} className="flex items-start gap-2">
                                 <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                                 <span className="text-sm">{benefit}</span>
@@ -334,18 +352,18 @@ export default function FlightResults({
                           </div>
                         </TabsContent>
                         <TabsContent value="promotions" className="space-y-3">
-                          {flight.promotions.length > 0 ? (
+                          {((flight.promotions || []).length > 0) ? (
                             <div className="space-y-3">
                               <h4 className="font-medium">Khuyến mãi áp dụng</h4>
-                              {flight.promotions.map((promo, index) => (
+                              {(flight.promotions || []).map((promo: any, index: number) => (
                                 <Card key={index} className="p-3">
                                   <div className="flex items-start gap-3">
                                     <Gift className="h-5 w-5 text-orange-500 mt-0.5" />
                                     <div className="flex-1">
-                                      <div className="font-medium text-sm">{promo.code}</div>
-                                      <div className="text-sm text-[hsl(var(--muted-foreground))]">{promo.description}</div>
+                                      <div className="font-medium text-sm">{promo.code ?? '-'}</div>
+                                      <div className="text-sm text-[hsl(var(--muted-foreground))]">{promo.description ?? '-'}</div>
                                       <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                                        Hết hạn: {promo.valid}
+                                        Hết hạn: {promo.valid ?? '-'}
                                       </div>
                                     </div>
                                     <Button size="sm" variant="outline">
