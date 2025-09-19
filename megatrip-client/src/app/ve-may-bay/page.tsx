@@ -40,7 +40,7 @@ import { useSearchParams } from 'next/navigation';
 const airlines = [
     { code: 'VN', name: 'Vietnam Airlines', logo: '/placeholder.svg' },
     { code: 'VJ', name: 'VietJet Air', logo: '/placeholder.svg' },
-    { code: 'BL', name: 'Jetstar', logo: '/placeholder.svg' },
+     
     { code: 'QH', name: 'Bamboo Airways', logo: '/placeholder.svg' },
 ];
 
@@ -163,41 +163,7 @@ const sampleFlights = [
             'Đổi lịch bay linh hoạt'
         ]
     },
-    {
-        id: 4,
-        airline: 'Jetstar',
-        flightNumber: 'BL268',
-        departure: { time: '19:15', airport: 'SGN', city: 'TP.HCM', date: '2024-06-01' },
-        arrival: { time: '21:35', airport: 'HAN', city: 'Hà Nội', date: '2024-06-01' },
-        duration: '2h 20m',
-        aircraft: 'Airbus A320',
-        price: 1590000,
-        class: 'Phổ thông',
-        baggage: {
-            handbag: { weight: '7kg', size: '56x36x23cm' },
-            checkin: { weight: '20kg', pieces: 1 }
-        },
-        amenities: {
-            wifi: { available: false },
-            meal: { included: false, available: true, price: 'Từ 120.000đ' },
-            entertainment: { available: false },
-            power: { available: false },
-            priority: false
-        },
-        policies: {
-            cancellable: false,
-            changeable: false,
-            refundable: 'Không hoàn tiền, không đổi lịch'
-        },
-        availableSeats: 5,
-        promotions: [
-            { code: 'JETSTAR20', description: 'Giảm 20K phí dịch vụ', valid: '10/01/2025' }
-        ],
-        benefits: [
-            'Giá vé cạnh tranh',
-            'Lựa chọn dịch vụ bổ sung'
-        ]
-    },
+    
 ];
 
 export default function VeMayBay() {

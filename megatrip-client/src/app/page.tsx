@@ -161,12 +161,7 @@ const popularFlights = [
     price: 'từ 1.790.000₫',
     cities: 'Hà Nội → TP.HCM',
   },
-  {
-    route: 'SGN - DAD',
-    airline: 'Jetstar',
-    price: 'từ 1.590.000₫',
-    cities: 'TP.HCM → Đà Nẵng',
-  },
+  
   {
     route: 'HAN - DAD',
     airline: 'Bamboo Airways',

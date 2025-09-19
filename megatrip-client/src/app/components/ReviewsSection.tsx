@@ -134,7 +134,7 @@ const reviews: Review[] = [
     content: 'Sử dụng MegaTrip đã 2 năm, rất hài lòng. Giao diện app dễ sử dụng, thông tin rõ ràng, thanh toán an toàn. Mỗi lần đặt vé đều nhận được xác nhận nhanh chóng. Team hỗ trợ phản hồi nhanh khi có thắc mắc. Đã giới thiệu cho nhiều bạn bè.',
     date: '2024-12-15',
     service: 'flight',
-    serviceName: 'Jetstar TP.HCM - Đà Nẵng',
+    serviceName: ' TP.HCM - Đà Nẵng',
     helpful: 42,
     tags: ['App tốt', 'Hỗ trợ nhanh', 'Tin cậy'],
     travelWith: 'Công việc',

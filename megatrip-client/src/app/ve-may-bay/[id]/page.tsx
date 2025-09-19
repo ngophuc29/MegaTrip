@@ -289,7 +289,7 @@ export default function ChiTietVeMayBay() {
                         </Card>
 
                         {/* Fare Selection */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle>Chọn hạng vé</CardTitle>
                                 <p className="text-[hsl(var(--muted-foreground))]">
@@ -332,7 +332,7 @@ export default function ChiTietVeMayBay() {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Add-on Services */}
                         <Card>

@@ -311,7 +311,7 @@ export default function EnhancedHero() {
             <div className="text-2xl font-bold">Vietnam Airlines</div>
             <div className="text-2xl font-bold">VietJet</div>
             <div className="text-2xl font-bold">Bamboo Airways</div>
-            <div className="text-2xl font-bold">Jetstar</div>
+            
           </div>
         </div>
       </div>
