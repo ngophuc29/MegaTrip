@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Layout from '../components/Layout';
 import SearchTabs from '../components/SearchTabs';
 import { Button } from '../components/ui/button';
@@ -40,7 +41,7 @@ import { useSearchParams } from 'next/navigation';
 const airlines = [
     { code: 'VN', name: 'Vietnam Airlines', logo: '/placeholder.svg' },
     { code: 'VJ', name: 'VietJet Air', logo: '/placeholder.svg' },
-     
+
     { code: 'QH', name: 'Bamboo Airways', logo: '/placeholder.svg' },
 ];
 
@@ -163,10 +164,11 @@ const sampleFlights = [
             'Đổi lịch bay linh hoạt'
         ]
     },
-    
+
 ];
 
 export default function VeMayBay() {
+    const router = useRouter();
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 3000000]);
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
@@ -188,6 +190,7 @@ export default function VeMayBay() {
     const [selectedOutbound, setSelectedOutbound] = useState<typeof sampleFlights[number] | null>(null);
     const [selectedInbound, setSelectedInbound] = useState<typeof sampleFlights[number] | null>(null);
     const [showReview, setShowReview] = useState(false);
+    const [pricingLoadingRT, setPricingLoadingRT] = useState(false);
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -209,7 +212,7 @@ export default function VeMayBay() {
         try {
             const a = new Date(arr);
             const b = new Date(dep);
-            const diff = Math.round((a.setHours(0,0,0,0) - b.setHours(0,0,0,0)) / (1000*60*60*24));
+            const diff = Math.round((a.setHours(0, 0, 0, 0) - b.setHours(0, 0, 0, 0)) / (1000 * 60 * 60 * 24));
             return Number.isFinite(diff) ? diff : 0;
         } catch {
             return 0;
@@ -375,7 +378,7 @@ export default function VeMayBay() {
     };
 
     // Fetch Amadeus token + flight offers when URL query changes (SearchTabs pushes query)
-    
+
     useEffect(() => {
         const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
         const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
@@ -426,7 +429,7 @@ export default function VeMayBay() {
                 params.set('max', q['max'] || '5');
 
                 console.log('[Amadeus] Request URL:', `https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`);
-                
+
                 const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -682,7 +685,7 @@ export default function VeMayBay() {
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded bg-white/70 flex items-center justify-center text-sm font-semibold">
                                             {/* placeholder for airline logo/initial */}
-                                            {selectedOutbound.airline.split(' ').map(s => s[0]).slice(0,2).join('')}
+                                            {selectedOutbound.airline.split(' ').map(s => s[0]).slice(0, 2).join('')}
                                         </div>
                                         <div>
                                             <div className="font-medium">{selectedOutbound.airline}</div>
@@ -1452,7 +1455,7 @@ export default function VeMayBay() {
                                                                                     ))}
                                                                                 </div>
                                                                             </TabsContent>
-                                                                                                                                                       <TabsContent value="refund" className="space-y-3">
+                                                                            <TabsContent value="refund" className="space-y-3">
                                                                                 <div className="flex items-start gap-3">
                                                                                     {flight.policies.cancellable ? (
                                                                                         <Shield className="h-5 w-5 text-green-500 mt-0.5" />
@@ -1533,6 +1536,115 @@ export default function VeMayBay() {
                                                                                     </div>
                                                                                 )}
                                                                             </TabsContent>
+                                                                            {/* CHI TIẾT VÉ (roundtrip): map travelerPricings for this flight if pricing fetched */}
+                                                                            <TabsContent value="detailsCharge" className="space-y-3">
+                                                                                {(() => {
+                                                                                    const key = String(flight.id);
+                                                                                    const p = pricingByFlight[key];
+                                                                                    // normalize to offer object
+                                                                                    const offer = p?.data?.[0] ?? p?.data ?? p ?? null;
+                                                                                    const travelers = offer?.travelerPricings ?? [];
+                                                                                    if (!offer || travelers.length === 0) {
+                                                                                        return (
+                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                                                Chưa có thông tin giá. Bấm "Kiểm giá" để lấy chi tiết.
+                                                                                            </div>
+                                                                                        );
+                                                                                    }
+                                                                                    const currency = offer?.price?.currency ?? travelers[0]?.price?.currency ?? '';
+                                                                                    return (
+                                                                                        <div className="space-y-3">
+                                                                                            {travelers.map((t: any, i: number) => {
+                                                                                                const price = t?.price ?? {};
+                                                                                                const total = price?.total ?? price?.grandTotal ?? '-';
+                                                                                                const base = price?.base ?? '-';
+                                                                                                const taxes = price?.taxes ?? [];
+                                                                                                const refundableTaxes = price?.refundableTaxes ?? null;
+                                                                                                const fareDetails = t?.fareDetailsBySegment ?? [];
+                                                                                                return (
+                                                                                                    <div key={i} className="p-3 border rounded">
+                                                                                                        <div className="flex justify-between items-center">
+                                                                                                            <div className="text-sm font-medium">
+                                                                                                                {t.travelerType ?? `Hành khách ${i + 1}`}{" "}
+                                                                                                                {t.travelerId ? `(id: ${t.travelerId})` : ''}
+                                                                                                            </div>
+                                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                                                                {t.fareOption ?? ''}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                    Tổng
+                                                                                                                </div>
+                                                                                                                <div className="font-semibold">
+                                                                                                                    {total !== '-'
+                                                                                                                        ? `${Number(total).toLocaleString()} ${currency}`
+                                                                                                                        : '-'}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                    Giá cơ sở
+                                                                                                                </div>
+                                                                                                                <div>
+                                                                                                                    {base !== '-'
+                                                                                                                        ? `${Number(base).toLocaleString()} ${currency}`
+                                                                                                                        : '-'}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                    Thuế & phí
+                                                                                                                </div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                    {taxes.length > 0
+                                                                                                                        ? taxes.map((tx: any) => `${tx.code}:${tx.amount}`).join(', ')
+                                                                                                                        : '-'}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        {refundableTaxes && (
+                                                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
+                                                                                                                Refundable taxes: {refundableTaxes}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                        <div className="mt-3">
+                                                                                                            <div className="text-xs font-medium mb-1">
+                                                                                                                Chi tiết theo segment
+                                                                                                            </div>
+                                                                                                            <div className="space-y-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                {fareDetails.length === 0 && (
+                                                                                                                    <div>Không có thông tin theo segment.</div>
+                                                                                                                )}
+                                                                                                                {fareDetails.map((fd: any, idx: number) => (
+                                                                                                                    <div key={idx} className="p-2 bg-gray-50 rounded">
+                                                                                                                        <div>
+                                                                                                                            Segment:{' '}
+                                                                                                                            <span className="font-medium">
+                                                                                                                                {fd.segmentId ?? idx}
+                                                                                                                            </span>
+                                                                                                                        </div>
+                                                                                                                        <div>Cabin: {fd.cabin ?? '-'}</div>
+                                                                                                                        <div>Fare basis: {fd.fareBasis ?? '-'}</div>
+                                                                                                                        <div>Class: {fd.class ?? fd.bookingClass ?? '-'}</div>
+                                                                                                                        <div>
+                                                                                                                            Included checked bags:{' '}
+                                                                                                                            {fd.includedCheckedBags?.quantity ??
+                                                                                                                                fd.includedCheckedBags?.weight ??
+                                                                                                                                '-'}
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                ))}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })}
+                                                                                        </div>
+                                                                                    );
+                                                                                })()}
+                                                                            </TabsContent>
                                                                         </div>
                                                                     </Tabs>
                                                                 </>
@@ -1576,7 +1688,7 @@ export default function VeMayBay() {
                                 <Card className="p-3">
                                     <div className="text-md font-medium mb-1">
                                         <span className='inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-xs font-medium rounded mr-2'>Khởi hành</span>
-                                         {selectedOutbound.departure.city} → {selectedOutbound.arrival.city}
+                                        {selectedOutbound.departure.city} → {selectedOutbound.arrival.city}
                                         {selectedOutbound.departure?.date && (
                                             <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedOutbound.departure.date)}</span>
                                         )}
@@ -1617,7 +1729,7 @@ export default function VeMayBay() {
                                         </div>
                                     </div>
 
-                                    
+
                                 </Card>
 
                                 {/* INBOUND: cùng style như Outbound */}
@@ -1664,15 +1776,21 @@ export default function VeMayBay() {
                                         </div>
                                     </div>
 
-                                     
+
                                 </Card>
 
                                 {/* Tổng giá + nút tiếp tục giữ nguyên */}
                                 <div className="flex items-center justify-between pt-2">
                                     <div className="text-lg font-bold text-orange-600">{formatPrice(totalRoundtripPrice())}/khách</div>
-                                    <Button size="lg" asChild>
-                                        <Link href="/thanh-toan">Tiếp tục</Link>
-                                    </Button>
+                                    <div>
+                                        <Button
+                                            size="lg"
+                                            onClick={() => handlePriceRoundtrip()}
+                                            disabled={pricingLoadingRT}
+                                        >
+                                            {pricingLoadingRT ? 'Đang kiểm giá...' : 'Tiếp tục'}
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1681,7 +1799,7 @@ export default function VeMayBay() {
             )}
 
 
-            
+
         </>
     );
 }
