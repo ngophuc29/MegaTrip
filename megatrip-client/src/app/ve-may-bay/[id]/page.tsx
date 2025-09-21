@@ -138,6 +138,11 @@ export default function ChiTietVeMayBay() {
     });
     const [selectedFare, setSelectedFare] = useState('basic');
     const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+    // per-addOn flag: true = mua cho tất cả hành khách, false = chỉ 1 (khi người dùng xác nhận)
+    const [addOnPerPassenger, setAddOnPerPassenger] = useState<Record<string, boolean>>({});
+    // prevent duplicate confirmations / re-entrant calls for same add-on
+    const addOnProcessingRef = useRef<Record<string, boolean>>({});
+
     const [passengerInfo, setPassengerInfo] = useState({
         title: 'Mr',
         firstName: '',
@@ -180,6 +185,28 @@ export default function ChiTietVeMayBay() {
                 };
                 setMappedOffer(mapped);
                 console.log('[Flight detail] mappedOffer=', mapped);
+
+                // --- NEW: derive participants counts from offer.travelerPricings (fix missing CHILD/INFANT counts) ---
+                try {
+                    const tps = Array.isArray(offer?.travelerPricings) ? offer.travelerPricings : [];
+                    if (tps.length > 0) {
+                        const adults = tps.filter((t: any) => String(t?.travelerType ?? '').toUpperCase().startsWith('ADULT')).length;
+                        const children = tps.filter((t: any) => /CHILD/i.test(String(t?.travelerType ?? ''))).length;
+                        const infants = tps.filter((t: any) => /INFANT/i.test(String(t?.travelerType ?? ''))).length;
+                        // only update if totals differ (avoid unnecessary re-renders)
+                        const totalDerived = (adults || 0) + (children || 0) + (infants || 0);
+                        const totalCurrent = participants.adults + participants.children + participants.infants;
+                        if (totalDerived > 0 && totalDerived !== totalCurrent) {
+                            setParticipants({
+                                adults: Math.max(1, adults || 1),
+                                children: children || 0,
+                                infants: infants || 0,
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Error deriving participants from offer', e);
+                }
             }
             if (stored && stored.seatmap && stored.seatmap[id]) {
                 setCachedSeatmap(stored.seatmap[id]);
@@ -399,30 +426,54 @@ export default function ChiTietVeMayBay() {
     } catch (e) { /* ignore */ }
 
     const totalParticipants = participants.adults + participants.children + participants.infants;
+    const addOnClickRef = useRef(false); // Theo dõi trạng thái click
 
     const toggleAddOn = (addOnId: string) => {
-        setSelectedAddOns(prev => {
-            const willRemove = prev.includes(addOnId);
-            const next = willRemove ? prev.filter(id => id !== addOnId) : [...prev, addOnId];
+        if (addOnClickRef.current) return; // prevent rapid double-invokes
+        addOnClickRef.current = true;
 
-            // Only handle scroll/show-instruction for the seat_selection addon
-            if (addOnId === 'seat_selection') {
-                if (!willRemove) {
-                    // being enabled -> show banner and scroll to seatmap
-                    setShowSeatSelectionInstruction(true);
-                    if (seatmapRef.current && typeof seatmapRef.current.scrollIntoView === 'function') {
-                        try { seatmapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* ignore */ }
-                    }
-                } else {
-                    // being disabled -> hide banner
-                    setShowSeatSelectionInstruction(false);
-                }
+        try {
+            const currentlySelected = selectedAddOns.includes(addOnId);
+
+            // If currently selected -> remove immediately
+            if (currentlySelected) {
+                setSelectedAddOns(prev => prev.filter(id => id !== addOnId));
+                setAddOnPerPassenger(prevFlags => {
+                    const copy = { ...prevFlags };
+                    delete copy[addOnId];
+                    return copy;
+                });
+                if (addOnId === 'seat_selection') setShowSeatSelectionInstruction(false);
+                return;
             }
 
-            return next;
-        });
-    };
+            // Not selected -> determine per-passenger behavior (call confirm once if needed)
+            const total = participants.adults + participants.children + participants.infants;
+            let perPassenger = false;
 
+            if (addOnId === 'seat_selection') {
+                // seat selection: show instruction and scroll
+                setShowSeatSelectionInstruction(true);
+                if (seatmapRef.current && typeof seatmapRef.current.scrollIntoView === 'function') {
+                    try { seatmapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* ignore */ }
+                }
+            } else if (addOnId === 'travel_insurance') {
+                // always per passenger
+                perPassenger = true;
+            } else if (total > 1) {
+                // ask user once (synchronous) and use answer
+                const ok = window.confirm(`Bạn có ${total} hành khách. Bạn muốn mua dịch vụ này cho tất cả ${total} hành khách? (OK = tất cả, Cancel = chỉ 1)`);
+                perPassenger = !!ok;
+            }
+
+            // apply decision to state (single update per state)
+            setAddOnPerPassenger(prevFlags => ({ ...prevFlags, [addOnId]: perPassenger }));
+            setSelectedAddOns(prev => [...prev, addOnId]);
+        } finally {
+            // small timeout to allow event loop to finish before releasing lock
+            setTimeout(() => { addOnClickRef.current = false; }, 0);
+        }
+    };
     // Hàm cập nhật số lượng khách
     const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
         setParticipants(prev => ({
@@ -432,12 +483,18 @@ export default function ChiTietVeMayBay() {
     };
     // Tính tổng tiền
     const calculateTotal = () => {
-        const adultTotal = participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
-        const childTotal = participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
-        const infantTotal = participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
+        // Use derived traveler totals when available (prefer precise pricing from API)
+        const useDerived = (Array.isArray(travelerPricings) && travelerPricings.length > 0);
+        const adultTotal = useDerived ? derived.adultsTotal : participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
+        const childTotal = useDerived ? derived.childrenTotal : participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
+        const infantTotal = useDerived ? derived.infantsTotal : participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
+
         const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
             const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-            return total + ((addOn?.price || 0) * (participants.adults + participants.children + participants.infants));
+            if (!addOn) return total;
+            const per = addOnPerPassenger[addOnId] ?? false;
+            const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
+            return total + ((addOn?.price || 0) * qty);
         }, 0);
         const seatSelectedTotal = selectedSeats.reduce((sum, s) => sum + (s.price || 0), 0);
         return adultTotal + childTotal + infantTotal + addOnTotal + seatSelectedTotal;
@@ -593,6 +650,110 @@ export default function ChiTietVeMayBay() {
             });
     };
 
+    // ensure selectedSeats always matches participants count:
+	useEffect(() => {
+		const max = participants.adults + participants.children + participants.infants;
+		// trim if too many selected
+		if (selectedSeats.length > max) {
+			setSelectedSeats(prev => prev.slice(0, max));
+			return;
+		}
+
+		// if fewer than needed, try to auto-assign additional free seats
+		if (selectedSeats.length < max && seatRows.length > 0) {
+			const alreadyIds = new Set(selectedSeats.map(s => s.id));
+			// gather all seats from seatRows
+			const allSeats = seatRows.flatMap(r => r.seats || []);
+			// filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
+			const freeSeats = allSeats.filter(s => {
+				const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+				const hasCH = chars.includes('CH');
+				const priceIsZero = Number(s.price || 0) === 0;
+				return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+			});
+			if (freeSeats.length > 0) {
+				const need = Math.min(max - selectedSeats.length, freeSeats.length);
+				setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
+			}
+		}
+	}, [participants.adults, participants.children, participants.infants, seatRows]); 
+
+    // --- NEW: safe number parser + derive traveler-level pricing when available ---
+    const parseNumberSafe = (v: any) => {
+        if (v == null) return 0;
+        const n = Number(String(v).replace(/[^\d.-]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+    
+    const travelerPricings = normalizedOffer?.travelerPricings
+        ?? cachedPricing?.data?.flightOffers?.[0]?.travelerPricings
+        ?? cachedPricing?.travelerPricings
+        ?? [];
+    
+    // derived summary used by UI / calculateTotal
+    const derived: {
+        adultsCount: number;
+        childrenCount: number;
+        infantsCount: number;
+        adultsTotal: number;
+        childrenTotal: number;
+        infantsTotal: number;
+        adultsUnit: number;
+        childrenUnit: number;
+        infantsUnit: number;
+        offerTotal: number;
+    } = {
+        adultsCount: 0,
+        childrenCount: 0,
+        infantsCount: 0,
+        adultsTotal: 0,
+        childrenTotal: 0,
+        infantsTotal: 0,
+        adultsUnit: 0,
+        childrenUnit: 0,
+        infantsUnit: 0,
+        offerTotal: parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0)
+    };
+
+    if (Array.isArray(travelerPricings) && travelerPricings.length > 0) {
+        for (const t of travelerPricings) {
+            const typ = String(t?.travelerType ?? '').toUpperCase();
+            const amount = parseNumberSafe(t?.price?.total ?? t?.price?.grandTotal ?? t?.price?.amount ?? 0);
+            if (typ.includes('ADULT')) {
+                derived.adultsCount += 1;
+                derived.adultsTotal += amount;
+            } else if (typ.includes('CHILD')) {
+                derived.childrenCount += 1;
+                derived.childrenTotal += amount;
+            } else if (typ.includes('INFANT')) {
+                derived.infantsCount += 1;
+                derived.infantsTotal += amount;
+            } else {
+                derived.adultsCount += 1;
+                derived.adultsTotal += amount;
+            }
+        }
+        derived.adultsUnit = derived.adultsCount > 0 ? derived.adultsTotal / derived.adultsCount : 0;
+        derived.childrenUnit = derived.childrenCount > 0 ? derived.childrenTotal / derived.childrenCount : 0;
+        derived.infantsUnit = derived.infantsCount > 0 ? derived.infantsTotal / derived.infantsCount : 0;
+        if (!derived.offerTotal || derived.offerTotal === 0) {
+            derived.offerTotal = derived.adultsTotal + derived.childrenTotal + derived.infantsTotal;
+        }
+    } else {
+        // fallback: approximate per-unit from priceNumber / totalParticipants
+        const pax = Math.max(1, totalParticipants);
+        const avg = Math.round((derived.offerTotal || priceNumber) / pax);
+        derived.adultsUnit = avg;
+        derived.childrenUnit = Math.round(avg * 0.75);
+        derived.infantsUnit = Math.round(avg * 0.2);
+        derived.adultsCount = participants.adults;
+        derived.childrenCount = participants.children;
+        derived.infantsCount = participants.infants;
+        derived.adultsTotal = derived.adultsUnit * derived.adultsCount;
+        derived.childrenTotal = derived.childrenUnit * derived.childrenCount;
+        derived.infantsTotal = derived.infantsUnit * derived.infantsCount;
+    }
+
     return (
         <>
             {/* Breadcrumb */}
@@ -740,13 +901,14 @@ export default function ChiTietVeMayBay() {
                                         <div
                                             key={service.id}
                                             className={`border rounded-lg p-4 transition-colors ${selectedAddOns.includes(service.id) ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'}`}
+                                            onClick={() => toggleAddOn(service.id)}
                                         >
                                             <div className="flex items-start space-x-3">
                                                 <Checkbox
                                                     checked={selectedAddOns.includes(service.id)}
-                                                    onCheckedChange={() => toggleAddOn(service.id)}
+                                                    onClick={(e) => e.stopPropagation()} // Giữ để ngăn lan truyền
                                                 />
-                                                <div className="flex-1 cursor-pointer" onClick={() => toggleAddOn(service.id)}>
+                                                <div className="flex-1">
                                                     <div className="flex items-center justify-between">
                                                         <h4 className="font-medium">{service.name}</h4>
                                                         <span className="font-bold text-[hsl(var(--primary))]">
@@ -759,6 +921,7 @@ export default function ChiTietVeMayBay() {
                                                 </div>
                                             </div>
                                         </div>
+                                        
                                     ))}
                                 </div>
                             </CardContent>
@@ -1157,30 +1320,45 @@ export default function ChiTietVeMayBay() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
                                         <span>Người lớn ({participants.adults})</span>
-                                        <span>{currency === 'VND' ? formatPrice(participants.adults * priceNumber) : `${(participants.adults * priceNumber).toLocaleString()} ${currency}`}</span>
+                                        <span>
+                                            {currency === 'VND'
+                                                ? formatPrice(Math.round((derived.adultsUnit || (priceNumber || 0)) * participants.adults))
+                                                : `${Math.round((derived.adultsUnit || (priceNumber || 0)) * participants.adults).toLocaleString()} ${currency}`}
+                                        </span>
                                     </div>
                                     {participants.children > 0 && (
                                         <div className="flex justify-between">
                                             <span>Trẻ em ({participants.children})</span>
-                                            <span>{formatPrice(participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))}</span>
+                                            <span>
+                                                {currency === 'VND'
+                                                    ? formatPrice(Math.round((derived.childrenUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))) * participants.children))
+                                                    : `${Math.round((derived.childrenUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))) * participants.children).toLocaleString()} ${currency}`}
+                                            </span>
                                         </div>
                                     )}
                                     {participants.infants > 0 && (
                                         <div className="flex justify-between">
                                             <span>Em bé ({participants.infants})</span>
-                                            <span>{formatPrice(participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))}</span>
+                                            <span>
+                                                {currency === 'VND'
+                                                    ? formatPrice(Math.round((derived.infantsUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))) * participants.infants))
+                                                    : `${Math.round((derived.infantsUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))) * participants.infants).toLocaleString()} ${currency}`}
+                                            </span>
                                         </div>
                                     )}
                                     {selectedAddOns.length > 0 && (
                                         <div className="space-y-1">
                                             {selectedAddOns.map(addOnId => {
                                                 const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-                                                return addOn ? (
+                                                if (!addOn) return null;
+                                                const per = addOnPerPassenger[addOnId] ?? false;
+                                                const qty = per ? totalParticipants : 1;
+                                                return (
                                                     <div key={addOnId} className="flex justify-between text-sm">
-                                                        <span>{addOn.name} ({totalParticipants})</span>
-                                                        <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * totalParticipants).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * totalParticipants)}</span>
+                                                        <span>{addOn.name} ({qty})</span>
+                                                        <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
                                                     </div>
-                                                ) : null;
+                                                );
                                             })}
                                         </div>
                                     )}
@@ -1203,7 +1381,11 @@ export default function ChiTietVeMayBay() {
                                     <Separator />
                                     <div className="flex justify-between font-bold text-lg">
                                         <span>Tổng cộng (giá từ pricing)</span>
-                                        <span className="text-[hsl(var(--primary))]">{currency === 'VND' ? formatPrice((participants.adults + participants.children + participants.infants) * priceNumber) : `${((participants.adults + participants.children + participants.infants) * priceNumber).toLocaleString()} ${currency}`}</span>
+                                        <span className="text-[hsl(var(--primary))]">
+                                            {currency === 'VND'
+                                                ? formatPrice( Math.round( (derived.offerTotal && derived.offerTotal > 0) ? derived.offerTotal : calculateTotal() ) )
+                                                : `${Math.round( (derived.offerTotal && derived.offerTotal > 0) ? derived.offerTotal : calculateTotal() ).toLocaleString()} ${currency}`}
+                                        </span>
                                     </div>
                                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
                                         Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
