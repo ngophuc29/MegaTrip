@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Layout from '../../components/Layout';
 import { Button } from '../../components/ui/button';
@@ -36,6 +36,20 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+
+// same cache key used in FlightResults
+const CACHE_KEY = 'amadeus_pricing_cache_v1';
+
+const loadCacheFromStorage = () => {
+    try {
+        if (typeof window === 'undefined') return {};
+        const raw = localStorage.getItem(CACHE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+};
+
 // Sample flight data - normally would come from API based on ID
 const flightDetails = {
     id: 1,
@@ -63,12 +77,12 @@ const flightDetails = {
 };
 
 const addOnServices = [
-    {
-        id: 'baggage_10',
-        name: 'Hành lý ký gửi thêm 10kg',
-        price: 200000,
-        description: 'Thêm 10kg hành lý ký gửi (tối đa 33kg)',
-    },
+    // {
+    //     id: 'baggage_10',
+    //     name: 'Hành lý ký gửi thêm 10kg',
+    //     price: 200000,
+    //     description: 'Thêm 10kg hành lý ký gửi (tối đa 33kg)',
+    // },
     {
         id: 'seat_selection',
         name: 'Chọn chỗ ngồi',
@@ -97,7 +111,196 @@ const addOnServices = [
 
 export default function ChiTietVeMayBay() {
     const router = useRouter();
-    const { id } = useParams();
+    const params = useParams();
+    const id = params?.id ?? null;
+
+    // --- ADDED: mapped state for easier UI ---
+    const [cachedPricing, setCachedPricing] = useState<any | null>(null);
+    const [cachedSeatmap, setCachedSeatmap] = useState<any | null>(null);
+    const [mappedOffer, setMappedOffer] = useState<any | null>(null);
+    const [seatmapSummary, setSeatmapSummary] = useState<any | null>(null);
+    // dynamic add-ons: static fallback + any included resources from pricing (bags, credit-card-fees, other-services, detailed-fare-rules, ...)
+    const [dynamicAddOnServices, setDynamicAddOnServices] = useState<typeof addOnServices>(addOnServices);
+
+    useEffect(() => {
+        if (!id) return;
+        try {
+            const stored = loadCacheFromStorage();
+            // LOG: kiểm tra cache cho id này
+            console.log('[Flight detail] id=', id, 'cache present:', Boolean(stored));
+            console.log('[Flight detail] pricing for id=', id, stored?.pricing?.[id]);
+            console.log('[Flight detail] seatmap for id=', id, stored?.seatmap?.[id]);
+            console.log('[Flight detail] signature for id=', id, stored?.signatures?.[id]);
+            if (stored && stored.pricing && stored.pricing[id]) {
+                setCachedPricing(stored.pricing[id]);
+                // normalize/derive offer
+                const offer =
+                    stored.pricing[id]?.data?.flightOffers?.[0] ??
+                    (Array.isArray(stored.pricing[id]?.data) ? stored.pricing[id].data[0] : (stored.pricing[id]?.data ?? stored.pricing[id] ?? null));
+                const travelerCount = (offer?.travelerPricings && offer.travelerPricings.length) || (offer?.travelerPricings?.length) || 0;
+                const mapped = {
+                    numberOfBookableSeats: offer?.numberOfBookableSeats ?? stored.pricing[id]?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? null,
+                    total: offer?.price?.total ?? stored.pricing[id]?.price?.total ?? null,
+                    currency: offer?.price?.currency ?? stored.pricing[id]?.price?.currency ?? null,
+                    travelerPricingsCount: travelerCount,
+                    validatingAirlines: offer?.validatingAirlineCodes ?? stored.pricing[id]?.validatingAirlineCodes ?? [],
+                    lastTicketingDate: offer?.lastTicketingDate ?? null,
+                    rawOffer: offer
+                };
+                setMappedOffer(mapped);
+                console.log('[Flight detail] mappedOffer=', mapped);
+            }
+            if (stored && stored.seatmap && stored.seatmap[id]) {
+                setCachedSeatmap(stored.seatmap[id]);
+                const summary = {
+                    aircraftCode: stored.seatmap[id]?.aircraft?.code ?? stored.seatmap[id]?.data?.aircraft?.code ?? null,
+                    availableSeatsCounters: stored.seatmap[id]?.availableSeatsCounters ?? stored.seatmap[id]?.data?.availableSeatsCounters ?? null,
+                    rawSeatmap: stored.seatmap[id]
+                };
+                setSeatmapSummary(summary);
+                console.log('[Flight detail] seatmapSummary=', summary);
+            }
+            // map ALL included resources into add-on-like items (merge with static addOnServices)
+            const inc = stored.pricing[id]?.included ?? stored.pricing[id]?.data?.included ?? {};
+            console.log('[Flight detail] included keys:', Object.keys(inc));
+            const includedAddOns: any[] = [];
+            for (const [key, val] of Object.entries(inc || {})) {
+                // SKIP: do not map detailed fare rules or credit-card-fees into add-on list
+                if (key === 'detailed-fare-rules' || key === 'credit-card-fees') {
+                    console.log(`[Flight detail] skipping included key for add-ons: ${key}`);
+                    continue;
+                }
+                // val can be an object mapping ids -> resources, or an array
+                if (!val) continue;
+                if (Array.isArray(val)) {
+                    val.forEach((entry, idx) => {
+                        // SPECIAL: if key === 'bags' we want to include quantity meaning
+                        const price = entry?.price?.amount ?? entry?.amount ?? null;
+                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? null;
+                        const qty = entry?.quantity ?? null;
+                        const baseName = entry?.name ?? `${key} ${idx + 1}`;
+                        const name = key === 'bags' && qty ? `${baseName} (${qty} kiện)` : baseName;
+                        let desc = entry?.description ?? entry?.text ?? (entry?.fareNotes?.descriptions?.[0]?.text ?? null);
+                        if (key === 'bags') {
+                            // Giải thích đơn giản về số kiện, đoạn bay, hành khách
+                            const segs = Array.isArray(entry?.segmentIds)
+                                ? `Đoạn bay: ${entry.segmentIds.join(', ')}`
+                                : '';
+                            const travs = Array.isArray(entry?.travelerIds)
+                                ? `Hành khách: ${entry.travelerIds.join(', ')}`
+                                : '';
+                            const qtyNote = qty
+                                ? `Số kiện: ${qty}`
+                                : '';
+
+                            // Ghép thành nhiều dòng cho dễ đọc
+                            desc = [qtyNote, segs, travs, desc].filter(Boolean).join('\n');
+                        }
+
+                        includedAddOns.push({
+                            id: `${key}_${idx}`,
+                            name,
+                            price: price != null ? Number(String(price).replace(/[^\d.-]/g, '')) : 0,
+                            currency: currency ?? 'VND',
+                            description: desc ? String(desc).slice(0, 300) : key,
+                            raw: entry,
+                            sourceKey: key
+                        });
+                    });
+                } else if (typeof val === 'object') {
+                    // object keyed by id
+                    Object.entries(val).forEach(([subKey, entry]: any, idx) => {
+                        if (!entry) return;
+                        const price = entry?.price?.amount ?? entry?.amount ?? entry?.amount?.value ?? null;
+                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? entry?.currency ?? null;
+                        const qty = entry?.quantity ?? null;
+                        let name = entry?.name ?? entry?.brand ?? `${key} ${subKey}`;
+                        let desc = entry?.fareNotes?.descriptions?.[0]?.text ?? entry?.text ?? entry?.description ?? null;
+                        if (key === 'bags') {
+                            // object-style bags (keyed by id) -> include quantity note as above
+                            name = entry?.name ? `${entry.name}${qty ? ` (${qty} kiện)` : ''}` : `${key} ${subKey}${qty ? ` (${qty} kiện)` : ''}`;
+                            // const segs = Array.isArray(entry?.segmentIds) ? `Chặng: ${entry.segmentIds.join(', ')}` : '';
+                            // const travs = Array.isArray(entry?.travelerIds) ? `Hành khách: ${entry.travelerIds.join(', ')}` : '';
+                            const qtyNote = qty ? `Số kiện: ${qty} (số kiện ký gửi mặc định cho lựa chọn này (23kg/1 kiện))` : '';
+                            // desc = [qtyNote, segs, travs, desc].filter(Boolean).join('\n');
+                            desc = [qtyNote,  desc].filter(Boolean).join('\n');
+
+                        }
+                        includedAddOns.push({
+                            id: `${key}_${subKey}`,
+                            name,
+                            price: price != null ? Number(String(price).replace(/[^\d.-]/g, '')) : 0,
+                            currency: currency ?? 'VND',
+                            description: desc ? String(desc).slice(0, 300) : key,
+                            raw: entry,
+                            sourceKey: key
+                        });
+                    });
+                }
+            }
+            // merge static + includedAddOns (static first)
+            const merged = [
+                ...addOnServices,
+                ...includedAddOns.filter(ia => !addOnServices.some(s => s.id === ia.id))
+            ];
+            setDynamicAddOnServices(merged);
+        } catch (e) {
+            console.warn('Error loading cached pricing/seatmap', e);
+        }
+    }, [id]);
+
+    // MOVE: formatPrice must be defined before we derive/display prices
+    const formatPrice = (price: number) => {
+        return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND',
+        }).format(price);
+    };
+    
+    // --- NEW: derive normalized fields from cached pricing for direct mapping into UI ---
+    const normalizedOffer = mappedOffer?.rawOffer ?? null;
+    const priceRaw = normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? flightDetails.price;
+    const priceNumber = Number(String(priceRaw).replace(/[^\d.-]/g, '')) || Number(flightDetails.price);
+    const currency = normalizedOffer?.price?.currency ?? cachedPricing?.price?.currency ?? 'VND';
+    const displayPrice = currency === 'VND' ? formatPrice(priceNumber) : `${priceNumber.toLocaleString()} ${currency}`;
+ 
+    // fare / baggage from traveler pricing if available
+    const traveler = normalizedOffer?.travelerPricings?.[0] ?? null;
+    const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0] ?? null;
+    const displayCabin = fareSeg?.includedCabinBags?.quantity ?? fareSeg?.includedCabinBags?.weight ?? flightDetails.baggage.handbag;
+    const displayChecked = fareSeg?.includedCheckedBags?.quantity ?? fareSeg?.includedCheckedBags?.weight ?? flightDetails.baggage.checkin;
+ 
+    // bookable seats
+    const numberOfBookableSeats = normalizedOffer?.numberOfBookableSeats ?? mappedOffer?.numberOfBookableSeats ?? flightDetails.availableSeats;
+ 
+    // simple refundable detection
+    const parseRefundable = (obj: any) => {
+        if (!obj) return false;
+        const cand = obj?.price?.refundableTaxes ?? obj?.price?.refundableTaxesAmount ?? obj?.refundableTaxes ?? obj?.refundableTaxesAmount ?? null;
+        if (cand == null) return false;
+        const num = Number(String(cand).replace(/[^\d.-]/g, ''));
+        return Number.isFinite(num) && num > 0;
+    };
+    const policyObj = cachedPricing?.data?.policies ?? cachedPricing?.policies ?? null;
+    const isRefundable = (Array.isArray(normalizedOffer?.travelerPricings) && normalizedOffer.travelerPricings.some(parseRefundable)) || parseRefundable(normalizedOffer) || Boolean(policyObj?.cancellable) || flightDetails.cancellable;
+ 
+    // changeable detection (basic): scan included detailed-fare-rules text for "CHANGE"
+    const included = cachedPricing?.included ?? cachedPricing?.data?.included ?? {};
+    const detailedFareRules = included?.['detailed-fare-rules'] ?? {};
+    let isChangeable = flightDetails.changeable;
+    try {
+        for (const r of Object.values(detailedFareRules || {})) {
+            const notes = r?.fareNotes?.descriptions ?? [];
+            for (const n of notes) {
+                if (String(n?.text ?? '').toUpperCase().includes('CHANGE')) {
+                    isChangeable = true;
+                    break;
+                }
+            }
+            if (isChangeable) break;
+        }
+    } catch (e) { /* ignore */ }
+
     // Số lượng khách từng loại
     const [participants, setParticipants] = useState({
         adults: 1,
@@ -123,13 +326,6 @@ export default function ChiTietVeMayBay() {
 
     const totalParticipants = participants.adults + participants.children + participants.infants;
 
-    const formatPrice = (price: number) => {
-        return new Intl.NumberFormat('vi-VN', {
-            style: 'currency',
-            currency: 'VND',
-        }).format(price);
-    };
-
     const toggleAddOn = (addOnId: string) => {
         setSelectedAddOns(prev =>
             prev.includes(addOnId)
@@ -148,12 +344,11 @@ export default function ChiTietVeMayBay() {
     // Tính tổng tiền
     const calculateTotal = () => {
         const adultTotal = participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
-        // Giả sử trẻ em 75% giá vé, em bé 20% giá vé
         const childTotal = participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
         const infantTotal = participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
         const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
-            const addOn = addOnServices.find(service => service.id === addOnId);
-            return total + (addOn?.price || 0) * (participants.adults + participants.children + participants.infants);
+            const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
+            return total + ((addOn?.price || 0) * (participants.adults + participants.children + participants.infants));
         }, 0);
         return adultTotal + childTotal + infantTotal + addOnTotal;
     };
@@ -191,6 +386,9 @@ export default function ChiTietVeMayBay() {
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Main Content */}
                     <div className="flex-1 space-y-6">
+                        {/* If cached pricing present, map fields directly into UI elements below (no separate summary card) */}
+                        {/* (mappedOffer/seatmapSummary used to derive values; UI below uses derived variables) */}
+ 
                         {/* Back Button */}
                         <Button variant="outline" asChild className="w-fit">
                             <Link prefetch={false} href="/ve-may-bay">
@@ -198,7 +396,7 @@ export default function ChiTietVeMayBay() {
                                 Quay lại kết quả tìm kiếm
                             </Link>
                         </Button>
-
+ 
                         {/* Flight Details */}
                         <Card>
                             <CardHeader>
@@ -214,125 +412,82 @@ export default function ChiTietVeMayBay() {
                                             </div>
                                         </div>
                                     </CardTitle>
-                                    {flightDetails.discount && (
+                                    {/* {flightDetails.discount && (
                                         <Badge variant="destructive" className="text-lg">-{flightDetails.discount}%</Badge>
-                                    )}
+                                    )} */}
                                 </div>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 {/* Flight Route */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     <div className="text-center">
-                                        <div className="text-2xl font-bold">{flightDetails.departure.time}</div>
-                                        <div className="text-lg font-medium">{flightDetails.departure.airport}</div>
+                                        { /* prefer times from pricing itineraries if present */ }
+                                        <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0,5) ?? flightDetails.departure.time}</div>
+                                        <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport}</div>
                                         <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.departure.city}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{flightDetails.departure.terminal}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{flightDetails.date}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* departure terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.terminal ?? flightDetails.departure.terminal}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date}</div>
                                     </div>
-
+ 
                                     <div className="flex flex-col items-center justify-center">
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))] mb-2">{flightDetails.duration}</div>
-                                        <div className="flex items-center w-full">
-                                            <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
-                                            <ArrowRight className="h-5 w-5 mx-2 text-[hsl(var(--muted-foreground))]" />
-                                            <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
-                                        </div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Bay thẳng</div>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold">{flightDetails.arrival.time}</div>
-                                        <div className="text-lg font-medium">{flightDetails.arrival.airport}</div>
+                                        <div className="text-sm text-[hsl(var(--muted))] mb-2">{normalizedOffer?.itineraries?.[0]?.duration ?? flightDetails.duration}</div>
+                                         <div className="flex items-center w-full">
+                                             <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
+                                             <ArrowRight className="h-5 w-5 mx-2 text-[hsl(var(--muted-foreground))]" />
+                                             <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
+                                         </div>
+                                         <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Bay thẳng</div>
+                                     </div>
+ 
+                                     <div className="text-center">
+                                        <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0,5) ?? flightDetails.arrival.time}</div>
+                                        <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport}</div>
                                         <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.city}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.terminal}</div>
-                                    </div>
-                                </div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* arrival terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.slice(-1)[0]?.arrival?.terminal ?? flightDetails.arrival.terminal}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[0] ?? flightDetails.date}</div>
 
-                                <Separator />
-
-                                {/* Flight Info */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div>
-                                        <h4 className="font-medium mb-2">Hành lý</h4>
-                                        <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                            <div className="flex items-center gap-2">
-                                                <Luggage className="h-4 w-4" />
-                                                Xách tay: {flightDetails.baggage.handbag}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Luggage className="h-4 w-4" />
-                                                Ký gửi: {flightDetails.baggage.checkin}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h4 className="font-medium mb-2">Tiện ích</h4>
-                                        <div className="flex gap-3">
-                                            {flightDetails.amenities.map((amenity, index) => (
-                                                <div key={index} className="text-[hsl(var(--muted-foreground))]" title={amenity}>
-                                                    {getAmenityIcon(amenity)}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h4 className="font-medium mb-2">Điều kiện vé</h4>
-                                        <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                            <div>{flightDetails.cancellable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div>
-                                            <div>{flightDetails.changeable ? '✓ Có thể đổi' : '✗ Không thể đổi'}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Fare Selection */}
-                        {/* <Card>
-                            <CardHeader>
-                                <CardTitle>Chọn hạng vé</CardTitle>
-                                <p className="text-[hsl(var(--muted-foreground))]">
-                                    So sánh các loại vé để chọn phương án phù hợp nhất
-                                </p>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    {Object.entries(flightDetails.fareRules).map(([key, fare]) => (
-                                        <div
-                                            key={key}
-                                            className={`border rounded-lg p-4 cursor-pointer transition-colors ${selectedFare === key ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'} ` }
-                                            onClick={() => { setSelectedFare(key); console.log('Chọn hạng vé:', key); }}
-                                        >
-                                            <div className="flex items-center space-x-2 mb-3">
-                                                <input
-                                                    type="radio"
-                                                    name="fare"
-                                                    checked={selectedFare === key}
-                                                    onChange={() => { setSelectedFare(key); console.log('Chọn hạng vé:', key); }}
-                                                    className="mt-1"
-                                                />
-                                                <span className="font-medium">
-                                                    {key === 'basic' ? 'Cơ bản' : key === 'standard' ? 'Tiêu chuẩn' : 'Linh hoạt'}
-                                                </span>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <div className="text-xl font-bold text-[hsl(var(--primary))]">
-                                                    {formatPrice(fare.price)}
-                                                </div>
-                                                <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                                    <div>Hành lý: {fare.baggage}</div>
-                                                    <div>Phí đổi: {fare.changeFee ? formatPrice(fare.changeFee) : 'Miễn phí'}</div>
-                                                    <div>Phí hủy: {fare.cancelFee ? formatPrice(fare.cancelFee) : 'Miễn phí'}</div>
-                                                    {fare.seatSelection && <div>✓ Chọn chỗ ngồi</div>}
-                                                    {fare.priority && <div>✓ Ưu tiên check-in</div>}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card> */}
+                                     </div>
+                                 </div>
+ 
+                                 <Separator />
+ 
+                                 {/* Flight Info */}
+                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                     <div>
+                                         <h4 className="font-medium mb-2">Hành lý</h4>
+                                         <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                             <div className="flex items-center gap-2">
+                                                 <Luggage className="h-4 w-4" />
+{/*                                                Xách tay: {flightDetails.baggage.handbag} */}
++                                                Xách tay: {displayCabin}
+                                             </div>
+                                             <div className="flex items-center gap-2">
+                                                 <Luggage className="h-4 w-4" />
+{/*                                                Ký gửi: {flightDetails.baggage.checkin} */}
++                                                Ký gửi: {displayChecked}
+                                             </div>
+                                         </div>
+                                     </div>
+ 
+                                     <div>
+                                         <h4 className="font-medium mb-2">Tiện ích</h4>
+                                         <div className="flex gap-3">
+                                              
+                                         </div>
+                                     </div>
+ 
+                                     <div>
+                                         <h4 className="font-medium mb-2">Điều kiện vé</h4>
+                                         <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                            
+                                            <div>{isRefundable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div>
+                                            <div>{isChangeable ? '✓ Có thể đổi' : '✗ Không thể đổi'}</div>
+                                         </div>
+                                     </div>
+                                 </div>
+                             </CardContent>
+                         </Card>
+                                 
 
                         {/* Add-on Services */}
                         <Card>
@@ -343,12 +498,11 @@ export default function ChiTietVeMayBay() {
                                 </p>
                             </CardHeader>
                             <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {addOnServices.map((service) => (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {dynamicAddOnServices.map((service) => (
                                         <div
                                             key={service.id}
-                                            className={`border rounded-lg p-4 transition-colors ${selectedAddOns.includes(service.id) ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'}
-                                                `}
+                                            className={`border rounded-lg p-4 transition-colors ${selectedAddOns.includes(service.id) ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'}`}
                                         >
                                             <div className="flex items-start space-x-3">
                                                 <Checkbox
@@ -359,11 +513,11 @@ export default function ChiTietVeMayBay() {
                                                     <div className="flex items-center justify-between">
                                                         <h4 className="font-medium">{service.name}</h4>
                                                         <span className="font-bold text-[hsl(var(--primary))]">
-                                                            {formatPrice(service.price)}
+                                                            {service.currency && service.currency !== 'VND' ? `${Number(service.price).toLocaleString()} ${service.currency}` : formatPrice(Number(service.price))}
                                                         </span>
                                                     </div>
                                                     <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-                                                        {service.description}
+                                                        {service.description ?? (service.raw ? JSON.stringify(service.raw).slice(0,200) : '')}
                                                     </p>
                                                 </div>
                                             </div>
@@ -579,7 +733,7 @@ export default function ChiTietVeMayBay() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
                                         <span>Người lớn ({participants.adults})</span>
-                                        <span>{formatPrice(participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price)}</span>
+                                        <span>{currency === 'VND' ? formatPrice(participants.adults * priceNumber) : `${(participants.adults * priceNumber).toLocaleString()} ${currency}`}</span>
                                     </div>
                                     {participants.children > 0 && (
                                         <div className="flex justify-between">
@@ -596,11 +750,11 @@ export default function ChiTietVeMayBay() {
                                     {selectedAddOns.length > 0 && (
                                         <div className="space-y-1">
                                             {selectedAddOns.map(addOnId => {
-                                                const addOn = addOnServices.find(service => service.id === addOnId);
+                                                const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
                                                 return addOn ? (
                                                     <div key={addOnId} className="flex justify-between text-sm">
                                                         <span>{addOn.name} ({totalParticipants})</span>
-                                                        <span>{formatPrice(addOn.price * totalParticipants)}</span>
+                                                        <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * totalParticipants).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * totalParticipants)}</span>
                                                     </div>
                                                 ) : null;
                                             })}
@@ -614,13 +768,13 @@ export default function ChiTietVeMayBay() {
                                     )}
                                     <Separator />
                                     <div className="flex justify-between font-bold text-lg">
-                                        <span>Tổng cộng</span>
-                                        <span className="text-[hsl(var(--primary))]">{formatPrice(calculateTotal())}</span>
+                                        <span>Tổng cộng (giá từ pricing)</span>
+                                        <span className="text-[hsl(var(--primary))]">{currency === 'VND' ? formatPrice((participants.adults + participants.children + participants.infants) * priceNumber) : `${((participants.adults + participants.children + participants.infants) * priceNumber).toLocaleString()} ${currency}`}</span>
                                     </div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
-                                    </div>
-                                </div>
+                                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                         Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
+                                     </div>
+                                 </div>
 
                                 <Separator />
 

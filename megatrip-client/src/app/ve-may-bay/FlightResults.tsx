@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Plane, Wifi, Utensils, Luggage, ChevronUp, ChevronDown, Gift, CheckCircle, Shield, X, RefreshCw, Tv, Battery, ArrowRight, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 function CardSkeleton() {
   return (
@@ -49,6 +50,8 @@ export default function FlightResults({
   setExpandedFlight,
   formatPrice
 }) {
+  const router = useRouter();
+
   // per-flight pricing loading state so one click doesn't disable whole list
   const [pricingLoadingByFlight, setPricingLoadingByFlight] = useState<Record<string, boolean>>({});
   const setPricingLoadingFor = (key: string, v: boolean) => setPricingLoadingByFlight(prev => ({ ...prev, [key]: v }));
@@ -79,6 +82,50 @@ export default function FlightResults({
     } catch { /* ignore */ }
   };
 
+  // --- NEW: signature helpers to uniquely identify saved pricing/seatmap version ---
+  const sanitizeOfferForSignature = (offer: any) => {
+    if (!offer) return {};
+    try {
+      const itins = (offer.itineraries || []).map((it: any) => ({
+        duration: it.duration,
+        segments: (it.segments || []).map((s: any) => ({
+          departure: { iataCode: s.departure?.iataCode, at: s.departure?.at },
+          arrival: { iataCode: s.arrival?.iataCode, at: s.arrival?.at },
+          carrierCode: s.carrierCode, number: s.number, aircraft: s.aircraft?.code
+        }))
+      }));
+      return {
+        id: offer.id ?? null,
+        price: offer.price ? { total: offer.price.total, currency: offer.price.currency } : null,
+        numberOfBookableSeats: offer.numberOfBookableSeats ?? null,
+        itineraries: itins,
+        lastTicketingDate: offer.lastTicketingDate ?? null
+      };
+    } catch {
+      return {};
+    }
+  };
+
+  // small deterministic djb2 -> hex
+  const djb2Hex = (str: string) => {
+    let h = 5381;
+    for (let i = 0; i < str.length; i++) {
+      h = ((h << 5) + h) + str.charCodeAt(i);
+      h = h & 0xffffffff;
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  };
+
+  const computeSignatureForPayload = (payload: any) => {
+    try {
+      const cleaned = sanitizeOfferForSignature(payload);
+      const s = JSON.stringify(cleaned);
+      return djb2Hex(s);
+    } catch {
+      return null;
+    }
+  };
+
   // store pricing & seatmap responses per flight id so we can populate existing Tabs
   // initialize from localStorage when available
   const cacheInit = (() => {
@@ -86,15 +133,18 @@ export default function FlightResults({
       const full = loadCacheFromStorage();
       return {
         pricing: full.pricing || {},
-        seatmap: full.seatmap || {}
+        seatmap: full.seatmap || {},
+        signatures: full.signatures || {}
       };
     } catch {
-      return { pricing: {}, seatmap: {} };
+      return { pricing: {}, seatmap: {}, signatures: {} };
     }
   })();
 
   const [pricingByFlight, setPricingByFlight] = useState<Record<string, any>>(cacheInit.pricing);
   const [seatmapByFlight, setSeatmapByFlight] = useState<Record<string, any>>(cacheInit.seatmap);
+  // state for signatures per flight
+  const [signaturesByFlight, setSignaturesByFlight] = useState<Record<string, string>>(cacheInit.signatures);
 
   // Helper: parse refundable value from traveler or offer objects.
   // Returns { amount: number | null, raw: string | null }
@@ -205,14 +255,40 @@ export default function FlightResults({
     };
   };
 
+  // NEW helper: populate state from cache for a given key
+  const populateFromCache = (key: string) => {
+    try {
+      const stored = loadCacheFromStorage();
+      if (!stored) return false;
+      if (stored.pricing && stored.pricing[key]) {
+        setPricingByFlight(prev => ({ ...prev, [key]: stored.pricing[key] }));
+      }
+      if (stored.seatmap && stored.seatmap[key]) {
+        setSeatmapByFlight(prev => ({ ...prev, [key]: stored.seatmap[key] }));
+        setSeatmapData(stored.seatmap[key]);
+      }
+      setSeatmapDeckIndex(0);
+      setSelectedSeat(null);
+      setSeatmapOpenForFlightId(key);
+      setSignaturesByFlight(prev => ({ ...prev, [key]: stored.signatures?.[key] }));
+      return true;
+    } catch (e) {
+      console.warn('populateFromCache error', e);
+      return false;
+    }
+  };
+
   const handlePriceOffer = useCallback(async (flight: any) => {
     const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOffer(flight);
     const key = String(flight.id ?? flightOfferPayload.id ?? 'unknown');
 
-    // 1) check cache first
+    // compute signature for this payload
+    const signature = computeSignatureForPayload(flightOfferPayload);
+
+    // 1) check cache first, only accept if signature matches
     try {
       const stored = loadCacheFromStorage();
-      if (stored && stored.pricing && stored.pricing[key]) {
+      if (stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature) {
         // populate from cache and expand details without calling API
         setPricingByFlight(prev => ({ ...prev, [key]: stored.pricing[key] }));
         if (stored.seatmap && stored.seatmap[key]) {
@@ -223,15 +299,14 @@ export default function FlightResults({
         setSelectedSeat(null);
         setSeatmapOpenForFlightId(key);
         setExpandedFlight(flight.id ?? flightOfferPayload.id ?? null);
-        // no fetch required
-        return;
+        setSignaturesByFlight(prev => ({ ...prev, [key]: stored.signatures[key] }));
+        return { fromCache: true, key, signature, pricing: stored.pricing[key], seatmap: stored.seatmap?.[key] ?? null };
       }
     } catch (e) {
-      // proceed to fetch if any issue reading cache
       console.warn('Cache read error', e);
     }
 
-    // 2) not cached -> perform pricing + seatmap fetch (existing behavior)
+    // 2) not cached or signature mismatch -> perform pricing + seatmap fetch
     try {
       setPricingLoadingFor(key, true);
       const token = await fetchAmadeusToken();
@@ -283,24 +358,32 @@ export default function FlightResults({
       setSeatmapOpenForFlightId(key);
       setExpandedFlight(flight.id ?? flightOfferPayload.id ?? null);
 
-      // persist into localStorage cache (merge with existing)
+      // compute signature for saved payload (use original payload)
+      const sigToSave = signature ?? computeSignatureForPayload(flightOfferPayload) ?? null;
+
+      // persist into localStorage cache (merge with existing), also store signature map
       try {
         const existing = loadCacheFromStorage();
         const merged = {
           pricing: { ...(existing.pricing || {}), [key]: pricingJson },
           seatmap: { ...(existing.seatmap || {}), [key]: normalizedSeat },
+          signatures: { ...(existing.signatures || {}), [key]: sigToSave },
           ts: Date.now()
         };
         saveCacheToStorage(merged);
+        setSignaturesByFlight(prev => ({ ...prev, [key]: sigToSave }));
       } catch (e) {
         console.warn('Cache write error', e);
       }
 
       // feedback unchanged
       alert('Pricing & seatmaps response logged to console');
+
+      return { fromCache: false, key, signature: sigToSave, pricing: pricingJson, seatmap: normalizedSeat };
     } catch (err) {
       console.error('Pricing/Seatmap error', err);
       alert('Pricing/Seatmap error — see console for details');
+      return null;
     } finally {
       setPricingLoadingFor(key, false);
     }
@@ -421,21 +504,63 @@ export default function FlightResults({
                     <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
                       <Button
                         className="w-full lg:w-auto"
-                        // DON'T trigger pricing here anymore
-                        onClick={() => console.log('Selected flight', flight.id)}
+                        onClick={async () => {
+                          const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOffer(flight);
+                          const key = String(flight.id ?? flightOfferPayload.id ?? 'unknown');
+                          const signature = computeSignatureForPayload(flightOfferPayload);
+
+                          // quick cache check: must exist and signature must match
+                          const stored = loadCacheFromStorage();
+                          const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
+
+                          if (hasCachedAndMatchingSig) {
+                            // populate and proceed without fetching
+                            populateFromCache(key);
+                            console.log('Selected flight (from cache)', flight.id);
+                            // navigate to details page after ensuring state populated
+                            router.push(`/ve-may-bay/${key}`);
+                            return;
+                          }
+
+                          // not cached or signature mismatch -> fetch then proceed
+                          setPricingLoadingFor(key, true);
+                          const res = await handlePriceOffer(flight);
+                          setPricingLoadingFor(key, false);
+
+                          if (res) {
+                            populateFromCache(res.key);
+                            console.log('Selected flight (after fetch)', flight.id);
+                            // navigate to details page
+                            router.push(`/ve-may-bay/${res.key}`);
+                          } else {
+                            console.warn('Could not retrieve pricing for selection');
+                          }
+                        }}
                         disabled={Boolean(pricingLoadingByFlight[String(flight.id)])}
                       >
                         {pricingLoadingByFlight[String(flight.id)] ? 'Đang chờ chi tiết' : 'Chọn chuyến bay'}
                       </Button>
+
                       <Button
                         variant="ghost"
                         size="sm"
-                        // When user clicks "Chi tiết" -> expand details AND start pricing/seatmap fetch
-                        onClick={() => {
+                        onClick={async () => {
                           const opening = expandedFlight !== flight.id;
                           if (opening) {
+                            // Before expanding, check cache+signature and avoid fetch if valid
+                            const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOffer(flight);
+                            const key = String(flight.id ?? flightOfferPayload.id ?? 'unknown');
+                            const signature = computeSignatureForPayload(flightOfferPayload);
+                            const stored = loadCacheFromStorage();
+                            const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
+
                             setExpandedFlight(flight.id);
-                            handlePriceOffer(flight);
+                            if (hasCachedAndMatchingSig) {
+                              populateFromCache(key);
+                              return;
+                            }
+                            // otherwise trigger pricing+seatmap fetch and expand when done
+                            await handlePriceOffer(flight);
                           } else {
                             setExpandedFlight(null);
                           }
