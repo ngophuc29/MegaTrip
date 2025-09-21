@@ -483,11 +483,21 @@ export default function ChiTietVeMayBay() {
     };
     // Tính tổng tiền
     const calculateTotal = () => {
-        // Use derived traveler totals when available (prefer precise pricing from API)
-        const useDerived = (Array.isArray(travelerPricings) && travelerPricings.length > 0);
-        const adultTotal = useDerived ? derived.adultsTotal : participants.adults * flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
-        const childTotal = useDerived ? derived.childrenTotal : participants.children * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
-        const infantTotal = useDerived ? derived.infantsTotal : participants.infants * Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
+        // Prefer derived per-unit prices when available (more robust if traveler breakdown exists),
+        // otherwise fallback to fareRules-based approximations.
+        const adultUnit = (derived.adultsUnit && derived.adultsUnit > 0)
+            ? derived.adultsUnit
+            : flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
+        const childUnit = (derived.childrenUnit && derived.childrenUnit > 0)
+            ? derived.childrenUnit
+            : Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
+        const infantUnit = (derived.infantsUnit && derived.infantsUnit > 0)
+            ? derived.infantsUnit
+            : Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
+
+        const adultTotal = adultUnit * participants.adults;
+        const childTotal = childUnit * participants.children;
+        const infantTotal = infantUnit * participants.infants;
 
         const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
             const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
@@ -496,8 +506,22 @@ export default function ChiTietVeMayBay() {
             const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
             return total + ((addOn?.price || 0) * qty);
         }, 0);
+
         const seatSelectedTotal = selectedSeats.reduce((sum, s) => sum + (s.price || 0), 0);
         return adultTotal + childTotal + infantTotal + addOnTotal + seatSelectedTotal;
+    };
+
+    // compute only extras (add-ons + seat fees) to be added on top of derived.offerTotal when present
+    const computeExtras = () => {
+        const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
+            const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
+            if (!addOn) return total;
+            const per = addOnPerPassenger[addOnId] ?? false;
+            const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
+            return total + ((addOn?.price || 0) * qty);
+        }, 0);
+        const seatSelectedTotal = selectedSeats.reduce((sum, s) => sum + (s.price || 0), 0);
+        return addOnTotal + seatSelectedTotal;
     };
 
     const getAmenityIcon = (amenity: string) => {
@@ -753,6 +777,21 @@ export default function ChiTietVeMayBay() {
         derived.childrenTotal = derived.childrenUnit * derived.childrenCount;
         derived.infantsTotal = derived.infantsUnit * derived.infantsCount;
     }
+
+    // --- NEW: tổng add-ons và seat fees để hiển thị cùng pricing khi có offerTotal ---
+    const addOnTotalForDisplay = selectedAddOns.reduce((total, addOnId) => {
+        const addOn = dynamicAddOnServices.find(s => s.id === addOnId);
+        if (!addOn) return total;
+        const per = addOnPerPassenger[addOnId] ?? false;
+        const qty = per ? totalParticipants : 1;
+        return total + ((Number(addOn.price) || 0) * qty);
+    }, 0);
+
+    const seatSelectedTotalForDisplay = selectedSeats.reduce((t, s) => t + (Number(s.price) || 0), 0);
+
+    const totalCombined = (derived.offerTotal && derived.offerTotal > 0)
+        ? (Number(derived.offerTotal || 0) + addOnTotalForDisplay + seatSelectedTotalForDisplay)
+        : calculateTotal();
 
     return (
         <>
@@ -1383,8 +1422,8 @@ export default function ChiTietVeMayBay() {
                                         <span>Tổng cộng (giá từ pricing)</span>
                                         <span className="text-[hsl(var(--primary))]">
                                             {currency === 'VND'
-                                                ? formatPrice( Math.round( (derived.offerTotal && derived.offerTotal > 0) ? derived.offerTotal : calculateTotal() ) )
-                                                : `${Math.round( (derived.offerTotal && derived.offerTotal > 0) ? derived.offerTotal : calculateTotal() ).toLocaleString()} ${currency}`}
+                                                ? formatPrice(Math.round(totalCombined))
+                                                : `${Math.round(totalCombined).toLocaleString()} ${currency}`}
                                         </span>
                                     </div>
                                     <div className="text-xs text-[hsl(var(--muted-foreground))]">
