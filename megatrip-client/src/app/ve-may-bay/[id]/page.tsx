@@ -648,7 +648,7 @@ export default function ChiTietVeMayBay() {
                         >
                             <span className="font-semibold">{s.number}</span>
                             {!isFree && s.price > 0 && s.availability === 'AVAILABLE' && (
-                                <span className="text-[8px] text-yellow-700 mt-0.5">₫</span>
+                                <span className="text-[8px] text-yellow-700 mt-0.5"></span>
                             )}
                         </button>
 
@@ -967,20 +967,12 @@ export default function ChiTietVeMayBay() {
                         </Card>
                         {/* Seatmap (showable, compact) */}
                         <div ref={(el) => { seatmapRef.current = el as HTMLElement | null; }} className="shadow-lg rounded-2xl bg-white p-5">
-                             {/* Header */}
-                             <div className="mb-4">
-                                 <h2 className="text-lg font-semibold flex items-center gap-2">
-                                     🪑 Sơ đồ chỗ ngồi
-                                 </h2>
-                            {/* <p className="text-sm text-gray-500">
-                                Chọn ghế — ghế miễn phí sẽ tự gán nếu đủ chỗ, ghế có giá hiển thị badge.
-                            </p>
-                             <p className="text-sm text-gray-500">
-                                 Chọn ghế — hệ thống sẽ tự gán ghế miễn phí cho số hành khách đã đăng ký.
-                                 Nếu bạn bật "Chọn chỗ ngồi", trang sẽ cuộn xuống sơ đồ ghế và bạn có thể đổi ghế.
-                                 Lưu ý: đổi sang ghế có ký hiệu CH và giá sẽ yêu cầu xác nhận và tính phí.
-                             </p> */}
-                             </div>
+                            {/* Header */}
+                            <div className="mb-4">
+                                <h2 className="text-lg font-semibold flex items-center gap-2">
+                                    🪑 Sơ đồ chỗ ngồi
+                                </h2>
+                            </div>
 
                             {/* Info banner */}
                             {showSeatSelectionInstruction && (
@@ -1004,7 +996,7 @@ export default function ChiTietVeMayBay() {
                             </div>
 
                             {/* Seat map */}
-                            <div className="space-y-3">
+                            <div className="space-y-3 flex flex-col items-center">
                                 {/** column layout: letters with aisles after C and F */}
                                 {seatRows.map((row) => {
                                     const letters = ['A','B','C','_aisle','D','E','F','_aisle','G','H','K'];
@@ -1015,10 +1007,19 @@ export default function ChiTietVeMayBay() {
                                         seatMap[letter] = s;
                                     });
 
+                                    // NEW: detect if any seat in this row will render a top price badge (CH + explicit price)
+                                    const rowHasTopBadge = row.seats.some((s: any) => {
+                                        const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                                        const hasCH = charsUp.includes('CH');
+                                        const explicitPrice = Number(s.price || 0) > 0;
+                                        return hasCH && explicitPrice;
+                                    });
+
                                     return (
-                                        <div key={row.row} className="grid grid-cols-[48px_repeat(11,44px)] items-center gap-2 relative">
+                                        // NOTE: added conditional padding-top when rowHasTopBadge to avoid price badge overlap
+                                        <div key={row.row} className={`grid grid-cols-[44px_repeat(11,44px)] items-center gap-2 relative ${rowHasTopBadge ? 'pt-4' : ''}`}>
                                             {/* row number column */}
-                                            <div className="w-12 text-center font-bold text-sm">{row.row}</div>
+                                            <div className="w-11 text-center font-bold text-sm">{row.row}</div>
 
                                             {/* seats + aisles columns */}
                                             {letters.map((col: string, idx) => {
@@ -1078,7 +1079,7 @@ export default function ChiTietVeMayBay() {
                                                                 <span className="font-semibold text-xs leading-none">{s.number}</span>
                                                                 {/* quick cue inside seat: explicit price => currency symbol; CH present but no explicit price => "CH" */}
                                                                 {explicitPrice && s.price > 0 && s.availability === 'AVAILABLE' && (
-                                                                    <span className="text-[10px] text-yellow-700 mt-0.5">₫</span>
+                                                                    <span className="text-[10px] text-yellow-700 mt-0.5"></span>
                                                                 )}
                                                                 {!explicitPrice && hasCH && s.availability === 'AVAILABLE' && (
                                                                     <span className="text-[9px] text-yellow-700 mt-0.5 font-semibold">CH</span>
@@ -1122,9 +1123,8 @@ export default function ChiTietVeMayBay() {
                                      <div>Ghế trống (AVAILABLE)</div>
                                  </div>
                                  <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]">₫</div>
--                                    <div>Ghế trả phí (badge)</div>
-+                                    <div>Ghế trả phí (CH hoặc có giá)</div>
+                                     <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]"></div>
+                                     <div>Ghế trả phí (CH hoặc có giá)</div>
                                  </div>
                                  <div className="flex items-center gap-2">
                                      <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
