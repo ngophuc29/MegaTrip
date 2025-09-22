@@ -291,9 +291,9 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         travelClass: travelClass,
         nonStop: 'true',
         currencyCode: 'VND',
-        max: String(5),
+        max: String(3), // normalized to 3 to match TravelokaBanner
         // always prefer VN by default
-        includedAirlineCodes: 'VN'
+        // includedAirlineCodes: 'VN'
       };
       // include returnDate only for roundtrip
       if (returnDate) payload.returnDate = returnDate;
