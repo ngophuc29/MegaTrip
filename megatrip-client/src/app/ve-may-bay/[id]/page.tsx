@@ -158,6 +158,30 @@ export default function ChiTietVeMayBay() {
         address: '',
     });
 
+    // add: validation state for lead passenger + contact
+	const [passengerErrors, setPassengerErrors] = useState<Record<string, string>>({});
+	const [contactErrors, setContactErrors] = useState<Record<string, string>>({});
+
+	const validateLeadPassengerAndContact = () => {
+		const pErr: Record<string, string> = {};
+		const cErr: Record<string, string> = {};
+
+		// passenger required fields (lead passenger)
+		if (!passengerInfo.firstName || String(passengerInfo.firstName).trim() === '') pErr.firstName = 'Họ và tên đệm bắt buộc';
+		if (!passengerInfo.lastName || String(passengerInfo.lastName).trim() === '') pErr.lastName = 'Tên bắt buộc';
+		if (!passengerInfo.dateOfBirth || String(passengerInfo.dateOfBirth).trim() === '') pErr.dateOfBirth = 'Ngày sinh bắt buộc';
+		if (!passengerInfo.idNumber || String(passengerInfo.idNumber).trim() === '') pErr.idNumber = 'Số giấy tờ bắt buộc';
+
+		// contact required
+		if (!contactInfo.email || String(contactInfo.email).trim() === '') cErr.email = 'Email liên hệ bắt buộc';
+		if (!contactInfo.phone || String(contactInfo.phone).trim() === '') cErr.phone = 'Số điện thoại liên hệ bắt buộc';
+
+		setPassengerErrors(pErr);
+		setContactErrors(cErr);
+
+		return Object.keys(pErr).length === 0 && Object.keys(cErr).length === 0;
+	};
+
     useEffect(() => {
         if (!id) return;
         try {
@@ -270,7 +294,7 @@ export default function ChiTietVeMayBay() {
                 // load amenities
                 setAircraftAmenities(raw?.aircraftCabinAmenities ?? null);
                 // auto-assign free seats if available and not yet selected
-             
+
                 // Auto-assign up to totalParticipants free seats (AVAILABLE, price === 0, and NOT marked CH)
                 const totalNeeded = participants.adults + participants.children + participants.infants;
                 const freeSeats = allSeats.filter(s => {
@@ -540,39 +564,39 @@ export default function ChiTietVeMayBay() {
 
     // --- CHANGED: toggleSeat with confirm-on-change and confirm-on-paid logic ---
     const toggleSeat = (seat: any) => {
-		if (!seat || seat.availability !== 'AVAILABLE') return;
+        if (!seat || seat.availability !== 'AVAILABLE') return;
 
-	const exists = selectedSeats.find(s => s.id === seat.id);
-	if (exists) {
-		// deselect
-		setSelectedSeats(prev => prev.filter(s => s.id !== seat.id));
-		return;
-	}
+        const exists = selectedSeats.find(s => s.id === seat.id);
+        if (exists) {
+            // deselect
+            setSelectedSeats(prev => prev.filter(s => s.id !== seat.id));
+            return;
+        }
 
-	// detect paid seat: require CH AND numeric price
-	const chars = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-	const hasCH = chars.includes('CH');
-	const explicitPrice = Number(seat.price || 0) > 0;
-	const isPaidSeat = hasCH && explicitPrice;
-	const max = participants.adults + participants.children + participants.infants;
+        // detect paid seat: require CH AND numeric price
+        const chars = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+        const hasCH = chars.includes('CH');
+        const explicitPrice = Number(seat.price || 0) > 0;
+        const isPaidSeat = hasCH && explicitPrice;
+        const max = participants.adults + participants.children + participants.infants;
 
-	// if selecting a paid seat, ask user confirm
-	if (isPaidSeat) {
-		const msgPrice = seat.currency && seat.currency !== 'VND' ? `${seat.price.toLocaleString()} ${seat.currency}` : formatPrice(seat.price);
-		const ok = window.confirm(`Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`);
-		if (!ok) return;
-	}
-	// if already selected max seats, ask to replace first selected seat
-	if (selectedSeats.length >= max && max > 0) {
-		const toReplace = selectedSeats[0];
-			const ok = window.confirm(`Bạn đã chọn đủ ${max} ghế. Thay thế ghế ${toReplace.number} bằng ghế ${seat.number}?`);
-			if (!ok) return;
-			setSelectedSeats(prev => [...prev.slice(1), seat]);
-			return;
-		}
+        // if selecting a paid seat, ask user confirm
+        if (isPaidSeat) {
+            const msgPrice = seat.currency && seat.currency !== 'VND' ? `${seat.price.toLocaleString()} ${seat.currency}` : formatPrice(seat.price);
+            const ok = window.confirm(`Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`);
+            if (!ok) return;
+        }
+        // if already selected max seats, ask to replace first selected seat
+        if (selectedSeats.length >= max && max > 0) {
+            const toReplace = selectedSeats[0];
+            const ok = window.confirm(`Bạn đã chọn đủ ${max} ghế. Thay thế ghế ${toReplace.number} bằng ghế ${seat.number}?`);
+            if (!ok) return;
+            setSelectedSeats(prev => [...prev.slice(1), seat]);
+            return;
+        }
 
-		// normal add
-	setSelectedSeats(prev => [...prev, seat]);
+        // normal add
+        setSelectedSeats(prev => [...prev, seat]);
     };
 
     {/* Component Legend nhỏ gọn */ }
@@ -675,32 +699,32 @@ export default function ChiTietVeMayBay() {
     };
 
     // ensure selectedSeats always matches participants count:
-	useEffect(() => {
-		const max = participants.adults + participants.children + participants.infants;
-		// trim if too many selected
-		if (selectedSeats.length > max) {
-			setSelectedSeats(prev => prev.slice(0, max));
-			return;
-		}
+    useEffect(() => {
+        const max = participants.adults + participants.children + participants.infants;
+        // trim if too many selected
+        if (selectedSeats.length > max) {
+            setSelectedSeats(prev => prev.slice(0, max));
+            return;
+        }
 
-		// if fewer than needed, try to auto-assign additional free seats
-		if (selectedSeats.length < max && seatRows.length > 0) {
-			const alreadyIds = new Set(selectedSeats.map(s => s.id));
-			// gather all seats from seatRows
-			const allSeats = seatRows.flatMap(r => r.seats || []);
-			// filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
-			const freeSeats = allSeats.filter(s => {
-				const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-				const hasCH = chars.includes('CH');
-				const priceIsZero = Number(s.price || 0) === 0;
-				return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
-			});
-			if (freeSeats.length > 0) {
-				const need = Math.min(max - selectedSeats.length, freeSeats.length);
-				setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
-			}
-		}
-	}, [participants.adults, participants.children, participants.infants, seatRows]); 
+        // if fewer than needed, try to auto-assign additional free seats
+        if (selectedSeats.length < max && seatRows.length > 0) {
+            const alreadyIds = new Set(selectedSeats.map(s => s.id));
+            // gather all seats from seatRows
+            const allSeats = seatRows.flatMap(r => r.seats || []);
+            // filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
+            const freeSeats = allSeats.filter(s => {
+                const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                const hasCH = chars.includes('CH');
+                const priceIsZero = Number(s.price || 0) === 0;
+                return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+            });
+            if (freeSeats.length > 0) {
+                const need = Math.min(max - selectedSeats.length, freeSeats.length);
+                setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
+            }
+        }
+    }, [participants.adults, participants.children, participants.infants, seatRows]);
 
     // --- NEW: safe number parser + derive traveler-level pricing when available ---
     const parseNumberSafe = (v: any) => {
@@ -708,12 +732,12 @@ export default function ChiTietVeMayBay() {
         const n = Number(String(v).replace(/[^\d.-]/g, ''));
         return Number.isFinite(n) ? n : 0;
     };
-    
+
     const travelerPricings = normalizedOffer?.travelerPricings
         ?? cachedPricing?.data?.flightOffers?.[0]?.travelerPricings
         ?? cachedPricing?.travelerPricings
         ?? [];
-    
+
     // derived summary used by UI / calculateTotal
     const derived: {
         adultsCount: number;
@@ -960,7 +984,7 @@ export default function ChiTietVeMayBay() {
                                                 </div>
                                             </div>
                                         </div>
-                                        
+
                                     ))}
                                 </div>
                             </CardContent>
@@ -999,7 +1023,7 @@ export default function ChiTietVeMayBay() {
                             <div className="space-y-3 flex flex-col items-center">
                                 {/** column layout: letters with aisles after C and F */}
                                 {seatRows.map((row) => {
-                                    const letters = ['A','B','C','_aisle','D','E','F','_aisle','G','H','K'];
+                                    const letters = ['A', 'B', 'C', '_aisle', 'D', 'E', 'F', '_aisle', 'G', 'H', 'K'];
                                     // map seats by letter for quick lookup
                                     const seatMap: Record<string, any> = {};
                                     row.seats.forEach((s: any) => {
@@ -1026,7 +1050,9 @@ export default function ChiTietVeMayBay() {
                                                 if (col === '_aisle') {
                                                     return (
                                                         <div key={idx} className="h-10 flex items-center justify-center">
-                                                            <div className="w-full h-2 bg-gray-100 rounded" />
+                                                            <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center" >
+                                                                <span className='text-[10px] text-gray-500 space-x-1'>Lối đi</span>
+                                                            </div>
                                                         </div>
                                                     );
                                                 }
@@ -1052,8 +1078,8 @@ export default function ChiTietVeMayBay() {
                                                 let seatType = 'M';
                                                 if (charsUp.includes('EXIT') || charsUp.includes('EXIT_ROW')) seatType = 'EX';
                                                 else if (charsUp.includes('GALLEY') || charsUp.includes('GAL')) seatType = 'GAL';
-                                                else if (charsUp.includes('AISLE') || ['C','D','F','G'].includes(col)) seatType = 'A';
-                                                else if (charsUp.includes('WINDOW') || ['A','K','F'].includes(col)) seatType = 'W';
+                                                else if (charsUp.includes('AISLE') || ['C', 'D', 'F', 'G'].includes(col)) seatType = 'A';
+                                                else if (charsUp.includes('WINDOW') || ['A', 'K', 'F'].includes(col)) seatType = 'W';
 
                                                 const baseUnavailable = 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed';
                                                 const baseSelected = 'bg-[hsl(var(--primary))] text-white shadow-md';
@@ -1112,41 +1138,41 @@ export default function ChiTietVeMayBay() {
                                     );
                                 })}
                             </div>
-                             {/* Legend */}
+                            {/* Legend */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-600 mt-6">
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded bg-[hsl(var(--primary))] border border-[hsl(var(--primary))]"></div>
-                                     <div>Đang chọn</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded border bg-white border-gray-300"></div>
-                                     <div>Ghế trống (AVAILABLE)</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]"></div>
-                                     <div>Ghế trả phí (CH hoặc có giá)</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
-                                     <div>Không khả dụng / Đã đặt</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">W</div>
-                                     <div>Cửa sổ (Window)</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">A</div>
-                                     <div>Hàng lối (Aisle)</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">EX</div>
-                                     <div>Cửa thoát hiểm</div>
-                                 </div>
-                                 <div className="flex items-center gap-2">
-                                     <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">GAL</div>
-                                     <div>Galley</div>
-                                 </div>
-                             </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded bg-[hsl(var(--primary))] border border-[hsl(var(--primary))]"></div>
+                                    <div>Đang chọn</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded border bg-white border-gray-300"></div>
+                                    <div>Ghế trống (AVAILABLE)</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]"></div>
+                                    <div>Ghế trả phí (CH hoặc có giá)</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
+                                    <div>Không khả dụng / Đã đặt</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">W</div>
+                                    <div>Cửa sổ (Window)</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">A</div>
+                                    <div>Hàng lối (Aisle)</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">EX</div>
+                                    <div>Cửa thoát hiểm</div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">GAL</div>
+                                    <div>Galley</div>
+                                </div>
+                            </div>
 
                             <p className="text-xs text-gray-500 mt-2">
                                 Ghế miễn phí sẽ tự gán nếu còn đủ cho {totalParticipants} khách.
@@ -1186,10 +1212,16 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="firstName">Họ và tên đệm</Label>
                                                 <Input id="firstName" value={passengerInfo.firstName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, firstName: e.target.value }))} placeholder="VD: NGUYEN VAN" />
+                                                { passengerErrors.firstName && (
+	<div className="text-xs text-red-600 mt-1">{passengerErrors.firstName}</div>
+) }
                                             </div>
                                             <div>
                                                 <Label htmlFor="lastName">Tên</Label>
                                                 <Input id="lastName" value={passengerInfo.lastName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, lastName: e.target.value }))} placeholder="VD: AN" />
+                                                { passengerErrors.lastName && (
+	<div className="text-xs text-red-600 mt-1">{passengerErrors.lastName}</div>
+) }
                                             </div>
                                         </div>
 
@@ -1199,6 +1231,9 @@ export default function ChiTietVeMayBay() {
                                                 <Input id="dateOfBirth" type="date"
                                                     className="block h-12 bg-white shadow-md text-black w-full"
                                                     value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
+                                                    { passengerErrors.dateOfBirth && (
+	<div className="text-xs text-red-600 mt-1">{passengerErrors.dateOfBirth}</div>
+) }
                                             </div>
                                             <div>
                                                 <Label htmlFor="nationality">Quốc tịch</Label>
@@ -1232,6 +1267,9 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="idNumber">Số giấy tờ</Label>
                                                 <Input id="idNumber" value={passengerInfo.idNumber} onChange={(e) => setPassengerInfo(prev => ({ ...prev, idNumber: e.target.value }))} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
+                                                { passengerErrors.idNumber && (
+	<div className="text-xs text-red-600 mt-1">{passengerErrors.idNumber}</div>
+) }
                                             </div>
                                         </div>
                                     </TabsContent>
@@ -1241,10 +1279,16 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="email">Email *</Label>
                                                 <Input id="email" type="email" value={contactInfo.email} onChange={(e) => setContactInfo(prev => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" />
+                                                { contactErrors.email && (
+	<div className="text-xs text-red-600 mt-1">{contactErrors.email}</div>
+) }
                                             </div>
                                             <div>
                                                 <Label htmlFor="phone">Số điện thoại *</Label>
                                                 <Input id="phone" value={contactInfo.phone} onChange={(e) => setContactInfo(prev => ({ ...prev, phone: e.target.value }))} placeholder="0912345678" />
+                                                { contactErrors.phone && (
+	<div className="text-xs text-red-600 mt-1">{contactErrors.phone}</div>
+) }
                                             </div>
                                         </div>
                                         <div>
@@ -1347,11 +1391,17 @@ export default function ChiTietVeMayBay() {
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="font-medium">Chuyến bay</span>
-                                        <span className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.flightNumber}</span>
+                                        <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                                            {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                            {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
+                                        </span>
                                     </div>
                                     <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        {flightDetails.departure.city} → {flightDetails.arrival.city}<br />
-                                        {flightDetails.date} • {flightDetails.departure.time} - {flightDetails.arrival.time}
+                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} ({flightDetails.departure.city}) →
+                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} ({flightDetails.arrival.city})<br />
+                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} •
+                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} -
+                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
                                     </div>
                                 </div>
                                 <Separator />
@@ -1452,35 +1502,128 @@ export default function ChiTietVeMayBay() {
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
                                     <Button className="w-full" size="lg" onClick={() => {
-                                        // Tính toán giá trị booking
-                                        const basePrice = flightDetails.fareRules[selectedFare].price * participants.adults;
-                                        const taxes = 290000 * (participants.adults + participants.children + participants.infants); // demo
-                                        const addOns = selectedAddOns.reduce((total, addOnId) => {
-                                            const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-                                            return total + (addOn?.price || 0) * (participants.adults + participants.children + participants.infants);
-                                        }, 0);
-                                        const seatsCost = selectedSeats.reduce((t, s) => t + (s.price || 0), 0);
-                                        const discount = flightDetails.discount ? -Math.round(basePrice * flightDetails.discount / 100) : 0;
-                                        const total = basePrice + taxes + addOns + seatsCost + discount;
-                                        // Chuyển sang trang thanh toán với param
-                                        const params = new URLSearchParams({
-                                            type: 'flight',
-                                            route: `${flightDetails.departure.city} → ${flightDetails.arrival.city}`,
-                                            date: flightDetails.date,
-                                            time: `${flightDetails.departure.time} - ${flightDetails.arrival.time}`,
-                                            flightNumber: flightDetails.flightNumber,
-                                            airline: flightDetails.airline,
-                                            basePrice: basePrice.toString(),
-                                            taxes: taxes.toString(),
-                                            addOns: addOns.toString(),
-                                            seats: selectedSeats.map(s => s.number).join(','),
-                                            discount: discount.toString(),
-                                            total: total.toString(),
-                                            adults: participants.adults.toString(),
-                                            children: participants.children.toString(),
-                                            infants: participants.infants.toString(),
+                                        // validate lead passenger + contact (defined above)
+                                        if (!validateLeadPassengerAndContact()) {
+                                            // passengerErrors / contactErrors are set and will be shown under inputs
+                                            // show brief notice and stop navigation
+                                            window.scrollTo({ top: 200, behavior: 'smooth' });
+                                            alert('Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.');
+                                            return;
+                                        }
+
+                                        // Build comprehensive booking payload to pass to payment page
+                                        const paxCount = participants.adults + participants.children + participants.infants;
+
+                                        // pricing breakdown (prefer derived if available)
+                                        const pricingPerPax = {
+                                            adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
+                                            childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
+                                            infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
+                                        };
+                                        const paxTotals = {
+                                            adultsTotal: pricingPerPax.adultUnit * participants.adults,
+                                            childrenTotal: pricingPerPax.childUnit * participants.children,
+                                            infantsTotal: pricingPerPax.infantUnit * participants.infants,
+                                        };
+
+                                        // add-ons with qty determined by addOnPerPassenger flags
+                                        const addOnsDetailed = selectedAddOns.map(id => {
+                                            const svc = dynamicAddOnServices.find(s => s.id === id) ?? { id, name: id, price: 0 };
+                                            const per = addOnPerPassenger[id] ?? false;
+                                            const qty = per ? paxCount : 1;
+                                            return {
+                                                id: svc.id,
+                                                name: svc.name,
+                                                unitPrice: Number(svc.price) || 0,
+                                                qty,
+                                                total: (Number(svc.price) || 0) * qty,
+                                                perPassenger: per
+                                            };
                                         });
-                                        router.push(`/thanh-toan?${params.toString()}`);
+
+                                        // seats selected
+                                        const seatsDetailed = selectedSeats.map((s) => ({
+                                            id: s.id,
+                                            number: s.number,
+                                            price: Number(s.price) || 0,
+                                            currency: s.currency || currency || 'VND'
+                                        }));
+
+                                        // taxes / fees estimate (keep existing demo calc as fallback)
+                                        const taxesEstimate = (() => {
+                                            // try to derive from cachedPricing / normalizedOffer if possible
+                                            const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
+                                            if (offerTotal && offerTotal > 0) {
+                                                // taxes = offerTotal - sum(pax base totals)
+                                                const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
+                                                const t = Math.max(0, Math.round(offerTotal - paxSum));
+                                                return t || (290000 * paxCount);
+                                            }
+                                            return 290000 * paxCount;
+                                        })();
+
+                                        // totals
+                                        const addOnsTotal = addOnsDetailed.reduce((s, a) => s + a.total, 0);
+                                        const seatsTotal = seatsDetailed.reduce((s, a) => s + a.price, 0);
+                                        const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
+                                        const estimatedTotal = passengerBaseTotal + taxesEstimate + addOnsTotal + seatsTotal;
+
+                                        // build booking.flight from real offer/pricing when available (normalizedOffer/mappedOffer/cachedPricing)
+                                        const offerSeg = normalizedOffer?.itineraries?.[0]?.segments?.[0] ?? mappedOffer?.rawOffer?.itineraries?.[0]?.segments?.[0] ?? null;
+                                        const dep = offerSeg?.departure ?? null;
+                                        const arr = offerSeg?.arrival ?? null;
+                                        const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
+                                        const number = offerSeg?.number ?? null;
+                                        const flightNumberStr = carrier && number ? `${carrier}${number}` : (normalizedOffer?.id ?? mappedOffer?.rawOffer?.id ?? flightDetails.flightNumber);
+                                        const airlineName = (normalizedOffer?.validatingAirlineCodes && normalizedOffer.validatingAirlineCodes[0]) || flightDetails.airline;
+                                        const routeStr = `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
+                                        const dateStr = dep?.at?.split('T')?.[0] ?? flightDetails.date;
+                                        const timeStr = (dep?.at ? dep.at.split('T')[1]?.slice(0,5) : null) && (arr?.at ? arr.at.split('T')[1]?.slice(0,5) : null)
+                                        ? `${dep.at.split('T')[1].slice(0,5)} - ${arr.at.split('T')[1].slice(0,5)}`
+                                        : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+
+                                    const booking = {
+                                        source: 'megatrip-client',
+                                        flight: {
+                                            id: normalizedOffer?.id ?? mappedOffer?.rawOffer?.id ?? flightDetails.id,
+                                            flightNumber: flightNumberStr,
+                                            airline: airlineName,
+                                            route: routeStr,
+                                            date: dateStr,
+                                            time: timeStr,
+                                            itineraries: normalizedOffer?.itineraries ?? mappedOffer?.rawOffer?.itineraries ?? null,
+                                            currency,
+                                        },
+                                        passengers: {
+                                            counts: { ...participants },
+                                            contactInfo,
+                                            leadPassenger: passengerInfo
+                                        },
+                                        pricing: {
+                                            perPax: pricingPerPax,
+                                            paxTotals,
+                                            taxesEstimate,
+                                            addOns: addOnsDetailed,
+                                            seats: seatsDetailed,
+                                            passengerBaseTotal,
+                                            addOnsTotal,
+                                            seatsTotal,
+                                            estimatedTotal,
+                                            offerTotal: derived.offerTotal || null
+                                        },
+                                        rawPricing: cachedPricing ?? mappedOffer?.rawOffer ?? null,
+                                        timestamp: Date.now()
+                                    };
+
+                                        // save to sessionStorage and navigate with bookingKey
+                                        try {
+                                            const bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                                            sessionStorage.setItem(bookingKey, JSON.stringify(booking));
+                                            router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
+                                        } catch (e) {
+                                            console.error('Lỗi lưu booking', e);
+                                            alert('Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.');
+                                        }
                                     }}>
                                         Tiếp tục thanh toán
                                     </Button>

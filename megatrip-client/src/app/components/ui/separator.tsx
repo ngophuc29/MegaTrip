@@ -16,7 +16,8 @@ const Separator = React.forwardRef<
       decorative={decorative}
       orientation={orientation}
       className={cn(
-        "shrink-0 bg-border",
+        // use a visible default color to ensure the separator is shown even if `bg-border` token is missing
+        "shrink-0 bg-gray-200 dark:bg-gray-700",
         orientation === "horizontal" ? "h-[1px] w-full" : "h-full w-[1px]",
         className,
       )}
@@ -24,6 +25,6 @@ const Separator = React.forwardRef<
     />
   ),
 );
-Separator.displayName = SeparatorPrimitive.Root.displayName;
+Separator.displayName = "Separator";
 
 export { Separator };
