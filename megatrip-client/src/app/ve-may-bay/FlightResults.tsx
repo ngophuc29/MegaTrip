@@ -1,12 +1,11 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
-import { Plane, Wifi, Utensils, Luggage, ChevronUp, ChevronDown, Gift, CheckCircle, Shield, X, RefreshCw, Tv, Battery, ArrowRight, Info } from 'lucide-react';
-import Link from 'next/link';
-import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { Plane, ArrowRight, Wifi, Utensils, Luggage, Tv, Battery, Shield, X, RefreshCw, Gift, ChevronUp, ChevronDown, CheckCircle } from 'lucide-react';
 
 function CardSkeleton() {
   return (
@@ -49,7 +48,7 @@ export default function FlightResults({
   expandedFlight,
   setExpandedFlight,
   formatPrice
-}) {
+}: any) {
   const router = useRouter();
 
   // per-flight pricing loading state so one click doesn't disable whole list
@@ -403,7 +402,6 @@ export default function FlightResults({
     }
   };
 
-  // ...existing code (render) ...
   return (
     <div className="space-y-4">
       {isLoading ? (
@@ -1250,3 +1248,4 @@ export default function FlightResults({
     </div>
   );
 }
+

@@ -248,10 +248,9 @@ export default function TravelokaBanner() {
         setPassengerCounts({ adults, children, infants });
       }
 
-      const payload: Record<string, string> = {
+      const base: Record<string, string> = {
         originLocationCode: originCode,
         destinationLocationCode: destCode,
-        departureDate,
         adults: String(adults),
         children: String(children),
         infants: String(infants),
@@ -261,18 +260,22 @@ export default function TravelokaBanner() {
         includedAirlineCodes: 'VN',
         max: String(3)
       };
-      if (returnDate) payload.returnDate = returnDate;
+      const outbound = { ...base, departureDate };
+      const inbound = (tripType === 'roundtrip' && returnDate) ? { ...base, originLocationCode: destCode, destinationLocationCode: originCode, departureDate: returnDate } : null;
 
+      console.log('Outbound payload (TravelokaBanner):', outbound);
+      if (inbound) console.log('Inbound payload (TravelokaBanner):', inbound);
+
+      const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      if (!ok) return;
+
+      const payload: Record<string, string> = { ...outbound };
+      if (inbound) payload.returnDate = inbound.departureDate!;
       console.log('Flight search payload (Amadeus params) Traveloka Banner:', payload);
       const qs = new URLSearchParams(payload);
-
-     // Ensure SearchTabs can pre-fill "from" / "to" selects:
-     // SearchTabs reads params['from'] and params['to'], so include them (IATA preferred).
-     if (originCode) qs.set('from', originCode);
-     if (destCode) qs.set('to', destCode);
-     // include explicit total (optional) so pages that only read total can prefill
-     qs.set('total', String(totalPassengers));
-
+      if (originCode) qs.set('from', originCode);
+      if (destCode) qs.set('to', destCode);
+      qs.set('total', String(totalPassengers));
       router.push(`/ve-may-bay?${qs.toString()}`);
     } else if (activeTab === 'buses') {
       const payload = {

@@ -281,34 +281,41 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       const children = norm.children;
       const infants = norm.infants;
 
-      const payload: Record<string, string> = {
+      const basePayload: Record<string, string> = {
         originLocationCode: originCode,
         destinationLocationCode: destCode,
-        departureDate,
         adults: String(adults),
         children: String(children),
         infants: String(infants),
         travelClass: travelClass,
+        includedAirlineCodes:'VN',
         nonStop: 'true',
         currencyCode: 'VND',
-        max: String(3), // normalized to 3 to match TravelokaBanner
-        // always prefer VN by default
-        // includedAirlineCodes: 'VN'
+        max: String(3)
       };
-      // include returnDate only for roundtrip
-      if (returnDate) payload.returnDate = returnDate;
+      // outbound / inbound payloads
+      const outboundPayload = { ...basePayload, departureDate };
+      const inboundPayload = returnDate ? { ...basePayload, originLocationCode: destCode, destinationLocationCode: originCode, departureDate: returnDate } : null;
 
+      // Log both payloads for verification before proceeding
+      console.log('Outbound payload (SearchTabs):', outboundPayload);
+      if (inboundPayload) console.log('Inbound payload (SearchTabs):', inboundPayload);
+
+      // ask user to confirm before navigating (so you can inspect console)
+      const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      if (!ok) return;
+
+      // Build final querystring (keep compatibility with landing page params)
+      const payload: Record<string, string> = { ...outboundPayload };
+      if (inboundPayload) payload.returnDate = inboundPayload.departureDate!;
       console.log('Flight search payload (Amadeus params) SearchTabs :', payload);
       const qs = new URLSearchParams(payload);
-      // keep 'from'/'to' keys so TravelokaBanner/SearchTabs (and other pages) can prefill selects consistently.
       if (originCode) qs.set('from', originCode);
       if (destCode) qs.set('to', destCode);
-      // also include the airport "state" for both from/to so landing page can display state names
       const originState = originAirport?.state || '';
       const destState = destAirport?.state || '';
       if (originState) qs.set('fromState', originState);
       if (destState) qs.set('toState', destState);
-      // include explicit total and breakdown so landing page can prefill reliably
       qs.set('total', String(totalPassengers));
       qs.set('adults', String(adults));
       qs.set('children', String(children));

@@ -184,7 +184,10 @@ export default function VeMayBay() {
         to: 'Hà Nội (HAN)'
     });
     const [isLoading, setIsLoading] = useState(false);
-    const [apiFlights, setApiFlights] = useState<any[]>([]); // mapped flights returned from Amadeus
+    const [apiFlights, setApiFlights] = useState<any[]>([]); // mapped flights returned from Amadeus (legacy single-leg pointer)
+    // Per-leg results for roundtrip flows (cached separately by leg)
+    const [outboundFlights, setOutboundFlights] = useState<any[]>([]);
+    const [inboundFlights, setInboundFlights] = useState<any[]>([]);
     const searchParams = useSearchParams();
     const [roundtripMode, setRoundtripMode] = useState(true);
     const [tripStep, setTripStep] = useState<'outbound' | 'inbound'>('outbound');
@@ -547,30 +550,16 @@ export default function VeMayBay() {
         const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
         const destination = q['destinationLocationCode'] || q['to'] || q['destination'];
         const departure = q['departureDate'] || q['departure'] || q['date'];
-        if (!origin || !destination || !departure) {
-            return;
-        }
+        const returnDate = q['returnDate'] || q['return'];
+        if (!origin || !destination || !departure) return;
 
-        // build canonical param object used for cache key (only relevant params)
-        const cacheParams: Record<string, string | undefined> = {
-            originLocationCode: origin,
-            destinationLocationCode: destination,
-            departureDate: departure,
-            returnDate: q['returnDate'] || q['return'],
-            adults: q['adults'] || '1',
-            children: q['children'] || '0',
-            infants: q['infants'] || '0',
-            travelClass: q['travelClass'] || undefined,
-            nonStop: q['nonStop'] || undefined,
-            currencyCode: q['currencyCode'] || undefined,
-            includedAirlineCodes: q['includedAirlineCodes'] || undefined
-        };
-        const cacheKey = makeCacheKeyFromParams(cacheParams);
-        setCurrentCacheKey(cacheKey);
         setIsLoading(true);
+        // clear previous legs while loading
         setApiFlights([]);
+        setOutboundFlights([]);
+        setInboundFlights([]);
         try {
-            // 1) get token
+            // get token once and reuse for both legs
             const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -582,63 +571,110 @@ export default function VeMayBay() {
             });
             const tokenJson = await tokenRes.json();
             const token = tokenJson.access_token;
-
             if (!token) throw new Error('No token from Amadeus');
 
-            // 2) build offers URL
-            const params = new URLSearchParams();
-            params.set('originLocationCode', origin);
-            params.set('destinationLocationCode', destination);
-            params.set('departureDate', departure);
-            if (q['returnDate']) params.set('returnDate', q['returnDate']);
+            const legs: { origin: string; destination: string; departureDate: string | undefined }[] = [
+                { origin, destination, departureDate: departure }
+            ];
+            if (returnDate) legs.push({ origin: destination, destination: origin, departureDate: returnDate });
 
-            params.set('adults', q['adults'] || '1');
-            params.set('children', q['children'] || '0');
-            params.set('infants', q['infants'] || '0');
-            if (q['travelClass']) params.set('travelClass', q['travelClass']);
-            params.set('includedAirlineCodes', q['includedAirlineCodes'] || 'VN');
-            params.set('currencyCode', q['currencyCode'] || 'VND');
-            params.set('nonStop', q['nonStop'] || 'true');
-            params.set('max', q['max'] || '5');
+            const perLegResults: any[][] = [];
+            for (const leg of legs) {
+                const cacheParams: Record<string, string | undefined> = {
+                    originLocationCode: leg.origin,
+                    destinationLocationCode: leg.destination,
+                    departureDate: leg.departureDate,
+                    adults: q['adults'] || '1',
+                    children: q['children'] || '0',
+                    infants: q['infants'] || '0',
+                    travelClass: q['travelClass'] || undefined,
+                    nonStop: q['nonStop'] || undefined,
+                    currencyCode: q['currencyCode'] || undefined,
+                    includedAirlineCodes: q['includedAirlineCodes'] || undefined
+                };
+                const cacheKey = makeCacheKeyFromParams(cacheParams);
 
-            console.log('[Amadeus] Request URL:', `https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`);
+                // try cache-first for this leg
+                const cached = getCache(cacheKey);
+                if (cached && cached.timestamp && Array.isArray(cached.data)) {
+                    perLegResults.push(cached.data);
+                    continue;
+                }
 
-            const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            const offersJson = await offersRes.json();
-            const dicts = offersJson.dictionaries || {};
-            const data = offersJson.data || [];
-            // map offers
-            const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
-            console.log('[Amadeus] mapped flights:', mapped.map(m => ({ id: m.id, price: m.price, dep: m.departure, arr: m.arrival })));
-            // if mapped flights exist but none fit current priceRange, widen priceRange so UI shows results
-            if (mapped.length > 0) {
-                const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
-                if (prices.length > 0) {
-                    const minP = Math.min(...prices);
-                    const maxP = Math.max(...prices);
-                    const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
-                    if (!anyInCurrentRange) {
-                        setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
+                const params = new URLSearchParams();
+                params.set('originLocationCode', leg.origin);
+                params.set('destinationLocationCode', leg.destination);
+                if (leg.departureDate) params.set('departureDate', leg.departureDate);
+                params.set('adults', q['adults'] || '1');
+                params.set('children', q['children'] || '0');
+                params.set('infants', q['infants'] || '0');
+                if (q['travelClass']) params.set('travelClass', q['travelClass']);
+                params.set('includedAirlineCodes', q['includedAirlineCodes'] || 'VN');
+                params.set('currencyCode', q['currencyCode'] || 'VND');
+                params.set('nonStop', q['nonStop'] || 'true');
+                params.set('max', q['max'] || '5');
+
+                const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                const offersJson = await offersRes.json();
+                const dicts = offersJson.dictionaries || {};
+                const data = offersJson.data || [];
+                const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
+
+                // adjust priceRange if necessary (preserve existing logic)
+                if (mapped.length > 0) {
+                    const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
+                    if (prices.length > 0) {
+                        const minP = Math.min(...prices);
+                        const maxP = Math.max(...prices);
+                        const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                        if (!anyInCurrentRange) {
+                            setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
+                        }
                     }
                 }
-            }
-            setApiFlights(mapped);
-            setHasSearched(true);
-            setShowPromotions(false);
-            setCacheExpired(false); // fresh results
 
-            // save mapped results to cache (overwrite existing entry for same key) only if we have data
+                perLegResults.push(mapped);
+                try { if (mapped.length > 0) setCache(cacheKey, mapped); } catch {}
+            }
+
+            // assign per-leg results: outbound = leg0, inbound = leg1 (if present)
+            const outbound = perLegResults[0] || [];
+            const inbound = perLegResults[1] || [];
+            setOutboundFlights(outbound);
+            setInboundFlights(inbound);
+            // for initial view, show outbound list (apiFlights kept as legacy pointer used elsewhere)
+            setApiFlights(outbound);
+
+            // --- NEW: also save a combined cache entry (outbound + inbound) when this was a roundtrip
+            // This helps other tabs/old logic that look up a single canonical key containing returnDate.
             try {
-                if (mapped.length > 0) {
-                    setCache(cacheKey, mapped);
-                    console.log('[Cache] saved/updated cache for key', cacheKey);
-                } else {
-                    console.log('[Cache] mapped empty — not caching for key', cacheKey);
+                if (returnDate) {
+                    // Save wrapped structure to avoid id collisions and allow deterministic extraction later
+                    const combinedCacheParams: Record<string, string | undefined> = {
+                        originLocationCode: origin,
+                        destinationLocationCode: destination,
+                        departureDate: departure,
+                        returnDate: returnDate,
+                        adults: q['adults'] || '1',
+                        children: q['children'] || '0',
+                        infants: q['infants'] || '0',
+                        travelClass: q['travelClass'] || undefined,
+                        nonStop: q['nonStop'] || undefined,
+                        currencyCode: q['currencyCode'] || undefined,
+                        includedAirlineCodes: q['includedAirlineCodes'] || undefined
+                    };
+                    const combinedKey = makeCacheKeyFromParams(combinedCacheParams);
+                    const wrapped = { outbound, inbound };
+                    if ((outbound && outbound.length) || (inbound && inbound.length)) {
+                        setCache(combinedKey, wrapped);
+                        setCurrentCacheKey(combinedKey);
+                        console.log('[Cache] saved combined (wrapped) cache for key', combinedKey);
+                    }
                 }
             } catch (e) {
-                // ignore storage errors
+                // ignore caching errors
             }
         } catch (err) {
             console.error('Amadeus fetch error', err);
@@ -674,13 +710,203 @@ export default function VeMayBay() {
         const cacheKey = makeCacheKeyFromParams(cacheParams);
         setCurrentCacheKey(cacheKey);
 
-        // If we have cached results for this canonical key, check age and decide:
-        // - fresh (<= TTL): use cached and skip API
-        // - expired (> TTL): remove it and auto-refresh immediately (caller can revert to manual flow if desired)
+        // If this is a roundtrip search, prefer checking per-leg caches (outbound/inbound)
+        const returnDate = cacheParams.returnDate;
+        if (returnDate) {
+            // --- NEW: try combined cache first (supports wrapped { outbound,inbound } or legacy flat array)
+            try {
+                const combinedCached = getCache(cacheKey);
+                if (combinedCached && combinedCached.timestamp) {
+                    const ageMs = Date.now() - combinedCached.timestamp;
+                    const stored = combinedCached.data;
+                    // wrapped shape { outbound: [], inbound: [] }
+                    if (stored && typeof stored === 'object' && (Array.isArray(stored.outbound) || Array.isArray(stored.inbound))) {
+                        const outboundList = Array.isArray(stored.outbound) ? stored.outbound : [];
+                        const inboundList = Array.isArray(stored.inbound) ? stored.inbound : [];
+                        // update priceRange to include both legs (merge with current range)
+                        try {
+                            const prices = [...outboundList, ...inboundList].map((m: any) => Number(m.price) || 0).filter(Boolean);
+                            if (prices.length > 0) {
+                                const minP = Math.min(...prices);
+                                const maxP = Math.max(...prices);
+                                const anyInCurrentRange = prices.some((p: number) => p >= priceRange[0] && p <= priceRange[1]);
+                                if (!anyInCurrentRange) {
+                                    setPriceRange([Math.max(0, Math.min(priceRange[0], minP) - 100000), Math.max(priceRange[1], maxP) + 100000]);
+                                }
+                            }
+                        } catch { /* ignore */ }
+
+                        if (ageMs <= CACHE_TTL_MS) {
+                            setOutboundFlights(outboundList);
+                            setInboundFlights(inboundList);
+                            setApiFlights(outboundList);
+                            setHasSearched(true);
+                            setShowPromotions(false);
+                            setIsLoading(false);
+                            setCacheExpired(false);
+                            return;
+                        }
+                        // stale: still populate but mark expired
+                        setOutboundFlights(outboundList);
+                        setInboundFlights(inboundList);
+                        setApiFlights(outboundList);
+                        setHasSearched(true);
+                        setShowPromotions(false);
+                        setIsLoading(false);
+                        setCacheExpired(true);
+                        return;
+                    }
+
+                    // legacy flat-array combined cache -> split by dates
+                    if (Array.isArray(stored)) {
+                        const combinedData: any[] = stored;
+                        const outboundList = combinedData.filter(f => String(f.departure?.date || '') === String(cacheParams.departureDate || ''));
+                        const inboundList = combinedData.filter(f => String(f.departure?.date || '') === String(cacheParams.returnDate || ''));
+                        try {
+                            const prices = [...outboundList, ...inboundList].map((m: any) => Number(m.price) || 0).filter(Boolean);
+                            if (prices.length > 0) {
+                                const minP = Math.min(...prices);
+                                const maxP = Math.max(...prices);
+                                const anyInCurrentRange = prices.some((p: number) => p >= priceRange[0] && p <= priceRange[1]);
+                                if (!anyInCurrentRange) {
+                                    setPriceRange([Math.max(0, Math.min(priceRange[0], minP) - 100000), Math.max(priceRange[1], maxP) + 100000]);
+                                }
+                            }
+                        } catch { /* ignore */ }
+
+                        if (ageMs <= CACHE_TTL_MS) {
+                            setOutboundFlights(outboundList);
+                            setInboundFlights(inboundList);
+                            setApiFlights(outboundList);
+                            setHasSearched(true);
+                            setShowPromotions(false);
+                            setIsLoading(false);
+                            setCacheExpired(false);
+                            return;
+                        }
+                        setOutboundFlights(outboundList);
+                        setInboundFlights(inboundList);
+                        setApiFlights(outboundList);
+                        setHasSearched(true);
+                        setShowPromotions(false);
+                        setIsLoading(false);
+                        setCacheExpired(true);
+                        return;
+                    }
+                }
+            } catch (e) {
+                // ignore combined-cache read errors and fallback to per-leg logic
+            }
+
+             const outboundParams: Record<string, string | undefined> = {
+                 originLocationCode: cacheParams.originLocationCode,
+                 destinationLocationCode: cacheParams.destinationLocationCode,
+                 departureDate: cacheParams.departureDate,
+                 adults: cacheParams.adults,
+                 children: cacheParams.children,
+                 infants: cacheParams.infants,
+                 travelClass: cacheParams.travelClass,
+                 nonStop: cacheParams.nonStop,
+                 currencyCode: cacheParams.currencyCode,
+                 includedAirlineCodes: cacheParams.includedAirlineCodes
+             };
+             const inboundParams: Record<string, string | undefined> = {
+                 originLocationCode: cacheParams.destinationLocationCode,
+                 destinationLocationCode: cacheParams.originLocationCode,
+                 departureDate: cacheParams.returnDate,
+                 adults: cacheParams.adults,
+                 children: cacheParams.children,
+                 infants: cacheParams.infants,
+                 travelClass: cacheParams.travelClass,
+                 nonStop: cacheParams.nonStop,
+                 currencyCode: cacheParams.currencyCode,
+                 includedAirlineCodes: cacheParams.includedAirlineCodes
+             };
+
+            const outboundKey = makeCacheKeyFromParams(outboundParams);
+            const inboundKey = makeCacheKeyFromParams(inboundParams);
+
+            const outboundCached = getCache(outboundKey);
+            const inboundCached = getCache(inboundKey);
+
+            let anyExpired = false;
+
+            // If we have outbound cached data (fresh or stale), show it immediately as the initial list
+            if (outboundCached && outboundCached.timestamp && Array.isArray(outboundCached.data)) {
+                const ageMs = Date.now() - outboundCached.timestamp;
+                // --- NEW: update priceRange from cached outbound prices (same logic as when fetching) ---
+                try {
+                    const prices = (outboundCached.data as any[]).map(m => Number(m.price) || 0).filter(Boolean);
+                    if (prices.length > 0) {
+                        const minP = Math.min(...prices);
+                        const maxP = Math.max(...prices);
+                        const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                        if (!anyInCurrentRange) {
+                            setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
+                        }
+                    }
+                } catch { /* ignore price compute errors */ }
+
+                if (ageMs <= CACHE_TTL_MS) {
+                    setOutboundFlights(outboundCached.data);
+                    setApiFlights(outboundCached.data); // show outbound first
+                } else {
+                    // stale: remove stored entry but keep showing stale data in UI and mark expired
+                    try { removeCache(outboundKey); } catch {}
+                    setOutboundFlights(outboundCached.data);
+                    setApiFlights(outboundCached.data);
+                    anyExpired = true;
+                }
+                setHasSearched(true);
+                setShowPromotions(false);
+                setIsLoading(false);
+            }
+
+            // If inbound cached, populate inboundFlights (but do not automatically switch UI)
+            if (inboundCached && inboundCached.timestamp && Array.isArray(inboundCached.data)) {
+                const ageMs = Date.now() - inboundCached.timestamp;
+                // also update priceRange using inbound prices as a best-effort (optional)
+                try {
+                    const prices = (inboundCached.data as any[]).map(m => Number(m.price) || 0).filter(Boolean);
+                    if (prices.length > 0) {
+                        const minP = Math.min(...prices);
+                        const maxP = Math.max(...prices);
+                        const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                        if (!anyInCurrentRange) {
+                            setPriceRange([Math.max(0, Math.min(priceRange[0], minP) - 100000), Math.max(priceRange[1], maxP) + 100000]);
+                        }
+                    }
+                } catch { /* ignore */ }
+
+                if (ageMs <= CACHE_TTL_MS) {
+                    setInboundFlights(inboundCached.data);
+                } else {
+                    try { removeCache(inboundKey); } catch {}
+                    setInboundFlights(inboundCached.data);
+                    anyExpired = true;
+                }
+            }
+
+            if (anyExpired) {
+                // mark expired so "Làm mới" UI shows up
+                setCacheExpired(true);
+            }
+
+            // If we had outbound cached (even stale) we stop here and do NOT fetch both legs immediately.
+            // This enables the UX: show outbound list fast; fetch inbound only when user selects outbound.
+            if (outboundCached && outboundCached.timestamp && Array.isArray(outboundCached.data)) {
+                return;
+            }
+
+            // No outbound cache -> fetch both legs now
+            fetchAmadeusOffers();
+            return;
+        }
+
+        // Non-roundtrip flow: look for single-key cache as before
         const cached = getCache(cacheKey);
         if (cached && cached.timestamp && Array.isArray(cached.data)) {
             try {
-                // ensure priceRange covers cached prices so filters don't immediately hide results
                 const prices = (cached.data as any[]).map(m => Number(m.price) || 0).filter(Boolean);
                 if (prices.length > 0) {
                     const minP = Math.min(...prices);
@@ -690,14 +916,10 @@ export default function VeMayBay() {
                         setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
                     }
                 }
-            } catch {
-                // ignore parsing errors
-            }
+            } catch { /* ignore */ }
 
             const ageMs = Date.now() - cached.timestamp;
             console.log('[Cache] found cache for key', cacheKey, `age ${Math.round(ageMs / 1000)}s`);
-
-            // fresh cache: use it and skip remote fetch
             if (ageMs <= CACHE_TTL_MS) {
                 setApiFlights(cached.data);
                 setHasSearched(true);
@@ -706,27 +928,19 @@ export default function VeMayBay() {
                 setCacheExpired(false);
                 return;
             }
-
-            // Cache expired: remove it immediately from storage (auto-delete).
-            // But we still keep the cached data in-memory (apiFlights) so the user
-            // who is currently on this route can see something and be prompted to refresh.
-            console.log('[Cache] expired -> removing cache for key', cacheKey);
-            try { removeCache(cacheKey); } catch (e) { console.warn('Failed to remove expired cache', e); }
-
-            // keep showing stale results in UI but mark expired so banner+Làm mới appear
+            try { removeCache(cacheKey); } catch { }
             setApiFlights(cached.data);
             setHasSearched(true);
             setShowPromotions(false);
             setIsLoading(false);
             setCacheExpired(true);
-            // Do NOT auto-fetch here; user must click "Làm mới" to get fresh offers.
             return;
         }
 
         // No cache -> fetch now
         fetchAmadeusOffers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams ? searchParams.toString() : '']);
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+     }, [searchParams ? searchParams.toString() : '']);
 
     // Handler invoked by "Làm mới" button in UI when cache is expired
     const handleRefreshCachedResults = async () => {
@@ -738,8 +952,21 @@ export default function VeMayBay() {
     };
 
     const routeFlights = selectedRoute ? generateRouteFlights() : [];
-    // If API returned flights, prefer them. Otherwise fallback to generated + sample flights.
-    const allFlights = apiFlights && apiFlights.length > 0 ? apiFlights : (selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights);
+    // Decide which set of flights to show:
+    // - If roundtripMode: show outboundFlights when choosing outbound, inboundFlights when choosing inbound.
+    // - Otherwise behave as before (apiFlights or generated/sample).
+    let legFlights: any[] = [];
+    if (roundtripMode) {
+        legFlights = tripStep === 'outbound' ? (outboundFlights.length ? outboundFlights : apiFlights) : (inboundFlights.length ? inboundFlights : []);
+        // fallback to generated/sample if no API flights for this leg
+        if (!legFlights || legFlights.length === 0) {
+            legFlights = selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights;
+        }
+    } else {
+        legFlights = apiFlights && apiFlights.length > 0 ? apiFlights : (selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights);
+    }
+
+    const allFlights = legFlights;
 
     const filteredFlights = allFlights.filter(flight => {
         const matchesPrice = flight.price >= priceRange[0] && flight.price <= priceRange[1];
@@ -1583,9 +1810,16 @@ export default function VeMayBay() {
                                                                     <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
                                                                         <Button
                                                                             className="w-full lg:w-auto"
-                                                                            onClick={() => {
+                                                                            onClick={async () => {
                                                                                 if (tripStep === 'outbound') {
                                                                                     setSelectedOutbound(flight);
+                                                                                    // if inbound not cached yet, trigger fetch now (will cache inbound)
+                                                                                    const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+                                                                                    const returnDate = q['returnDate'] || q['return'];
+                                                                                    if (returnDate && inboundFlights.length === 0) {
+                                                                                        // fetchAmadeusOffers fetches both legs but that's acceptable here:
+                                                                                        await fetchAmadeusOffers();
+                                                                                    }
                                                                                     setTripStep('inbound');
                                                                                 } else if (tripStep === 'inbound') {
                                                                                     setSelectedInbound(flight);
