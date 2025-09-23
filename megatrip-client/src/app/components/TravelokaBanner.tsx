@@ -258,6 +258,7 @@ export default function TravelokaBanner() {
         travelClass: travelClass,
         nonStop: 'true',
         currencyCode: 'VND',
+        includedAirlineCodes: 'VN',
         max: String(3)
       };
       if (returnDate) payload.returnDate = returnDate;

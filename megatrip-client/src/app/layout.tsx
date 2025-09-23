@@ -7,6 +7,7 @@ import Header from "@/app/components/Header";
 import Footer from "@/app/components/Footer";
 import "./globals.css";
 import { usePathname } from "next/navigation";
+import cleanExpiredFlightCaches from "@/lib/cacheCleaner";
 
 interface LayoutProps {
   children: ReactNode;
@@ -40,7 +41,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [pathname]);
 
   const hideLayout = pathname === '/dang-nhap' || pathname === '/dang-ky';
-
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      cleanExpiredFlightCaches();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(cleanupInterval);
+  }, []);
   return (
     <html lang="vi">
       <head>

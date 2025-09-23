@@ -389,6 +389,30 @@ export default function FlightResults({
     }
   }, [fetchAmadeusToken]);
 
+  // Helper: decide whether we can skip pricing/seatmap fetch and use embedded amenities/policies
+  const shouldUseLocalAmenities = (flight: any) => {
+    try {
+      // Conservative rule: only bypass Amadeus pricing/seatmap for VietJet (VJ)
+      // and only when the offer/raw actually contains embedded amenities or policies.
+      const raw = flight?.raw ?? null;
+      const carrier = (flight?.airlineCode ?? String(flight?.flightNumber ?? '').slice(0, 2)).toString().toUpperCase();
+
+      if (carrier === 'VJ') {
+        // Prefer explicit amenity/policy presence before skipping remote calls
+        if (flight?.amenities || raw?.amenities || flight?.policies || raw?.policies) {
+          return true;
+        }
+        // If VJ but no embedded info, do NOT skip — keep original pricing/seatmap flow.
+        return false;
+      }
+
+      // For all other carriers, never skip the pricing/seatmap API here — preserve original behavior.
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   // ...existing code (render) ...
   return (
     <div className="space-y-4">
@@ -522,6 +546,18 @@ export default function FlightResults({
                             return;
                           }
 
+                          // If flight already includes amenities/policies (e.g. VJ case), use local payload and avoid pricing+seatmap call
+                          if (shouldUseLocalAmenities(flight)) {
+                            // create a minimal pricing wrapper that UI code can consume
+                            const minimal = { data: flight.raw ?? flightOfferPayload };
+                            setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
+                            // no seatmap but we still set expanded and navigate
+                            setExpandedFlight(flight.id);
+                            console.log('Selected flight (local amenities/policies)', flight.id);
+                            router.push(`/ve-may-bay/${key}`);
+                            return;
+                          }
+
                           // not cached or signature mismatch -> fetch then proceed
                           setPricingLoadingFor(key, true);
                           const res = await handlePriceOffer(flight);
@@ -559,6 +595,18 @@ export default function FlightResults({
                               populateFromCache(key);
                               return;
                             }
+
+                            // If flight already has amenities/policies (VJ), populate locally and avoid remote pricing
+                            if (shouldUseLocalAmenities(flight)) {
+                              const minimal = { data: flight.raw ?? flightOfferPayload };
+                              setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
+                              // no seatmap but ensure seatmap state cleared for this key
+                              setSeatmapByFlight(prev => ({ ...prev }));
+                              setSeatmapData(null);
+                              setSignaturesByFlight(prev => ({ ...prev, [key]: signature }));
+                              return;
+                            }
+
                             // otherwise trigger pricing+seatmap fetch and expand when done
                             await handlePriceOffer(flight);
                           } else {
@@ -621,10 +669,25 @@ export default function FlightResults({
 
                                 // Amenities from seatmap if present
                                 const cabAmenities = seatmap?.aircraftCabinAmenities || {};
-                                const wifiInfo = cabAmenities?.seat?.medias ? { available: true } : (flight.amenities?.wifi || { available: false });
-                                const mealInfo = cabAmenities?.food ?? flight.amenities?.meal ?? { included: false };
-                                const entertainmentInfo = cabAmenities?.seat?.medias?.length ? { available: true, screens: cabAmenities.seat.medias.length } : (flight.amenities?.entertainment || { available: false });
-                                const powerInfo = cabAmenities?.power ?? (flight.amenities?.power || { available: false });
+                                const wifiRaw = cabAmenities?.wifi ?? cabAmenities?.seat?.wifi ?? flight.amenities?.wifi;
+                                const wifiInfo = wifiRaw
+                                  ? (typeof wifiRaw === 'object' ? wifiRaw : { available: !!wifiRaw })
+                                  : { available: false };
+
+                                const mealRaw = cabAmenities?.food ?? cabAmenities?.seat?.food ?? flight.amenities?.meal;
+                                const mealInfo = mealRaw
+                                  ? (typeof mealRaw === 'object' ? mealRaw : { available: !!mealRaw })
+                                  : { included: false, available: false };
+
+                                const entertainmentRaw = cabAmenities?.seat?.medias ?? cabAmenities?.medias ?? flight.amenities?.entertainment;
+                                const entertainmentInfo = entertainmentRaw
+                                  ? (Array.isArray(entertainmentRaw) ? { available: entertainmentRaw.length > 0, screens: entertainmentRaw.length } : (typeof entertainmentRaw === 'object' ? entertainmentRaw : { available: !!entertainmentRaw }))
+                                  : { available: false };
+
+                                const powerRaw = cabAmenities?.power ?? flight.amenities?.power;
+                                const powerInfo = powerRaw
+                                  ? (typeof powerRaw === 'object' ? powerRaw : { available: !!powerRaw })
+                                  : { available: false };
 
                                 // INCLUDED resources (detailed fare rules, bags, credit-card-fees)
                                 const includedFareRules = getIncluded(pricing, 'detailed-fare-rules');
@@ -701,29 +764,42 @@ export default function FlightResults({
                                           <div className="flex items-center gap-2">
                                             <Wifi className="h-4 w-4" />
                                             <div>
-                                              {wifiInfo.available ? (
-                                                <div className="text-muted-foreground">WiFi: {cabAmenities.power?.isChargeable ? 'Có phí' : 'Miễn phí'}</div>
+                                              {wifiInfo && wifiInfo.available ? (
+                                                // prefer explicit flags: free / included / price
+                                                wifiInfo.free === true || wifiInfo.included === true ? (
+                                                  <div className="text-muted-foreground">WiFi: Miễn phí</div>
+                                                ) : wifiInfo.price ? (
+                                                  <div className="text-muted-foreground">WiFi: {String(wifiInfo.price)}</div>
+                                                ) : (
+                                                  <div className="text-muted-foreground">WiFi: Có phí</div>
+                                                )
                                               ) : <span className="text-muted-foreground">Không có WiFi</span>}
                                             </div>
                                           </div>
                                           <div className="flex items-center gap-2">
                                             <Utensils className="h-4 w-4" />
                                             <div>
-                                              {mealInfo ? (
-                                                <div className="text-muted-foreground">{mealInfo.isChargeable ? 'Bữa ăn có phí' : 'Bữa ăn miễn phí'}</div>
+                                              {mealInfo && (mealInfo.available || mealInfo.included) ? (
+                                                mealInfo.included === true || mealInfo.free === true ? (
+                                                  <div className="text-muted-foreground">Bữa ăn miễn phí{mealInfo.type ? ` • ${mealInfo.type}` : ''}</div>
+                                                ) : mealInfo.price ? (
+                                                  <div className="text-muted-foreground">Bữa ăn có phí • {String(mealInfo.price)}</div>
+                                                ) : (
+                                                  <div className="text-muted-foreground">Bữa ăn có phí</div>
+                                                )
                                               ) : <span className="text-muted-foreground">Không có thông tin bữa ăn</span>}
                                             </div>
                                           </div>
-                                          {entertainmentInfo.available && (
-                                            <div className="flex items-center gap-2">
-                                              <Tv className="h-4 w-4" />
-                                              <div className="text-muted-foreground">Giải trí • {entertainmentInfo.screens ?? '-'}</div>
-                                            </div>
-                                          )}
-                                          {powerInfo && powerInfo.powerType && (
+                                           {entertainmentInfo.available && (
+                                             <div className="flex items-center gap-2">
+                                               <Tv className="h-4 w-4" />
+                                               <div className="text-muted-foreground">Giải trí • {entertainmentInfo.screens ?? '-'}</div>
+                                             </div>
+                                           )}
+                                          {powerInfo && (powerInfo.powerType || powerInfo.available) && (
                                             <div className="flex items-center gap-2">
                                               <Battery className="h-4 w-4" />
-                                              <div className="text-muted-foreground">{powerInfo.powerType}</div>
+                                              <div className="text-muted-foreground">{powerInfo.powerType ?? (powerInfo.available ? 'Có ổ sạc' : '')}</div>
                                             </div>
                                           )}
                                           {refundForDetails && (

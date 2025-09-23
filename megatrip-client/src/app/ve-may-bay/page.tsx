@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import FlightResults from './FlightResults';
 import { useSearchParams } from 'next/navigation';
+import cleanExpiredFlightCaches from '../../lib/cacheCleaner';
 
 const airlines = [
     { code: 'VN', name: 'Vietnam Airlines', logo: '/placeholder.svg' },
@@ -338,6 +339,114 @@ export default function VeMayBay() {
         let priceNumeric = Number(priceStr) || 0;
         // if currency isn't VND keep numeric as-is (formatting will show currency)
 
+        // Attempt to read amenities/policies from the offer or raw payload (some suppliers embed these)
+        const readAmenities = () => {
+            // check many possible places where amenity info can appear
+            const candCandidates = [
+                offer.amenities,
+                offer.raw?.amenities,
+                offer.extensions?.amenities,
+                offer.meta?.amenities,
+                offer.included?.['aircraft-cabin-amenities'],
+                offer.raw?.included?.['aircraft-cabin-amenities'],
+                offer.seatmap?.aircraftCabinAmenities,
+                offer.raw?.seatmap?.aircraftCabinAmenities,
+                // some sellers attach a 'services' array
+                Array.isArray(offer.services) ? offer.services.find((s: any) => s.type === 'AMENITY' || s.type === 'SERVICE') : null,
+                // fallback: sometimes wrapped under data/included
+                offer.data?.included?.['aircraft-cabin-amenities'] ?? offer.data?.included
+            ].filter(Boolean);
+
+            if (candCandidates.length === 0) return null;
+
+            // prefer first meaningful candidate
+            const cand = candCandidates[0];
+
+            // Normalization helpers — many sources use different shapes
+            const bool = (v: any) => !!v;
+            const str = (v: any) => (v === undefined || v === null) ? undefined : String(v);
+
+            // wifi may be boolean or object
+            const wifi = (() => {
+                if (cand.wifi !== undefined) {
+                    if (typeof cand.wifi === 'object') return { available: bool(cand.wifi.available), free: !!cand.wifi.free, price: cand.wifi.price ?? cand.wifi.fee };
+                    return { available: bool(cand.wifi) };
+                }
+                if (cand['wifi']) return { available: true };
+                if (cand.seat?.wifi || cand.seat?.medias) return { available: true };
+                return { available: false };
+            })();
+
+            // meal can be object or boolean or array
+            const meal = (() => {
+                if (cand.meal !== undefined) {
+                    if (typeof cand.meal === 'object') {
+                        return {
+                            included: !!cand.meal.included,
+                            available: cand.meal.available !== undefined ? !!cand.meal.available : !!cand.meal,
+                            price: cand.meal.price ?? cand.meal.fee ?? undefined,
+                            type: cand.meal.type ?? cand.meal.name ?? undefined
+                        };
+                    }
+                    return { included: !!cand.meal, available: !!cand.meal };
+                }
+                // seatmap food hints
+                if (cand.food || (cand.seat && cand.seat.food)) {
+                    const f = cand.food ?? cand.seat?.food;
+                    return { included: !!f.included, available: !!f, price: f.price ?? undefined, type: f.type ?? undefined };
+                }
+                return { included: false, available: false };
+            })();
+
+            // entertainment: may be boolean or object with screens/media info
+            const entertainment = (() => {
+                if (cand.entertainment !== undefined) {
+                    if (typeof cand.entertainment === 'object') return { available: !!cand.entertainment.available, screens: cand.entertainment.screens ?? cand.entertainment.count ?? undefined };
+                    return { available: !!cand.entertainment };
+                }
+                if (cand.seat?.medias || cand.medias) return { available: true, screens: (cand.seat?.medias?.length ?? cand.medias?.length) || undefined };
+                return { available: false };
+            })();
+
+            // power / charging
+            const power = (() => {
+                if (cand.power !== undefined) {
+                    if (typeof cand.power === 'object') return { available: !!cand.power.available, type: cand.power.type ?? cand.power.powerType ?? undefined, isChargeable: !!cand.power.isChargeable };
+                    return { available: !!cand.power };
+                }
+                if (cand.seat?.power || cand.powerType) return { available: true, type: cand.powerType ?? (cand.seat?.power?.type) ?? undefined };
+                return { available: false };
+            })();
+
+            const priority = !!(cand.priority || cand.priorityBoarding || cand.priorityService);
+
+            return {
+                wifi,
+                meal,
+                entertainment,
+                power,
+                priority
+            };
+        };
+
+        const readPolicies = () => {
+            const cand = offer.policies || offer.raw?.policies || offer.policy || offer.extensions?.policies || offer.meta?.policies || null;
+            if (!cand) return null;
+            // normalize minimal expected fields
+            return {
+                cancellable: !!cand.cancellable,
+                changeable: !!cand.changeable,
+                refundable: cand.refundable ?? cand.refund ?? cand.note ?? (cand.cancellable ? 'Xem điều khoản hãng' : 'Không hoàn tiền, không đổi lịch'),
+                cancellationFee: cand.cancellationFee ?? cand.cancellation_fee ?? cand.cancellation ?? undefined,
+                changeFee: cand.changeFee ?? cand.change_fee ?? undefined,
+                // keep raw copy for debugging
+                _raw: cand
+            };
+        };
+
+        const detectedAmenities = readAmenities();
+        const detectedPolicies = readPolicies();
+
         return {
             id: String(offer.id) || `offer-${idx}`,
             airline: airlineName,
@@ -358,14 +467,15 @@ export default function VeMayBay() {
             // Ensure these arrays exist so UI can safely iterate
             benefits: offer.benefits || [],
             promotions: offer.promotions || [],
-            amenities: {
+            // prefer detected amenities/policies when available (VJ or other suppliers)
+            amenities: detectedAmenities ?? {
                 wifi: { available: false },
                 meal: { included: false, available: true, price: 'Từ 120.000đ' },
                 entertainment: { available: false },
                 power: { available: false },
                 priority: false
             },
-            policies: {
+            policies: detectedPolicies ?? {
                 cancellable: false,
                 changeable: false,
                 refundable: 'Không hoàn tiền, không đổi lịch'
@@ -380,6 +490,15 @@ export default function VeMayBay() {
     // Thêm helper cache (canonical key từ searchParams; lưu mapped results để tái sử dụng)
     const CACHE_PREFIX = 'mt_flight_offers_cache_v1';
     const CACHE_TTL_MS = 30 * 60 * 1000; // 30 phút
+
+    // Gọi shared cleaner khi component mount để chạy cleanup ngay và tránh "declared but never read"
+    useEffect(() => {
+        try { cleanExpiredFlightCaches(); } catch (e) { /* ignore */ }
+    }, []);
+
+    // Track current cache key + whether cached results are expired (older than TTL)
+    const [currentCacheKey, setCurrentCacheKey] = useState<string | null>(null);
+    const [cacheExpired, setCacheExpired] = useState(false);
 
     function makeCacheKeyFromParams(paramsObj: Record<string, string | undefined>) {
         // canonicalize: sort keys so order query ko tạo key khác
@@ -419,145 +538,201 @@ export default function VeMayBay() {
         }
     }
 
+    // Reusable function to fetch offers and update state (callable from refresh button)
+    const fetchAmadeusOffers = async () => {
+        const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+        const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
+        const destination = q['destinationLocationCode'] || q['to'] || q['destination'];
+        const departure = q['departureDate'] || q['departure'] || q['date'];
+        if (!origin || !destination || !departure) {
+            return;
+        }
+
+        // build canonical param object used for cache key (only relevant params)
+        const cacheParams: Record<string, string | undefined> = {
+            originLocationCode: origin,
+            destinationLocationCode: destination,
+            departureDate: departure,
+            returnDate: q['returnDate'] || q['return'],
+            adults: q['adults'] || '1',
+            children: q['children'] || '0',
+            infants: q['infants'] || '0',
+            travelClass: q['travelClass'] || undefined,
+            nonStop: q['nonStop'] || undefined,
+            currencyCode: q['currencyCode'] || undefined,
+            includedAirlineCodes: q['includedAirlineCodes'] || undefined
+        };
+        const cacheKey = makeCacheKeyFromParams(cacheParams);
+        setCurrentCacheKey(cacheKey);
+        setIsLoading(true);
+        setApiFlights([]);
+        try {
+            // 1) get token
+            const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    grant_type: 'client_credentials',
+                    client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
+                    client_secret: '9fcdtMUicUy6ZAGm'
+                })
+            });
+            const tokenJson = await tokenRes.json();
+            const token = tokenJson.access_token;
+
+            if (!token) throw new Error('No token from Amadeus');
+
+            // 2) build offers URL
+            const params = new URLSearchParams();
+            params.set('originLocationCode', origin);
+            params.set('destinationLocationCode', destination);
+            params.set('departureDate', departure);
+            if (q['returnDate']) params.set('returnDate', q['returnDate']);
+
+            params.set('adults', q['adults'] || '1');
+            params.set('children', q['children'] || '0');
+            params.set('infants', q['infants'] || '0');
+            if (q['travelClass']) params.set('travelClass', q['travelClass']);
+            params.set('includedAirlineCodes', q['includedAirlineCodes'] || 'VN');
+            params.set('currencyCode', q['currencyCode'] || 'VND');
+            params.set('nonStop', q['nonStop'] || 'true');
+            params.set('max', q['max'] || '5');
+
+            console.log('[Amadeus] Request URL:', `https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`);
+
+            const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const offersJson = await offersRes.json();
+            const dicts = offersJson.dictionaries || {};
+            const data = offersJson.data || [];
+            // map offers
+            const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
+            console.log('[Amadeus] mapped flights:', mapped.map(m => ({ id: m.id, price: m.price, dep: m.departure, arr: m.arrival })));
+            // if mapped flights exist but none fit current priceRange, widen priceRange so UI shows results
+            if (mapped.length > 0) {
+                const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
+                if (prices.length > 0) {
+                    const minP = Math.min(...prices);
+                    const maxP = Math.max(...prices);
+                    const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                    if (!anyInCurrentRange) {
+                        setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
+                    }
+                }
+            }
+            setApiFlights(mapped);
+            setHasSearched(true);
+            setShowPromotions(false);
+            setCacheExpired(false); // fresh results
+
+            // save mapped results to cache (overwrite existing entry for same key) only if we have data
+            try {
+                if (mapped.length > 0) {
+                    setCache(cacheKey, mapped);
+                    console.log('[Cache] saved/updated cache for key', cacheKey);
+                } else {
+                    console.log('[Cache] mapped empty — not caching for key', cacheKey);
+                }
+            } catch (e) {
+                // ignore storage errors
+            }
+        } catch (err) {
+            console.error('Amadeus fetch error', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Fetch Amadeus token + flight offers when URL query changes (SearchTabs pushes query)
     useEffect(() => {
-	const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
-	const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
-	const destination = q['destinationLocationCode'] || q['to'] || q['destination'];
-	const departure = q['departureDate'] || q['departure'] || q['date'];
-	if (!origin || !destination || !departure) {
-		return;
-	}
+        const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+        const origin = q['originLocationCode'] || q['from'] || q['origin'] || q['fromLocationCode'];
+        const destination = q['destinationLocationCode'] || q['to'] || q['destination'];
+        const departure = q['departureDate'] || q['departure'] || q['date'];
+        if (!origin || !destination || !departure) {
+            return;
+        }
 
-	// build canonical param object used for cache key (only relevant params)
-	const cacheParams: Record<string, string | undefined> = {
-		originLocationCode: origin,
-		destinationLocationCode: destination,
-		departureDate: departure,
-		returnDate: q['returnDate'] || q['return'],
-		adults: q['adults'] || '1',
-		children: q['children'] || '0',
-		infants: q['infants'] || '0',
-		travelClass: q['travelClass'] || undefined,
-		nonStop: q['nonStop'] || undefined,
-		currencyCode: q['currencyCode'] || undefined,
-		includedAirlineCodes: q['includedAirlineCodes'] || undefined
-	};
-	const cacheKey = makeCacheKeyFromParams(cacheParams);
+        // build canonical param object used for cache key (only relevant params)
+        const cacheParams: Record<string, string | undefined> = {
+            originLocationCode: origin,
+            destinationLocationCode: destination,
+            departureDate: departure,
+            returnDate: q['returnDate'] || q['return'],
+            adults: q['adults'] || '1',
+            children: q['children'] || '0',
+            infants: q['infants'] || '0',
+            travelClass: q['travelClass'] || undefined,
+            nonStop: q['nonStop'] || undefined,
+            currencyCode: q['currencyCode'] || undefined,
+            includedAirlineCodes: q['includedAirlineCodes'] || undefined
+        };
+        const cacheKey = makeCacheKeyFromParams(cacheParams);
+        setCurrentCacheKey(cacheKey);
 
-	// If we have cached results for this canonical key, use them and DO NOT call API.
-	// This prevents duplicate fetch when same logical search is triggered from different UI components.
-	const cached = getCache(cacheKey);
-	if (cached && cached.timestamp && Array.isArray(cached.data)) {
-		try {
-			// ensure priceRange covers cached prices so filters don't immediately hide results
-			const prices = (cached.data as any[]).map(m => Number(m.price) || 0).filter(Boolean);
-			if (prices.length > 0) {
-				const minP = Math.min(...prices);
-				const maxP = Math.max(...prices);
-				const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
-				if (!anyInCurrentRange) {
-					setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
-				}
-			}
-		} catch {
-			// ignore parsing errors
-		}
+        // If we have cached results for this canonical key, check age and decide:
+        // - fresh (<= TTL): use cached and skip API
+        // - expired (> TTL): remove it and auto-refresh immediately (caller can revert to manual flow if desired)
+        const cached = getCache(cacheKey);
+        if (cached && cached.timestamp && Array.isArray(cached.data)) {
+            try {
+                // ensure priceRange covers cached prices so filters don't immediately hide results
+                const prices = (cached.data as any[]).map(m => Number(m.price) || 0).filter(Boolean);
+                if (prices.length > 0) {
+                    const minP = Math.min(...prices);
+                    const maxP = Math.max(...prices);
+                    const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                    if (!anyInCurrentRange) {
+                        setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
+                    }
+                }
+            } catch {
+                // ignore parsing errors
+            }
 
-		console.log('[Cache] using cached flight offers for key', cacheKey, `(age ${Math.round((Date.now() - cached.timestamp)/1000)}s)`);
-		setApiFlights(cached.data);
-		setHasSearched(true);
-		setShowPromotions(false);
-		setIsLoading(false);
-		// Important: DO NOT call the API if cached data exists — return early.
-		return;
-	}
+            const ageMs = Date.now() - cached.timestamp;
+            console.log('[Cache] found cache for key', cacheKey, `age ${Math.round(ageMs / 1000)}s`);
 
-	// No cache -> proceed to fetch and save results if any
-	const fetchAmadeus = async () => {
-		setIsLoading(true);
-		setApiFlights([]);
-		try {
-			// 1) get token
-			const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-				body: new URLSearchParams({
-					grant_type: 'client_credentials',
-					client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
-					client_secret: '9fcdtMUicUy6ZAGm'
-				})
-			});
-			const tokenJson = await tokenRes.json();
-			const token = tokenJson.access_token;
+            // fresh cache: use it and skip remote fetch
+            if (ageMs <= CACHE_TTL_MS) {
+                setApiFlights(cached.data);
+                setHasSearched(true);
+                setShowPromotions(false);
+                setIsLoading(false);
+                setCacheExpired(false);
+                return;
+            }
 
-			if (!token) throw new Error('No token from Amadeus');
+            // Cache expired: remove it immediately from storage (auto-delete).
+            // But we still keep the cached data in-memory (apiFlights) so the user
+            // who is currently on this route can see something and be prompted to refresh.
+            console.log('[Cache] expired -> removing cache for key', cacheKey);
+            try { removeCache(cacheKey); } catch (e) { console.warn('Failed to remove expired cache', e); }
 
-			// 2) build offers URL
-			const params = new URLSearchParams();
-			params.set('originLocationCode', origin);
-			params.set('destinationLocationCode', destination);
-			params.set('departureDate', departure);
-			if (q['returnDate']) params.set('returnDate', q['returnDate']);
+            // keep showing stale results in UI but mark expired so banner+Làm mới appear
+            setApiFlights(cached.data);
+            setHasSearched(true);
+            setShowPromotions(false);
+            setIsLoading(false);
+            setCacheExpired(true);
+            // Do NOT auto-fetch here; user must click "Làm mới" to get fresh offers.
+            return;
+        }
 
-			params.set('adults', q['adults'] || '1');
-			params.set('children', q['children'] || '0');
-			params.set('infants', q['infants'] || '0');
-			if (q['travelClass']) params.set('travelClass', q['travelClass']);
-			// params.set('includedAirlineCodes', q['includedAirlineCodes'] || 'VN');
-			params.set('currencyCode', q['currencyCode'] || 'VND');
-			params.set('nonStop', q['nonStop'] || 'true');
-			params.set('max', q['max'] || '5');
+        // No cache -> fetch now
+        fetchAmadeusOffers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams ? searchParams.toString() : '']);
 
-			console.log('[Amadeus] Request URL:', `https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`);
-
-			const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
-				headers: { Authorization: `Bearer ${token}` }
-			});
-			const offersJson = await offersRes.json();
-			const dicts = offersJson.dictionaries || {};
-			const data = offersJson.data || [];
-			// map offers
-			const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
-			console.log('[Amadeus] mapped flights:', mapped.map(m => ({ id: m.id, price: m.price, dep: m.departure, arr: m.arrival })));
-			// if mapped flights exist but none fit current priceRange, widen priceRange so UI shows results
-			if (mapped.length > 0) {
-				const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
-				if (prices.length > 0) {
-					const minP = Math.min(...prices);
-					const maxP = Math.max(...prices);
-					const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
-					if (!anyInCurrentRange) {
-						// expand to include mapped results with small padding
-						setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
-					}
-				}
-			}
-			setApiFlights(mapped);
-			setHasSearched(true);
-			setShowPromotions(false);
-
-			// save mapped results to cache (overwrite existing entry for same key) only if we have data
-			try {
-				if (mapped.length > 0) {
-					setCache(cacheKey, mapped);
-					console.log('[Cache] saved/updated cache for key', cacheKey);
-				} else {
-					console.log('[Cache] mapped empty — not caching for key', cacheKey);
-				}
-			} catch (e) {
-				// ignore storage errors
-			}
-		} catch (err) {
-			console.error('Amadeus fetch error', err);
-		} finally {
-			setIsLoading(false);
-		}
-	};
-
-	fetchAmadeus();
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, [searchParams ? searchParams.toString() : '']);
+    // Handler invoked by "Làm mới" button in UI when cache is expired
+    const handleRefreshCachedResults = async () => {
+        if (currentCacheKey) {
+            try { removeCache(currentCacheKey); } catch {}
+        }
+        setCacheExpired(false);
+        await fetchAmadeusOffers();
+    };
 
     const routeFlights = selectedRoute ? generateRouteFlights() : [];
     // If API returned flights, prefer them. Otherwise fallback to generated + sample flights.
@@ -1285,6 +1460,19 @@ export default function VeMayBay() {
 
                             {/* Flight Results */}
                             <div className="space-y-4">
+                                {cacheExpired && (
+                                    <Card className="mb-4 border-yellow-300 bg-yellow-50">
+                                        <CardContent className="p-4 flex items-center justify-between">
+                                            <div>
+                                                <div className="font-medium">Kết quả tìm kiếm của bạn đã hết hạn</div>
+                                                <div className="text-sm text-[hsl(var(--muted-foreground))]">Vui lòng làm mới để xem giá và tình trạng sẵn có mới nhất.</div>
+                                            </div>
+                                            <div>
+                                                <Button onClick={handleRefreshCachedResults}>Làm mới</Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                )}
                                 {isLoading ? (
                                     Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
                                 ) : (
@@ -1796,7 +1984,10 @@ export default function VeMayBay() {
                                                 <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.flightNumber} • {selectedOutbound.aircraft}</div>
                                             </div>
                                         </div>
-                                        {/* right column reserved (bỏ hiển thị giá theo yêu cầu) */}
+                                        {/* <div className="text-right">
+                                        <div className="text-sm font-semibold text-[hsl(var(--primary))]">{formatPrice(selectedOutbound.price)}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">1 khách</div>
+                                    </div> */}
                                     </div>
 
                                     <div className="flex items-center gap-6 mt-3">
