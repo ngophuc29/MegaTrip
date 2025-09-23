@@ -392,22 +392,12 @@ export default function FlightResults({
   // Helper: decide whether we can skip pricing/seatmap fetch and use embedded amenities/policies
   const shouldUseLocalAmenities = (flight: any) => {
     try {
-      // Conservative rule: only bypass Amadeus pricing/seatmap for VietJet (VJ)
-      // and only when the offer/raw actually contains embedded amenities or policies.
       const raw = flight?.raw ?? null;
-      const carrier = (flight?.airlineCode ?? String(flight?.flightNumber ?? '').slice(0, 2)).toString().toUpperCase();
-
-      if (carrier === 'VJ') {
-        // Prefer explicit amenity/policy presence before skipping remote calls
-        if (flight?.amenities || raw?.amenities || flight?.policies || raw?.policies) {
-          return true;
-        }
-        // If VJ but no embedded info, do NOT skip — keep original pricing/seatmap flow.
-        return false;
-      }
-
-      // For all other carriers, never skip the pricing/seatmap API here — preserve original behavior.
-      return false;
+      const hasAmenities = Boolean(flight?.amenities || raw?.amenities);
+      const hasPolicies = Boolean(flight?.policies || raw?.policies);
+      // If the flight (or embedded raw payload) already contains amenities or policies,
+      // use the local data and skip the remote pricing/seatmap call. Otherwise fetch.
+      return hasAmenities || hasPolicies;
     } catch {
       return false;
     }
@@ -546,17 +536,9 @@ export default function FlightResults({
                             return;
                           }
 
-                          // If flight already includes amenities/policies (e.g. VJ case), use local payload and avoid pricing+seatmap call
-                          if (shouldUseLocalAmenities(flight)) {
-                            // create a minimal pricing wrapper that UI code can consume
-                            const minimal = { data: flight.raw ?? flightOfferPayload };
-                            setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
-                            // no seatmap but we still set expanded and navigate
-                            setExpandedFlight(flight.id);
-                            console.log('Selected flight (local amenities/policies)', flight.id);
-                            router.push(`/ve-may-bay/${key}`);
-                            return;
-                          }
+                          // NOTE: do NOT skip pricing/seatmap here even if flight includes local amenities/policies.
+                          // The selection flow must fetch pricing and seatmap to secure the fare and show full purchase details.
+                          // (We still allow cache shortcut above.)
 
                           // not cached or signature mismatch -> fetch then proceed
                           setPricingLoadingFor(key, true);

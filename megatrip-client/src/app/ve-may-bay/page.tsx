@@ -192,6 +192,9 @@ export default function VeMayBay() {
     const [selectedInbound, setSelectedInbound] = useState<typeof sampleFlights[number] | null>(null);
     const [showReview, setShowReview] = useState(false);
     const [pricingLoadingRT, setPricingLoadingRT] = useState(false);
+    // Map of flightId -> pricing/offer data returned by pricing API (used by detail panel)
+    const [pricingByFlight, setPricingByFlight] = useState<Record<string, any>>({});
+
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
