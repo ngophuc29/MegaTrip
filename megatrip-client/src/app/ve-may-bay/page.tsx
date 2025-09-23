@@ -197,7 +197,8 @@ export default function VeMayBay() {
     const [pricingLoadingRT, setPricingLoadingRT] = useState(false);
     // Map of flightId -> pricing/offer data returned by pricing API (used by detail panel)
     const [pricingByFlight, setPricingByFlight] = useState<Record<string, any>>({});
-
+    const [showOutboundDetailsModal, setShowOutboundDetailsModal] = useState(false);
+    const [showInboundDetailsModal, setShowInboundDetailsModal] = useState(false);
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -636,7 +637,7 @@ export default function VeMayBay() {
                 }
 
                 perLegResults.push(mapped);
-                try { if (mapped.length > 0) setCache(cacheKey, mapped); } catch {}
+                try { if (mapped.length > 0) setCache(cacheKey, mapped); } catch { }
             }
 
             // assign per-leg results: outbound = leg0, inbound = leg1 (if present)
@@ -798,30 +799,30 @@ export default function VeMayBay() {
                 // ignore combined-cache read errors and fallback to per-leg logic
             }
 
-             const outboundParams: Record<string, string | undefined> = {
-                 originLocationCode: cacheParams.originLocationCode,
-                 destinationLocationCode: cacheParams.destinationLocationCode,
-                 departureDate: cacheParams.departureDate,
-                 adults: cacheParams.adults,
-                 children: cacheParams.children,
-                 infants: cacheParams.infants,
-                 travelClass: cacheParams.travelClass,
-                 nonStop: cacheParams.nonStop,
-                 currencyCode: cacheParams.currencyCode,
-                 includedAirlineCodes: cacheParams.includedAirlineCodes
-             };
-             const inboundParams: Record<string, string | undefined> = {
-                 originLocationCode: cacheParams.destinationLocationCode,
-                 destinationLocationCode: cacheParams.originLocationCode,
-                 departureDate: cacheParams.returnDate,
-                 adults: cacheParams.adults,
-                 children: cacheParams.children,
-                 infants: cacheParams.infants,
-                 travelClass: cacheParams.travelClass,
-                 nonStop: cacheParams.nonStop,
-                 currencyCode: cacheParams.currencyCode,
-                 includedAirlineCodes: cacheParams.includedAirlineCodes
-             };
+            const outboundParams: Record<string, string | undefined> = {
+                originLocationCode: cacheParams.originLocationCode,
+                destinationLocationCode: cacheParams.destinationLocationCode,
+                departureDate: cacheParams.departureDate,
+                adults: cacheParams.adults,
+                children: cacheParams.children,
+                infants: cacheParams.infants,
+                travelClass: cacheParams.travelClass,
+                nonStop: cacheParams.nonStop,
+                currencyCode: cacheParams.currencyCode,
+                includedAirlineCodes: cacheParams.includedAirlineCodes
+            };
+            const inboundParams: Record<string, string | undefined> = {
+                originLocationCode: cacheParams.destinationLocationCode,
+                destinationLocationCode: cacheParams.originLocationCode,
+                departureDate: cacheParams.returnDate,
+                adults: cacheParams.adults,
+                children: cacheParams.children,
+                infants: cacheParams.infants,
+                travelClass: cacheParams.travelClass,
+                nonStop: cacheParams.nonStop,
+                currencyCode: cacheParams.currencyCode,
+                includedAirlineCodes: cacheParams.includedAirlineCodes
+            };
 
             const outboundKey = makeCacheKeyFromParams(outboundParams);
             const inboundKey = makeCacheKeyFromParams(inboundParams);
@@ -852,7 +853,7 @@ export default function VeMayBay() {
                     setApiFlights(outboundCached.data); // show outbound first
                 } else {
                     // stale: remove stored entry but keep showing stale data in UI and mark expired
-                    try { removeCache(outboundKey); } catch {}
+                    try { removeCache(outboundKey); } catch { }
                     setOutboundFlights(outboundCached.data);
                     setApiFlights(outboundCached.data);
                     anyExpired = true;
@@ -881,7 +882,7 @@ export default function VeMayBay() {
                 if (ageMs <= CACHE_TTL_MS) {
                     setInboundFlights(inboundCached.data);
                 } else {
-                    try { removeCache(inboundKey); } catch {}
+                    try { removeCache(inboundKey); } catch { }
                     setInboundFlights(inboundCached.data);
                     anyExpired = true;
                 }
@@ -939,13 +940,13 @@ export default function VeMayBay() {
 
         // No cache -> fetch now
         fetchAmadeusOffers();
-     // eslint-disable-next-line react-hooks/exhaustive-deps
-     }, [searchParams ? searchParams.toString() : '']);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams ? searchParams.toString() : '']);
 
     // Handler invoked by "Làm mới" button in UI when cache is expired
     const handleRefreshCachedResults = async () => {
         if (currentCacheKey) {
-            try { removeCache(currentCacheKey); } catch {}
+            try { removeCache(currentCacheKey); } catch { }
         }
         setCacheExpired(false);
         await fetchAmadeusOffers();
@@ -1167,8 +1168,11 @@ export default function VeMayBay() {
                             </div>
                             {selectedOutbound && (
                                 <div className="text-sm">
-                                    {/* Chi tiết UI only */}
-                                    <button className="text-[hsl(var(--primary))] text-sm hover:underline cursor-default" onClick={() => { /* no-op UI */ }}>
+                                    {/* Thay handler no-op bằng mở modal */}
+                                    <button
+                                        className="text-[hsl(var(--primary))] text-sm hover:underline"
+                                        onClick={() => setShowOutboundDetailsModal(true)}
+                                    >
                                         Chi tiết
                                     </button>
                                 </div>
@@ -1176,7 +1180,7 @@ export default function VeMayBay() {
                         </div>
 
                         {selectedOutbound ? (
-                            <div className="px-4 pb-3">
+                            <div className="px-4 pb-0">
                                 <div className="flex items-center justify-between text-sm">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded bg-white/70 flex items-center justify-center text-sm font-semibold">
@@ -1222,6 +1226,10 @@ export default function VeMayBay() {
                                     <Button className="w-full" onClick={() => { setSelectedOutbound(null); setTripStep('outbound'); }}>
                                         Đổi chuyến bay đi
                                     </Button>
+                                </div>
+                                {/* Add price display here */}
+                                <div className="mt-2 text-right text font-bold text-orange-600">
+                                    Giá tiền : {formatPrice(selectedOutbound.price)}/khách
                                 </div>
                             </div>
                         ) : (
@@ -2195,21 +2203,28 @@ export default function VeMayBay() {
                     {/* overlay: when closing review, clear inbound selection so it's not persisted */}
                     <div className="absolute inset-0 bg-black/30" onClick={() => { setShowReview(false); setSelectedInbound(null); }} />
                     <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl animate-in slide-in-from-right duration-200">
-                        <Card className="h-full rounded-none border-0">
+                        <Card className="flex flex-col h-full space-y-3  ">
                             <CardHeader className="flex flex-row items-center justify-between py-4 px-4">
                                 <CardTitle className="text-base">Xem lại chuyến bay của bạn</CardTitle>
-                                {/* Close: close + clear inbound (do not persist selectedInbound) */}
                                 <Button variant="ghost" size="sm" onClick={() => { setShowReview(false); setSelectedInbound(null); }}>Đóng</Button>
                             </CardHeader>
-                            <CardContent className="space-y-3 px-4 pb-4">
-                                {/* OUTBOUND: sử dụng style giống phần bạn gửi */}
+                            <CardContent className="flex flex-col h-full space-y-3 px-4 pb-4">
+                                {/* OUTBOUND */}
                                 <Card className="p-3">
-                                    <div className="text-md font-medium mb-1">
-                                        <span className='inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-xs font-medium rounded mr-2'>Khởi hành</span>
-                                        {selectedOutbound.departure.city} → {selectedOutbound.arrival.city}
-                                        {selectedOutbound.departure?.date && (
-                                            <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedOutbound.departure.date)}</span>
-                                        )}
+                                    <div className="flex justify-between items-center mb-1">
+                                        <div className="text-md font-medium">
+                                            <span className='inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-xs font-medium rounded mr-2'>Khởi hành</span>
+                                            {selectedOutbound.departure.city} → {selectedOutbound.arrival.city}
+                                            {selectedOutbound.departure?.date && (
+                                                <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedOutbound.departure.date)}</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            className="text-[hsl(var(--primary))] text-sm hover:underline"
+                                            onClick={() => setShowOutboundDetailsModal(true)}
+                                        >
+                                            Chi tiết
+                                        </button>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
                                         <div className="flex items-center gap-3">
@@ -2221,19 +2236,13 @@ export default function VeMayBay() {
                                                 <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.flightNumber} • {selectedOutbound.aircraft}</div>
                                             </div>
                                         </div>
-                                        {/* <div className="text-right">
-                                        <div className="text-sm font-semibold text-[hsl(var(--primary))]">{formatPrice(selectedOutbound.price)}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">1 khách</div>
-                                    </div> */}
                                     </div>
-
                                     <div className="flex items-center gap-6 mt-3">
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedOutbound.departure.time}</div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.airport}</div>
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.city}</div>
                                         </div>
-
                                         <div className="flex-1 text-center">
                                             <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedOutbound.duration}</div>
                                             <div className="flex items-center">
@@ -2242,25 +2251,34 @@ export default function VeMayBay() {
                                                 <div className="flex-1 h-px bg-gray-300"></div>
                                             </div>
                                         </div>
-
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedOutbound.arrival.time}</div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.arrival.airport}</div>
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.arrival.city}</div>
                                         </div>
                                     </div>
-
-
+                                    {/* Add price display here */}
+                                    <div className="mt-2 text-right text font-bold text-orange-600">
+                                        Giá tiền : {formatPrice(selectedOutbound.price)}/khách
+                                    </div>
                                 </Card>
 
-                                {/* INBOUND: cùng style như Outbound */}
+                                {/* INBOUND */}
                                 <Card className="p-3">
-                                    <div className="text-sm font-medium mb-1">
-                                        <span className='inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-md font-medium rounded mr-2'>Chuyến về</span>
-                                        {selectedInbound.departure.city} → {selectedInbound.arrival.city}
-                                        {selectedInbound.departure?.date && (
-                                            <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedInbound.departure.date)}</span>
-                                        )}
+                                    <div className="flex justify-between items-center mb-1">
+                                        <div className="text-sm font-medium">
+                                            <span className='inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-md font-medium rounded mr-2'>Chuyến về</span>
+                                            {selectedInbound.departure.city} → {selectedInbound.arrival.city}
+                                            {selectedInbound.departure?.date && (
+                                                <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedInbound.departure.date)}</span>
+                                            )}
+                                        </div>
+                                        <button
+                                            className="text-[hsl(var(--primary))] text-sm hover:underline"
+                                            onClick={() => setShowInboundDetailsModal(true)}
+                                        >
+                                            Chi tiết
+                                        </button>
                                     </div>
                                     <div className="flex items-center justify-between text-sm">
                                         <div className="flex items-center gap-3">
@@ -2273,14 +2291,12 @@ export default function VeMayBay() {
                                             </div>
                                         </div>
                                     </div>
-
                                     <div className="flex items-center gap-6 mt-3">
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedInbound.departure.time}</div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.airport}</div>
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.city}</div>
                                         </div>
-
                                         <div className="flex-1 text-center">
                                             <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedInbound.duration}</div>
                                             <div className="flex items-center">
@@ -2289,29 +2305,30 @@ export default function VeMayBay() {
                                                 <div className="flex-1 h-px bg-gray-300"></div>
                                             </div>
                                         </div>
-
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedInbound.arrival.time}</div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.airport}</div>
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.city}</div>
                                         </div>
                                     </div>
-
-
+                                    {/* Add price display here */}
+                                    <div className="mt-2 text-right text font-bold text-orange-600">
+                                        Giá tiền : {formatPrice(selectedInbound.price)}/khách
+                                    </div>
                                 </Card>
 
-                                {/* Tổng giá + nút tiếp tục giữ nguyên */}
-                                <div className="flex items-center justify-between pt-2">
-                                    <div className="text-lg font-bold text-orange-600">{formatPrice(totalRoundtripPrice())}/khách</div>
-                                    <div>
-                                        <Button
-                                            size="lg"
-                                            onClick={() => handlePriceRoundtrip()}
-                                            disabled={pricingLoadingRT}
-                                        >
-                                            {pricingLoadingRT ? 'Đang kiểm giá...' : 'Tiếp tục'}
-                                        </Button>
+                                {/* Tổng giá + nút tiếp tục */}
+                                <div className="flex items-center justify-between pt-2 mt-auto border-t">
+                                    <div className="text-lg font-bold text-[hsl(var(--primary))]">
+                                        Tổng Tiền: {formatPrice(totalRoundtripPrice())}
                                     </div>
+                                    <Button
+                                        size="lg"
+                                        onClick={() => handlePriceRoundtrip()}
+                                        disabled={pricingLoadingRT}
+                                    >
+                                        {pricingLoadingRT ? 'Đang kiểm giá...' : 'Tiếp tục'}
+                                    </Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -2319,7 +2336,551 @@ export default function VeMayBay() {
                 </div>
             )}
 
+            {/* Modal chi tiết chuyến bay đi (Outbound) */}
 
+            {selectedOutbound && showOutboundDetailsModal && (
+                <div className="fixed inset-0 z-50">
+                    {/* overlay */}
+                    <div
+                        className="absolute inset-0 bg-black/40"
+                        onClick={() => setShowOutboundDetailsModal(false)}
+                    />
+                    {/* modal panel */}
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl p-4">
+                        <Card>
+                            <CardHeader className="flex items-center justify-between py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="font-semibold">Chi tiết chuyến đi</div>
+                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.airline}</div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => setShowOutboundDetailsModal(false)}>
+                                    <X />
+                                </Button>
+                            </CardHeader>
+                            <CardContent className="space-y-3 p-4">
+                                {/* Route Display */}
+                                <div className='flex justify-between'>
+
+                                    <div className="text-md font-medium mb-3">
+                                        <span className="inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-xs font-medium rounded mr-2">Chuyến đi</span>
+                                        {selectedOutbound.departure.city} → {selectedOutbound.arrival.city}
+                                        {selectedOutbound.departure?.date && (
+                                            <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedOutbound.departure.date)}</span>
+                                        )}
+                                    </div>
+
+                                    {/* Price Display */}
+                                    <div className="text-xl font-bold text-[hsl(var(--primary))]">{formatPrice(selectedOutbound.price)}/khách</div>
+                                </div>
+
+                                {/* <div className="flex items-center gap-4">
+                                    <div className="w-14 h-14 rounded bg-gray-100 flex items-center justify-center text-lg font-bold">
+                                        {selectedOutbound.airline.split(' ').map((s: string) => s[0]).slice(0, 2).join('')}
+                                    </div>
+                                    <div>
+                                        <div className="font-medium">{selectedOutbound.airline} • {selectedOutbound.flightNumber}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.aircraft}</div>
+                                    </div>
+                                </div> */}
+
+                                {/* Flight Timeline */}
+                                <div className="flex items-center gap-6 mt-3">
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedOutbound.departure.time}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.city}</div>
+                                    </div>
+                                    <div className="flex-1 text-center">
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedOutbound.duration}</div>
+                                        <div className="flex items-center">
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                            <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                        </div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedOutbound.arrival.time}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.arrival.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.arrival.city}</div>
+                                    </div>
+                                </div>
+
+                                {/* Tabs for Details, Benefits, Refund, Change, Promotions */}
+                                <Tabs defaultValue="details" className="w-full">
+                                    <TabsList className="grid w-full grid-cols-5">
+                                        <TabsTrigger value="details">Chi tiết</TabsTrigger>
+                                        <TabsTrigger value="benefits">Lợi ích đi kèm</TabsTrigger>
+                                        <TabsTrigger value="refund">Hoàn vé</TabsTrigger>
+                                        <TabsTrigger value="change">Đổi lịch</TabsTrigger>
+                                        <TabsTrigger value="promotions">Khuyến mãi</TabsTrigger>
+                                    </TabsList>
+                                    <div className="mt-4">
+                                        {/* Chi tiết */}
+                                        <TabsContent value="details" className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Hành lý</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <Luggage className="h-4 w-4 text-blue-500" />
+                                                            <div>
+                                                                <div className="font-medium">Xách tay</div>
+                                                                <div className="text-muted-foreground">
+                                                                    {selectedOutbound.baggage.handbag.weight} • {selectedOutbound.baggage.handbag.size}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Luggage className="h-4 w-4 text-green-500" />
+                                                            <div>
+                                                                <div className="font-medium">Ký gửi</div>
+                                                                <div className="text-muted-foreground">
+                                                                    {selectedOutbound.baggage.checkin.weight} • {selectedOutbound.baggage.checkin.pieces ?? `kiện`}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Tiện ích</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <Wifi className="h-4 w-4" />
+                                                            <div>
+                                                                {selectedOutbound.amenities.wifi.available ? (
+                                                                    <>
+                                                                        <div className="font-medium">WiFi</div>
+                                                                        <div className="text-muted-foreground">
+                                                                            {selectedOutbound.amenities.wifi.free ? 'Miễn phí' : selectedOutbound.amenities.wifi.price}
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">Không có WiFi</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Utensils className="h-4 w-4" />
+                                                            <div>
+                                                                {selectedOutbound.amenities.meal.included ? (
+                                                                    <>
+                                                                        <div className="font-medium">Bữa ăn</div>
+                                                                        <div className="text-muted-foreground">{selectedOutbound.amenities.meal.type}</div>
+                                                                    </>
+                                                                ) : selectedOutbound.amenities.meal.available ? (
+                                                                    <>
+                                                                        <div className="font-medium">Bữa ăn có phí</div>
+                                                                        <div className="text-muted-foreground">{selectedOutbound.amenities.meal.price}</div>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">Không bán suất ăn</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {selectedOutbound.amenities.entertainment?.available && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Tv className="h-4 w-4" />
+                                                                <div>
+                                                                    <div className="font-medium">Giải trí</div>
+                                                                    <div className="text-muted-foreground">{selectedOutbound.amenities.entertainment.screens}</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {selectedOutbound.amenities.power?.available && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Battery className="h-4 w-4" />
+                                                                <div>
+                                                                    <div className="font-medium">Sạc điện</div>
+                                                                    <div className="text-muted-foreground">{selectedOutbound.amenities.power.type}</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div>
+                                                            <span className="font-medium">Máy bay:</span> {selectedOutbound.aircraft}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium">Hạng vé:</span> {selectedOutbound.class}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium">Còn lại:</span> {selectedOutbound.availableSeats} ghế
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Lợi ích đi kèm */}
+                                        <TabsContent value="benefits" className="space-y-3">
+                                            <h4 className="font-medium">Lợi ích đi kèm</h4>
+                                            <div className="space-y-2">
+                                                {selectedOutbound.benefits?.map((benefit: string, index: number) => (
+                                                    <div key={index} className="flex items-start gap-2">
+                                                        <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                                        <span className="text-sm">{benefit}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Hoàn vé */}
+                                        <TabsContent value="refund" className="space-y-3">
+                                            <div className="flex items-start gap-3">
+                                                {selectedOutbound.policies.cancellable ? (
+                                                    <Shield className="h-5 w-5 text-green-500 mt-0.5" />
+                                                ) : (
+                                                    <X className="h-5 w-5 text-red-500 mt-0.5" />
+                                                )}
+                                                <div>
+                                                    <h4 className="font-medium mb-2">
+                                                        {selectedOutbound.policies.cancellable ? 'Có thể hoàn vé' : 'Không hoàn vé'}
+                                                    </h4>
+                                                    {selectedOutbound.policies.cancellable ? (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
+                                                            <div>• Phí hủy: {selectedOutbound.policies.cancellationFee}</div>
+                                                            <div>• {selectedOutbound.policies.refundable}</div>
+                                                            <div>• Thời gian xử lý: 7-14 ngày làm việc</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                            Vé này không thể hoàn tiền trong mọi trường hợp
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Đổi lịch */}
+                                        <TabsContent value="change" className="space-y-3">
+                                            <div className="flex items-start gap-3">
+                                                {selectedOutbound.policies.changeable ? (
+                                                    <RefreshCw className="h-5 w-5 text-blue-500 mt-0.5" />
+                                                ) : (
+                                                    <X className="h-5 w-5 text-red-500 mt-0.5" />
+                                                )}
+                                                <div>
+                                                    <h4 className="font-medium mb-2">
+                                                        {selectedOutbound.policies.changeable ? 'Có thể đổi lịch' : 'Không đổi lịch'}
+                                                    </h4>
+                                                    {selectedOutbound.policies.changeable ? (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
+                                                            <div>• Phí đổi: {selectedOutbound.policies.changeFee}</div>
+                                                            <div>• Áp dụng: Trước 24h khởi hành</div>
+                                                            <div>• Số lần đổi: Không giới hạn</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                            Vé này không thể đổi lịch bay
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+
+                                        {/* Khuyến mãi */}
+                                        <TabsContent value="promotions" className="space-y-3">
+                                            {selectedOutbound.promotions && selectedOutbound.promotions.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    <h4 className="font-medium">Khuyến mãi áp dụng</h4>
+                                                    {selectedOutbound.promotions.map((promo: any, index: number) => (
+                                                        <Card key={index} className="p-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <Gift className="h-5 w-5 text-orange-500 mt-0.5" />
+                                                                <div className="flex-1">
+                                                                    <div className="font-medium text-sm">{promo.code}</div>
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">{promo.description}</div>
+                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                                                                        Hết hạn: {promo.valid}
+                                                                    </div>
+                                                                </div>
+                                                                <Button size="sm" variant="outline" onClick={() => handleCopy(promo.code)}>
+                                                                    {copied[promo.code] ? 'Đã copy!' : 'Sao chép'}
+                                                                </Button>
+                                                            </div>
+                                                        </Card>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-4">
+                                                    <Info className="h-8 w-8 text-[hsl(var(--muted-foreground))] mx-auto mb-2" />
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                        Hiện không có khuyến mãi cho chuyến bay này
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </TabsContent>
+                                    </div>
+                                </Tabs>
+
+                                <div className="flex justify-end">
+                                    <Button onClick={() => setShowOutboundDetailsModal(false)}>Đóng</Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal chi tiết chuyến bay về (Inbound) */}
+            {selectedInbound && showInboundDetailsModal && (
+                <div className="fixed inset-0 z-50">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setShowInboundDetailsModal(false)} />
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl p-4">
+                        <Card>
+                            <CardHeader className="flex items-center justify-between py-3 px-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="font-semibold">Chi tiết chuyến về</div>
+                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.airline}</div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => setShowInboundDetailsModal(false)}>
+                                    <X />
+                                </Button>
+                            </CardHeader>
+                            <CardContent className="space-y-3 p-4">
+                                <div className='flex justify-between'>
+                                    <div className="text-md font-medium mb-3">
+                                        <span className="inline-flex items-center px-2 py-1 bg-sky-100 text-sky-700 text-xs font-medium rounded mr-2">Chuyến về</span>
+                                        {selectedInbound.departure.city} → {selectedInbound.arrival.city}
+                                        {selectedInbound.departure?.date && (
+                                            <span className="text-xs text-[hsl(var(--muted-foreground))]"> • {formatDateReadable(selectedInbound.departure.date)}</span>
+                                        )}
+                                    </div>
+                                    <div className="text-xl font-bold text-[hsl(var(--primary))]">{formatPrice(selectedInbound.price)}/khách</div>
+                                </div>
+                                <div className="flex items-center gap-6 mt-3">
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedInbound.departure.time}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.city}</div>
+                                    </div>
+                                    <div className="flex-1 text-center">
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedInbound.duration}</div>
+                                        <div className="flex items-center">
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                            <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                        </div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedInbound.arrival.time}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.city}</div>
+                                    </div>
+                                </div>
+                                <Tabs defaultValue="details" className="w-full">
+                                    <TabsList className="grid w-full grid-cols-5">
+                                        <TabsTrigger value="details">Chi tiết</TabsTrigger>
+                                        <TabsTrigger value="benefits">Lợi ích đi kèm</TabsTrigger>
+                                        <TabsTrigger value="refund">Hoàn vé</TabsTrigger>
+                                        <TabsTrigger value="change">Đổi lịch</TabsTrigger>
+                                        <TabsTrigger value="promotions">Khuyến mãi</TabsTrigger>
+                                    </TabsList>
+                                    <div className="mt-4">
+                                        <TabsContent value="details" className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Hành lý</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <Luggage className="h-4 w-4 text-blue-500" />
+                                                            <div>
+                                                                <div className="font-medium">Xách tay</div>
+                                                                <div className="text-muted-foreground">
+                                                                    {selectedInbound.baggage.handbag.weight} • {selectedInbound.baggage.handbag.size}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Luggage className="h-4 w-4 text-green-500" />
+                                                            <div>
+                                                                <div className="font-medium">Ký gửi</div>
+                                                                <div className="text-muted-foreground">
+                                                                    {selectedInbound.baggage.checkin.weight} • {selectedInbound.baggage.checkin.pieces ?? `kiện`}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Tiện ích</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <Wifi className="h-4 w-4" />
+                                                            <div>
+                                                                {selectedInbound.amenities.wifi.available ? (
+                                                                    <>
+                                                                        <div className="font-medium">WiFi</div>
+                                                                        <div className="text-muted-foreground">
+                                                                            {selectedInbound.amenities.wifi.free ? 'Miễn phí' : selectedInbound.amenities.wifi.price}
+                                                                        </div>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">Không có WiFi</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <Utensils className="h-4 w-4" />
+                                                            <div>
+                                                                {selectedInbound.amenities.meal.included ? (
+                                                                    <>
+                                                                        <div className="font-medium">Bữa ăn</div>
+                                                                        <div className="text-muted-foreground">{selectedInbound.amenities.meal.type}</div>
+                                                                    </>
+                                                                ) : selectedInbound.amenities.meal.available ? (
+                                                                    <>
+                                                                        <div className="font-medium">Bữa ăn có phí</div>
+                                                                        <div className="text-muted-foreground">{selectedInbound.amenities.meal.price}</div>
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground">Không bán suất ăn</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        {selectedInbound.amenities.entertainment?.available && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Tv className="h-4 w-4" />
+                                                                <div>
+                                                                    <div className="font-medium">Giải trí</div>
+                                                                    <div className="text-muted-foreground">{selectedInbound.amenities.entertainment.screens}</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {selectedInbound.amenities.power?.available && (
+                                                            <div className="flex items-center gap-2">
+                                                                <Battery className="h-4 w-4" />
+                                                                <div>
+                                                                    <div className="font-medium">Sạc điện</div>
+                                                                    <div className="text-muted-foreground">{selectedInbound.amenities.power.type}</div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
+                                                    <div className="space-y-2 text-sm">
+                                                        <div>
+                                                            <span className="font-medium">Máy bay:</span> {selectedInbound.aircraft}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium">Hạng vé:</span> {selectedInbound.class}
+                                                        </div>
+                                                        <div>
+                                                            <span className="font-medium">Còn lại:</span> {selectedInbound.availableSeats} ghế
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="benefits" className="space-y-3">
+                                            <h4 className="font-medium">Lợi ích đi kèm</h4>
+                                            <div className="space-y-2">
+                                                {selectedInbound.benefits?.map((benefit: string, index: number) => (
+                                                    <div key={index} className="flex items-start gap-2">
+                                                        <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                                                        <span className="text-sm">{benefit}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="refund" className="space-y-3">
+                                            <div className="flex items-start gap-3">
+                                                {selectedInbound.policies.cancellable ? (
+                                                    <Shield className="h-5 w-5 text-green-500 mt-0.5" />
+                                                ) : (
+                                                    <X className="h-5 w-5 text-red-500 mt-0.5" />
+                                                )}
+                                                <div>
+                                                    <h4 className="font-medium mb-2">
+                                                        {selectedInbound.policies.cancellable ? 'Có thể hoàn vé' : 'Không hoàn vé'}
+                                                    </h4>
+                                                    {selectedInbound.policies.cancellable ? (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
+                                                            <div>• Phí hủy: {selectedInbound.policies.cancellationFee}</div>
+                                                            <div>• {selectedInbound.policies.refundable}</div>
+                                                            <div>• Thời gian xử lý: 7-14 ngày làm việc</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                            Vé này không thể hoàn tiền trong mọi trường hợp
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="change" className="space-y-3">
+                                            <div className="flex items-start gap-3">
+                                                {selectedInbound.policies.changeable ? (
+                                                    <RefreshCw className="h-5 w-5 text-blue-500 mt-0.5" />
+                                                ) : (
+                                                    <X className="h-5 w-5 text-red-500 mt-0.5" />
+                                                )}
+                                                <div>
+                                                    <h4 className="font-medium mb-2">
+                                                        {selectedInbound.policies.changeable ? 'Có thể đổi lịch' : 'Không đổi lịch'}
+                                                    </h4>
+                                                    {selectedInbound.policies.changeable ? (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
+                                                            <div>• Phí đổi: {selectedInbound.policies.changeFee}</div>
+                                                            <div>• Áp dụng: Trước 24h khởi hành</div>
+                                                            <div>• Số lần đổi: Không giới hạn</div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                            Vé này không thể đổi lịch bay
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </TabsContent>
+                                        <TabsContent value="promotions" className="space-y-3">
+                                            {selectedInbound.promotions && selectedInbound.promotions.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    <h4 className="font-medium">Khuyến mãi áp dụng</h4>
+                                                    {selectedInbound.promotions.map((promo: any, index: number) => (
+                                                        <Card key={index} className="p-3">
+                                                            <div className="flex items-start gap-3">
+                                                                <Gift className="h-5 w-5 text-orange-500 mt-0.5" />
+                                                                <div className="flex-1">
+                                                                    <div className="font-medium text-sm">{promo.code}</div>
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">{promo.description}</div>
+                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                                                                        Hết hạn: {promo.valid}
+                                                                    </div>
+                                                                </div>
+                                                                <Button size="sm" variant="outline" onClick={() => handleCopy(promo.code)}>
+                                                                    {copied[promo.code] ? 'Đã copy!' : 'Sao chép'}
+                                                                </Button>
+                                                            </div>
+                                                        </Card>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-4">
+                                                    <Info className="h-8 w-8 text-[hsl(var(--muted-foreground))] mx-auto mb-2" />
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                        Hiện không có khuyến mãi cho chuyến bay này
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </TabsContent>
+                                    </div>
+                                </Tabs>
+                                <div className="flex justify-end">
+                                    <Button onClick={() => setShowInboundDetailsModal(false)}>Đóng</Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </div>
+            )}
 
         </>
     );
