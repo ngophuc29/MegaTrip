@@ -1,6 +1,6 @@
 "use client"
-import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Layout from '../../components/Layout';
 import { Button } from '../../components/ui/button';
@@ -34,7 +34,6 @@ import {
     Minus,
     Plus,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 
 // same cache key used in FlightResults
@@ -185,25 +184,27 @@ export default function ChiTietVeMayBay() {
     useEffect(() => {
         if (!id) return;
         try {
+            // route param may be URL-encoded (e.g. "1%3A%3A72865655") — decode to match composite cache keys ("1::72865655")
+            const lookupId = decodeURIComponent(String(id));
             const stored = loadCacheFromStorage();
-            // LOG: kiểm tra cache cho id này
-            console.log('[Flight detail] id=', id, 'cache present:', Boolean(stored));
-            console.log('[Flight detail] pricing for id=', id, stored?.pricing?.[id]);
-            console.log('[Flight detail] seatmap for id=', id, stored?.seatmap?.[id]);
-            console.log('[Flight detail] signature for id=', id, stored?.signatures?.[id]);
-            if (stored && stored.pricing && stored.pricing[id]) {
-                setCachedPricing(stored.pricing[id]);
+            // LOG: kiểm tra cache cho id này (use decoded lookupId)
+            console.log('[Flight detail] id=', lookupId, 'cache present:', Boolean(stored));
+            console.log('[Flight detail] pricing for id=', lookupId, stored?.pricing?.[lookupId]);
+            console.log('[Flight detail] seatmap for id=', lookupId, stored?.seatmap?.[lookupId]);
+            console.log('[Flight detail] signature for id=', lookupId, stored?.signatures?.[lookupId]);
+            if (stored && stored.pricing && stored.pricing[lookupId]) {
+                setCachedPricing(stored.pricing[lookupId]);
                 // normalize/derive offer
                 const offer =
-                    stored.pricing[id]?.data?.flightOffers?.[0] ??
-                    (Array.isArray(stored.pricing[id]?.data) ? stored.pricing[id].data[0] : (stored.pricing[id]?.data ?? stored.pricing[id] ?? null));
+                    stored.pricing[lookupId]?.data?.flightOffers?.[0] ??
+                    (Array.isArray(stored.pricing[lookupId]?.data) ? stored.pricing[lookupId].data[0] : (stored.pricing[lookupId]?.data ?? stored.pricing[lookupId] ?? null));
                 const travelerCount = (offer?.travelerPricings && offer.travelerPricings.length) || (offer?.travelerPricings?.length) || 0;
                 const mapped = {
-                    numberOfBookableSeats: offer?.numberOfBookableSeats ?? stored.pricing[id]?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? null,
-                    total: offer?.price?.total ?? stored.pricing[id]?.price?.total ?? null,
-                    currency: offer?.price?.currency ?? stored.pricing[id]?.price?.currency ?? null,
+                    numberOfBookableSeats: offer?.numberOfBookableSeats ?? stored.pricing[lookupId]?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? null,
+                    total: offer?.price?.total ?? stored.pricing[lookupId]?.price?.total ?? null,
+                    currency: offer?.price?.currency ?? stored.pricing[lookupId]?.price?.currency ?? null,
                     travelerPricingsCount: travelerCount,
-                    validatingAirlines: offer?.validatingAirlineCodes ?? stored.pricing[id]?.validatingAirlineCodes ?? [],
+                    validatingAirlines: offer?.validatingAirlineCodes ?? stored.pricing[lookupId]?.validatingAirlineCodes ?? [],
                     lastTicketingDate: offer?.lastTicketingDate ?? null,
                     rawOffer: offer
                 };
@@ -232,17 +233,17 @@ export default function ChiTietVeMayBay() {
                     console.warn('Error deriving participants from offer', e);
                 }
             }
-            if (stored && stored.seatmap && stored.seatmap[id]) {
-                setCachedSeatmap(stored.seatmap[id]);
+            if (stored && stored.seatmap && stored.seatmap[lookupId]) {
+                setCachedSeatmap(stored.seatmap[lookupId]);
                 const summary = {
-                    aircraftCode: stored.seatmap[id]?.aircraft?.code ?? stored.seatmap[id]?.data?.aircraft?.code ?? null,
-                    availableSeatsCounters: stored.seatmap[id]?.availableSeatsCounters ?? stored.seatmap[id]?.data?.availableSeatsCounters ?? null,
-                    rawSeatmap: stored.seatmap[id]
+                    aircraftCode: stored.seatmap[lookupId]?.aircraft?.code ?? stored.seatmap[lookupId]?.data?.aircraft?.code ?? null,
+                    availableSeatsCounters: stored.seatmap[lookupId]?.availableSeatsCounters ?? stored.seatmap[lookupId]?.data?.availableSeatsCounters ?? null,
+                    rawSeatmap: stored.seatmap[lookupId]
                 };
                 setSeatmapSummary(summary);
                 console.log('[Flight detail] seatmapSummary=', summary);
                 // parse seatmap -> rows by numeric row extracted from seat.number
-                const raw = stored.seatmap[id];
+                const raw = stored.seatmap[lookupId];
                 const decks = raw?.decks ?? [];
                 const allSeats: any[] = [];
                 for (const d of decks) {
@@ -309,7 +310,7 @@ export default function ChiTietVeMayBay() {
                 }
             }
             // map ALL included resources into add-on-like items (merge with static addOnServices)
-            const inc = stored.pricing[id]?.included ?? stored.pricing[id]?.data?.included ?? {};
+            const inc = stored.pricing[lookupId]?.included ?? stored.pricing[lookupId]?.data?.included ?? {};
             console.log('[Flight detail] included keys:', Object.keys(inc));
             const includedAddOns: any[] = [];
             for (const [key, val] of Object.entries(inc || {})) {

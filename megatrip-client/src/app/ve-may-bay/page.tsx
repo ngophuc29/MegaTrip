@@ -1268,6 +1268,285 @@ export default function VeMayBay() {
         );
     }
 
+    // --- NEW: helpers để pricing/seatmap + cache (tương thích với FlightResults) ---
+    const CACHE_KEY = 'amadeus_pricing_cache_v1';
+
+    // Make a stable composite cache key from flight id and payload signature
+    const makePricingCacheKey = (flightOfferPayload: any, flightId?: any) => {
+        const sig = computeSignatureForPayload(flightOfferPayload) ?? 'nosig';
+        const idPart = String(flightId ?? flightOfferPayload?.id ?? 'unknown');
+        return `${idPart}::${sig}`;
+    };
+
+    const loadCacheFromStorage = () => {
+        try {
+            if (typeof window === 'undefined') return {};
+            const raw = localStorage.getItem(CACHE_KEY);
+            return raw ? JSON.parse(raw) : {};
+        } catch {
+            return {};
+        }
+    };
+    const saveCacheToStorage = (cache: Record<string, any>) => {
+        try {
+            if (typeof window === 'undefined') return;
+            localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+        } catch { /* ignore */ }
+    };
+
+    const sanitizeOfferForSignature = (offer: any) => {
+        if (!offer) return {};
+        try {
+            const itins = (offer.itineraries || []).map((it: any) => ({
+                duration: it.duration,
+                segments: (it.segments || []).map((s: any) => ({
+                    departure: { iataCode: s.departure?.iataCode, at: s.departure?.at },
+                    arrival: { iataCode: s.arrival?.iataCode, at: s.arrival?.at },
+                    carrierCode: s.carrierCode, number: s.number, aircraft: s.aircraft?.code
+                }))
+            }));
+            return {
+                id: offer.id ?? null,
+                price: offer.price ? { total: offer.price.total, currency: offer.price.currency } : null,
+                numberOfBookableSeats: offer.numberOfBookableSeats ?? null,
+                itineraries: itins,
+                lastTicketingDate: offer.lastTicketingDate ?? null
+            };
+        } catch {
+            return {};
+        }
+    };
+
+    const djb2Hex = (str: string) => {
+        let h = 5381;
+        for (let i = 0; i < str.length; i++) {
+            h = ((h << 5) + h) + str.charCodeAt(i);
+            h = h & 0xffffffff;
+        }
+        return (h >>> 0).toString(16).padStart(8, '0');
+    };
+
+    const computeSignatureForPayload = (payload: any) => {
+        try {
+            const cleaned = sanitizeOfferForSignature(payload);
+            const s = JSON.stringify(cleaned);
+            return djb2Hex(s);
+        } catch {
+            return null;
+        }
+    };
+
+    const fetchAmadeusTokenSimple = async () => {
+        const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'client_credentials',
+                client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
+                client_secret: '9fcdtMUicUy6ZAGm'
+            })
+        });
+        const tokenJson = await tokenRes.json();
+        return tokenJson.access_token;
+    };
+
+    const constructFallbackOfferForPage = (flight: any) => {
+        const depDate = flight.departure?.date || '';
+        const arrDate = flight.arrival?.date || '';
+        return {
+            type: 'flight-offer',
+            id: String(flight.id),
+            source: 'TEST',
+            numberOfBookableSeats: flight.availableSeats ?? 0,
+            itineraries: [
+                {
+                    duration: `PT0H0M`,
+                    segments: [
+                        {
+                            departure: {
+                                iataCode: flight.departure?.airport || flight.departure?.city || '',
+                                at: depDate && flight.departure?.time ? `${depDate}T${flight.departure.time}:00` : undefined
+                            },
+                            arrival: {
+                                iataCode: flight.arrival?.airport || flight.arrival?.city || '',
+                                at: arrDate && flight.arrival?.time ? `${arrDate}T${flight.arrival.time}:00` : undefined
+                            },
+                            carrierCode: flight.airlineCode || (flight.airline ? String(flight.airline).slice(0, 2).toUpperCase() : 'XX'),
+                            number: flight.flightNumber?.replace(/\D/g, '') || '0',
+                            aircraft: { code: '' }
+                        }
+                    ]
+                }
+            ],
+            price: {
+                currency: flight.currency || 'VND',
+                total: String(flight.price ?? 0)
+            }
+        };
+    };
+
+    // const handlePriceOfferSingle = async (flight: any) => {
+    //     if (!flight) return null;
+    //     const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
+    //     const key = String(flight.id ?? flightOfferPayload.id ?? 'unknown');
+    //     const signature = computeSignatureForPayload(flightOfferPayload);
+
+    //     // check cache
+    //     try {
+    //         const stored = loadCacheFromStorage();
+    //         if (stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature) {
+    //             console.log(`[pricing-cache] hit for key=${key}`);
+    //             return { fromCache: true, key, signature, pricing: stored.pricing[key], seatmap: stored.seatmap?.[key] ?? null };
+    //         }
+    //     } catch (e) {
+    //         console.warn('Cache read error', e);
+    //     }
+
+    //     // not cached or signature mismatch -> fetch pricing + seatmap and persist
+    //     try {
+    //         const token = await fetchAmadeusTokenSimple();
+    //         if (!token) throw new Error('No access token from Amadeus');
+
+    //         const pricingBody = { data: { type: 'flight-offers-pricing', flightOffers: [flightOfferPayload] } };
+    //         const includeList = ['credit-card-fees', 'bags', 'other-services', 'detailed-fare-rules'];
+    //         const forceClass = true;
+    //         const pricingUrl = `https://test.api.amadeus.com/v1/shopping/flight-offers/pricing?include=${encodeURIComponent(includeList.join(','))}&forceClass=${forceClass}`;
+    //         const pricingRes = await fetch(pricingUrl, {
+    //             method: 'POST',
+    //             headers: {
+    //                 Authorization: `Bearer ${token}`,
+    //                 'Content-Type': 'application/vnd.amadeus+json'
+    //             },
+    //             body: JSON.stringify(pricingBody)
+    //         });
+    //         const pricingJson = await pricingRes.json();
+
+    //         const seatmapBody = { data: [flightOfferPayload] };
+    //         const seatmapUrl = 'https://test.api.amadeus.com/v1/shopping/seatmaps';
+    //         const seatRes = await fetch(seatmapUrl, {
+    //             method: 'POST',
+    //             headers: {
+    //                 Authorization: `Bearer ${token}`,
+    //                 'Content-Type': 'application/vnd.amadeus+json'
+    //             },
+    //             body: JSON.stringify(seatmapBody)
+    //         });
+    //         const seatJson = await seatRes.json();
+    //         const normalizedSeat = Array.isArray(seatJson) ? seatJson[0] : (seatJson?.data?.[0] ?? seatJson);
+
+    //         // persist into localStorage cache (merge with existing)
+    //         try {
+    //             const existing = loadCacheFromStorage();
+    //             const merged = {
+    //                 pricing: { ...(existing.pricing || {}), [key]: pricingJson },
+    //                 seatmap: { ...(existing.seatmap || {}), [key]: normalizedSeat },
+    //                 signatures: { ...(existing.signatures || {}), [key]: signature ?? null },
+    //                 ts: Date.now()
+    //             };
+    //             saveCacheToStorage(merged);
+    //             console.log(`[pricing-cache] saved for key=${key}`);
+    //         } catch (e) {
+    //             console.warn('Cache write error', e);
+    //         }
+
+    //         return { fromCache: false, key, signature, pricing: pricingJson, seatmap: normalizedSeat };
+    //     } catch (err) {
+    //         console.error('Pricing/Seatmap error', err);
+    //         return null;
+    //     }
+    // };
+    const handlePriceOfferSingle = async (flight: any) => {
+        if (!flight) return null;
+        const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
+        const signature = computeSignatureForPayload(flightOfferPayload);
+        const key = makePricingCacheKey(flightOfferPayload, flight.id);
+
+        // Kiểm tra cache
+        try {
+            const stored = loadCacheFromStorage();
+            if (stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature) {
+                console.log(`[pricing-cache] HIT: Tìm thấy dữ liệu trong cache cho key=${key} signature=${signature}`);
+                return { fromCache: true, key, signature, pricing: stored.pricing[key], seatmap: stored.seatmap?.[key] ?? null };
+            } else {
+                console.log(`[pricing-cache] MISS: Không tìm thấy hoặc cache không hợp lệ cho key=${key} signature=${signature}, tiến hành fetch API`);
+            }
+        } catch (e) {
+            console.warn('[pricing-cache] Lỗi khi đọc cache', e);
+        }
+
+        // Fetch API nếu cache miss
+        try {
+            console.log(`[pricing-cache] Bắt đầu fetch pricing/seatmap cho key=${key} signature=${signature}`);
+            const token = await fetchAmadeusTokenSimple();
+            if (!token) throw new Error('No access token from Amadeus');
+
+            const pricingBody = { data: { type: 'flight-offers-pricing', flightOffers: [flightOfferPayload] } };
+            const includeList = ['credit-card-fees', 'bags', 'other-services', 'detailed-fare-rules'];
+            const forceClass = true;
+            const pricingUrl = `https://test.api.amadeus.com/v1/shopping/flight-offers/pricing?include=${encodeURIComponent(includeList.join(','))}&forceClass=${forceClass}`;
+            const pricingRes = await fetch(pricingUrl, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.amadeus+json'
+                },
+                body: JSON.stringify(pricingBody)
+            });
+            const pricingJson = await pricingRes.json();
+
+            const seatmapBody = { data: [flightOfferPayload] };
+            const seatmapUrl = 'https://test.api.amadeus.com/v1/shopping/seatmaps';
+            const seatRes = await fetch(seatmapUrl, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.amadeus+json'
+                },
+                body: JSON.stringify(seatmapBody)
+            });
+            const seatJson = await seatRes.json();
+            const normalizedSeat = Array.isArray(seatJson) ? seatJson[0] : (seatJson?.data?.[0] ?? seatJson);
+
+            // Lưu vào cache
+            try {
+                const existing = loadCacheFromStorage();
+                const merged = {
+                    pricing: { ...(existing.pricing || {}), [key]: pricingJson },
+                    seatmap: { ...(existing.seatmap || {}), [key]: normalizedSeat },
+                    signatures: { ...(existing.signatures || {}), [key]: signature ?? null },
+                    ts: Date.now()
+                };
+                saveCacheToStorage(merged);
+                console.log(`[pricing-cache] LƯU: Đã lưu dữ liệu mới vào cache cho key=${key} signature=${signature}`);
+            } catch (e) {
+                console.warn('[pricing-cache] Lỗi khi lưu cache', e);
+            }
+
+            return { fromCache: false, key, signature, pricing: pricingJson, seatmap: normalizedSeat };
+        } catch (err) {
+            console.error('[pricing-cache] Lỗi khi fetch pricing/seatmap', err);
+            return null;
+        }
+    };
+    // handler cho nút "Tiếp tục" (roundtrip) - gọi pricing/seatmap cho cả outbound + inbound
+    const handleContinueClick = async () => {
+        try {
+            if (!selectedOutbound || !selectedInbound) {
+                console.warn('Outbound or inbound missing, nothing to price');
+                return;
+            }
+            setPricingLoadingRT(true);
+            console.log('Start pricing both legs...');
+            const outRes = await handlePriceOfferSingle(selectedOutbound);
+            console.log('Outbound pricing result:', outRes);
+            const inRes = await handlePriceOfferSingle(selectedInbound);
+            console.log('Inbound pricing result:', inRes);
+            console.log('Both legs processed.');
+        } finally {
+            setPricingLoadingRT(false);
+        }
+    };
+
     return (
         <>
             {/* Search Section */}
@@ -1800,6 +2079,43 @@ export default function VeMayBay() {
                                                                             <Luggage className="h-3 w-3" />
                                                                             {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`}
                                                                         </div>
+                                                                        {/* Quick amenities */}
+                                                                        <div className="flex items-center gap-3 mt-3 text-sm text-[hsl(var(--muted-foreground))]">
+                                                                            {/* Stops / direct */}
+                                                                            <div className="inline-flex items-center gap-1">
+                                                                                <span className="px-2 py-1 bg-slate-100 rounded text-xs">{flight.stopsText || 'Bay thẳng'}</span>
+                                                                            </div>
+
+                                                                            {/* Class / cabin */}
+                                                                            <div className="inline-flex items-center gap-1">
+                                                                                <span className="text-xs text-muted-foreground">Hạng</span>
+                                                                                <div className="px-2 py-0.5 bg-slate-50 rounded text-xs font-medium">{flight.class}</div>
+                                                                            </div>
+
+                                                                            {/* Baggage */}
+                                                                            <div className="inline-flex items-center gap-1">
+                                                                                <Luggage className="h-3 w-3" />
+                                                                                <div className="text-xs">
+                                                                                    {flight.baggage.checkin?.pieces ? `${flight.baggage.checkin.pieces} kiện` :
+                                                                                        flight.baggage.checkin?.weight ? `${flight.baggage.checkin.weight}${flight.baggage.checkin.unit ?? ''}` :
+                                                                                            'Ký gửi: -'}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Cabin bag */}
+                                                                            <div className="inline-flex items-center gap-1">
+                                                                                <div className="text-xs">
+                                                                                    {flight.baggage?.handbag?.pieces ? `Xách tay: ${flight.baggage.handbag.pieces} kiện` :
+                                                                                        flight.baggage?.handbag?.weight ? `Xách tay: ${flight.baggage.handbag.weight}${flight.baggage.handbag.unit ?? ''}` :
+                                                                                            'Xách tay: Không có thông tin'}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Seats available */}
+                                                                            <div className="ml-auto text-right text-xs">
+                                                                                <div>Số ghế: <span className="font-medium">{flight.availableSeats ?? '-'}</span></div>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                                 {/* Price & Action */}
@@ -1855,6 +2171,7 @@ export default function VeMayBay() {
                                                                                 <ChevronDown className="ml-1 h-3 w-3" />
                                                                             }
                                                                         </Button>
+
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1881,7 +2198,7 @@ export default function VeMayBay() {
                                                                                                 <div>
                                                                                                     <div className="font-medium">Xách tay</div>
                                                                                                     <div className="text-muted-foreground">
-                                                                                                        {flight.baggage.handbag.weight} • {flight.baggage.handbag.size}
+                                                                                                        {flight.baggage.handbag.weight} • {flight.baggage.handbag.pieces}
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
@@ -2243,6 +2560,7 @@ export default function VeMayBay() {
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.airport}</div>
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.departure.city}</div>
                                         </div>
+
                                         <div className="flex-1 text-center">
                                             <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedOutbound.duration}</div>
                                             <div className="flex items-center">
@@ -2251,6 +2569,7 @@ export default function VeMayBay() {
                                                 <div className="flex-1 h-px bg-gray-300"></div>
                                             </div>
                                         </div>
+
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedOutbound.arrival.time}</div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedOutbound.arrival.airport}</div>
@@ -2324,10 +2643,10 @@ export default function VeMayBay() {
                                     </div>
                                     <Button
                                         size="lg"
-                                        onClick={() => handlePriceRoundtrip()}
                                         disabled={pricingLoadingRT}
+                                        onClick={handleContinueClick}
                                     >
-                                        {pricingLoadingRT ? 'Đang kiểm giá...' : 'Tiếp tục'}
+                                        {pricingLoadingRT ? 'Đang tải thông tin' : 'Tiếp tục'}
                                     </Button>
                                 </div>
                             </CardContent>
@@ -2672,6 +2991,7 @@ export default function VeMayBay() {
                                         <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.airport}</div>
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.city}</div>
                                     </div>
+                                    
                                 </div>
                                 <Tabs defaultValue="details" className="w-full">
                                     <TabsList className="grid w-full grid-cols-5">
@@ -2881,6 +3201,7 @@ export default function VeMayBay() {
                     </div>
                 </div>
             )}
+
 
         </>
     );
