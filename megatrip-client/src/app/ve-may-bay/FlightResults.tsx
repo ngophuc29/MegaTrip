@@ -803,7 +803,7 @@ export default function FlightResults({
                                               <div><span className="font-medium">Máy bay:</span> {seatmap?.aircraft?.code ?? segment?.aircraft?.code ?? flight.aircraft}</div>
                                               <div><span className="font-medium">Hạng vé:</span> {(traveler?.fareOption) ?? flight.class}</div>
                                               <div><span className="font-medium">Còn lại:</span> {offerFromPricing?.numberOfBookableSeats ?? pricing?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? flight.availableSeats ?? (seatmap?.availableSeatsCounters?.[0]?.value) ?? '-'} ghế</div>
-                                              <div><span className="font-medium">Stops:</span> {segment?.numberOfStops ?? '-'}</div>
+                                              {/* <div><span className="font-medium">Stops:</span> {segment?.numberOfStops ?? '-'}</div> */}
                                               {segment?.co2Emissions && (
                                                 <div><span className="font-medium">CO₂ (ước tính):</span> {segment.co2Emissions.map((c: any) => `${c.weight}${c.weightUnit} (${c.cabin ?? '-'})`).join(', ')}</div>
                                               )}

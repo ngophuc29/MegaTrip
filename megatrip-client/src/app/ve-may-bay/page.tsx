@@ -59,7 +59,7 @@ const sampleFlights = [
         originalPrice: 2490000,
         class: 'Phổ thông',
         baggage: {
-            handbag: { weight: '7kg', size: '56x36x23cm' },
+            handbag: { weight: '7kg', pieces: '56x36x23cm' },
             checkin: { weight: '23kg', pieces: 1 }
         },
         amenities: {
@@ -1168,7 +1168,6 @@ export default function VeMayBay() {
                             </div>
                             {selectedOutbound && (
                                 <div className="text-sm">
-                                    {/* Thay handler no-op bằng mở modal */}
                                     <button
                                         className="text-[hsl(var(--primary))] text-sm hover:underline"
                                         onClick={() => setShowOutboundDetailsModal(true)}
@@ -1184,7 +1183,6 @@ export default function VeMayBay() {
                                 <div className="flex items-center justify-between text-sm">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded bg-white/70 flex items-center justify-center text-sm font-semibold">
-                                            {/* placeholder for airline logo/initial */}
                                             {selectedOutbound.airline.split(' ').map(s => s[0]).slice(0, 2).join('')}
                                         </div>
                                         <div>
@@ -1192,10 +1190,6 @@ export default function VeMayBay() {
                                             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedOutbound.flightNumber} • {selectedOutbound.aircraft}</div>
                                         </div>
                                     </div>
-                                    {/* <div className="text-right">
-                                        <div className="text-sm font-semibold text-[hsl(var(--primary))]">{formatPrice(selectedOutbound.price)}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">1 khách</div>
-                                    </div> */}
                                 </div>
 
                                 <div className="flex items-center gap-6 mt-3">
@@ -1212,7 +1206,6 @@ export default function VeMayBay() {
                                             <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
                                             <div className="flex-1 h-px bg-gray-300"></div>
                                         </div>
-                                        {/* <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div> */}
                                     </div>
 
                                     <div className="text-center">
@@ -1223,13 +1216,21 @@ export default function VeMayBay() {
                                 </div>
 
                                 <div className="mt-3">
-                                    <Button className="w-full" onClick={() => { setSelectedOutbound(null); setTripStep('outbound'); }}>
-                                        Đổi chuyến bay đi
+                                    <Button
+                                        className="w-full"
+                                        onClick={() => {
+                                            if (tripStep === 'outbound') {
+                                                setTripStep('inbound'); // Lưu và quay về inbound
+                                            } else {
+                                                setTripStep('outbound'); // Đổi chuyến đi
+                                            }
+                                        }}
+                                    >
+                                        {tripStep === 'outbound' ? 'Lưu' : 'Đổi chuyến đi'}
                                     </Button>
                                 </div>
-                                {/* Add price display here */}
                                 <div className="mt-2 text-right text font-bold text-orange-600">
-                                    Giá tiền : {formatPrice(selectedOutbound.price)}/khách
+                                    Giá tiền: {formatPrice(selectedOutbound.price)}/khách
                                 </div>
                             </div>
                         ) : (
@@ -1240,10 +1241,7 @@ export default function VeMayBay() {
                     </div>
 
                     {/* Inbound */}
-                    <div className=" ">
-                        {/* Inbound sidebar intentionally minimal.
-                            Selected inbound is NOT shown here; it is only visible in the "Xem lại" panel.
-                            When the review panel is closed the inbound selection will be cleared so the user can pick another. */}
+                    <div className="border-l-4 border-[hsl(var(--primary))]">
                         <div className="px-4 py-3 flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <div className="h-7 w-7 rounded-md bg-[hsl(var(--primary))] text-white text-sm font-bold flex items-center justify-center">2</div>
@@ -1257,12 +1255,74 @@ export default function VeMayBay() {
                                     </div>
                                 </div>
                             </div>
-                            {/* No inbound details shown in sidebar per requirement */}
+                            {selectedInbound && (
+                                <div className="text-sm">
+                                    <button
+                                        className="text-[hsl(var(--primary))] text-sm hover:underline"
+                                        onClick={() => setShowInboundDetailsModal(true)}
+                                    >
+                                        Chi tiết
+                                    </button>
+                                </div>
+                            )}
                         </div>
-                        <div className="px-4 pb-3">
-                            {/* intentionally empty: user selects inbound from results; selection is shown only in review panel */}
-                        </div>
+
+                        {selectedInbound ? (
+                            <div className="px-4 pb-0">
+                                <div className="flex items-center justify-between text-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded bg-white/70 flex items-center justify-center text-sm font-semibold">
+                                            {selectedInbound.airline.split(' ').map(s => s[0]).slice(0, 2).join('')}
+                                        </div>
+                                        <div>
+                                            <div className="font-medium">{selectedInbound.airline}</div>
+                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.flightNumber} • {selectedInbound.aircraft}</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-6 mt-3">
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedInbound.departure.time}</div>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.departure.city}</div>
+                                    </div>
+
+                                    <div className="flex-1 text-center">
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{selectedInbound.duration}</div>
+                                        <div className="flex items-center">
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                            <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
+                                            <div className="flex-1 h-px bg-gray-300"></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center">
+                                        <div className="font-bold text-lg">{selectedInbound.arrival.time}</div>
+                                        <div className="text-sm text-[hsl(var(---muted-foreground))]">{selectedInbound.arrival.airport}</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.city}</div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-2 text-right text font-bold text-orange-600">
+                                    Giá tiền: {formatPrice(selectedInbound.price)}/khách
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="px-4 pb-3">
+                                {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">Chưa chọn chuyến về</div> */}
+                            </div>
+                        )}
                     </div>
+
+                    {/* Nút Chọn xong nếu cả hai đã chọn */}
+                    {selectedOutbound && selectedInbound && (
+                        <div className="px-4 py-3">
+                            <Button className="w-full" onClick={() => setShowReview(true)}>
+                                Chọn xong
+                            </Button>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         );
@@ -2544,12 +2604,12 @@ export default function VeMayBay() {
             {roundtripMode && showReview && selectedOutbound && selectedInbound && (
                 <div className="fixed inset-0 z-50">
                     {/* overlay: when closing review, clear inbound selection so it's not persisted */}
-                    <div className="absolute inset-0 bg-black/30" onClick={() => { setShowReview(false); setSelectedInbound(null); }} />
+                    <div className="absolute inset-0 bg-black/30" onClick={() => { setShowReview(false) }} />
                     <div className="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl animate-in slide-in-from-right duration-200">
                         <Card className="flex flex-col h-full space-y-3  ">
                             <CardHeader className="flex flex-row items-center justify-between py-4 px-4">
                                 <CardTitle className="text-base">Xem lại chuyến bay của bạn</CardTitle>
-                                <Button variant="ghost" size="sm" onClick={() => { setShowReview(false); setSelectedInbound(null); }}>Đóng</Button>
+                                <Button variant="ghost" size="sm" onClick={() => { setShowReview(false) }}>Đóng</Button>
                             </CardHeader>
                             <CardContent className="flex flex-col h-full space-y-3 px-4 pb-4">
                                 {/* OUTBOUND */}
@@ -2776,7 +2836,7 @@ export default function VeMayBay() {
                                                             <div>
                                                                 <div className="font-medium">Xách tay</div>
                                                                 <div className="text-muted-foreground">
-                                                                    {selectedOutbound.baggage.handbag.weight} • {selectedOutbound.baggage.handbag.size}
+                                                                    {selectedOutbound.baggage.handbag.weight} • {selectedOutbound.baggage.handbag.pieces} kiện
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -2785,7 +2845,7 @@ export default function VeMayBay() {
                                                             <div>
                                                                 <div className="font-medium">Ký gửi</div>
                                                                 <div className="text-muted-foreground">
-                                                                    {selectedOutbound.baggage.checkin.weight} • {selectedOutbound.baggage.checkin.pieces ?? `kiện`}
+                                                                    {selectedOutbound.baggage.checkin.weight} • {selectedOutbound.baggage.checkin.pieces ?? `kiện`} kiện
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3042,7 +3102,7 @@ export default function VeMayBay() {
                                                             <div>
                                                                 <div className="font-medium">Xách tay</div>
                                                                 <div className="text-muted-foreground">
-                                                                    {selectedInbound.baggage.handbag.weight} • {selectedInbound.baggage.handbag.size}
+                                                                    {selectedInbound.baggage.handbag.weight} • {selectedInbound.baggage.handbag.pieces} kiện
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -3051,7 +3111,7 @@ export default function VeMayBay() {
                                                             <div>
                                                                 <div className="font-medium">Ký gửi</div>
                                                                 <div className="text-muted-foreground">
-                                                                    {selectedInbound.baggage.checkin.weight} • {selectedInbound.baggage.checkin.pieces ?? `kiện`}
+                                                                    {selectedInbound.baggage.checkin.weight} • {selectedInbound.baggage.checkin.pieces ?? `kiện`} kiện
                                                                 </div>
                                                             </div>
                                                         </div>
