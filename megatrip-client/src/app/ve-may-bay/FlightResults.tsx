@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -407,6 +408,28 @@ export default function FlightResults({
     }
   };
 
+  const cardRefs = useRef(new Map<string, HTMLDivElement | null>());
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      let isOutside = true;
+      cardRefs.current.forEach((ref) => {
+        if (ref && ref.contains(event.target as Node)) {
+          isOutside = false;
+        }
+      });
+
+      if (isOutside && expandedFlight !== null) {
+        setExpandedFlight(null);
+        setPricingLoadingByFlight({}); // Reset loading để tránh state cũ
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside); // Sử dụng mousedown để bắt click sớm hơn
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [expandedFlight, setExpandedFlight]);
   return (
     <div className="space-y-4">
       {isLoading ? (
@@ -433,7 +456,9 @@ export default function FlightResults({
               const isPricingLoading = Boolean(pricingLoadingByFlight[key]);
 
               return (
-                <Card key={flight.id} className="hover:shadow-md transition-shadow">
+                <Card key={flight.id} className="hover:shadow-md transition-shadow"
+                  ref={(el:any) => cardRefs.current.set(flight.id, el)}
+                >
                   <CardContent className="p-6">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       {/* Flight Info */}
@@ -574,24 +599,34 @@ export default function FlightResults({
                                 const stored = loadCacheFromStorage();
                                 const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
 
+                                // expand UI immediately
                                 setExpandedFlight(flight.id);
+
                                 if (hasCachedAndMatchingSig) {
                                   populateFromCache(key);
                                   return;
                                 }
 
-                                // If flight already has amenities/policies (VJ), populate locally and avoid remote pricing
+                                // If flight already has amenities/policies (VJ), show local amenities immediately
+                                // but still trigger pricing+seatmap fetch in background so refund/change logic can rely on real pricing.
                                 if (shouldUseLocalAmenities(flight)) {
                                   const minimal = { data: flight.raw ?? flightOfferPayload };
                                   setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
-                                  // no seatmap but ensure seatmap state cleared for this key
+                                  // ensure seatmap state cleared for this key while we fetch real seatmap
                                   setSeatmapByFlight(prev => ({ ...prev }));
                                   setSeatmapData(null);
                                   setSignaturesByFlight(prev => ({ ...prev, [key]: signature }));
+
+                                  // Trigger background fetch so refund/change tabs can update when ready.
+                                  // handlePriceOffer will set per-key loading state so skeleton appears.
+                                  handlePriceOffer(flight).catch((e) => {
+                                    console.warn('Background pricing error', e);
+                                  });
+
                                   return;
                                 }
 
-                                // otherwise trigger pricing+seatmap fetch and expand when done
+                                // otherwise trigger pricing+seatmap fetch and expand when done (show skeleton while awaiting)
                                 await handlePriceOffer(flight);
                               } else {
                                 setExpandedFlight(null);
@@ -613,7 +648,7 @@ export default function FlightResults({
                       <>
                         <Separator className="my-4" />
                         {/* Show skeleton while pricing/seatmap loading for this flight */}
-                        {pricingLoadingByFlight[String(flight.id)] ? (
+                        {isPricingLoading ? (
                           <div className="my-2">
                             <CardSkeleton />
                           </div>
@@ -631,9 +666,9 @@ export default function FlightResults({
                                 {/* DETAILS: prefer data from pricingByFlight/seatmapByFlight, fallback to flight props */}
                                 <TabsContent value="details" className="space-y-4">
                                   {(() => {
-                                    const key = String(flight.id);
-                                    const pricing = pricingByFlight[key];
-                                    const seatmap = seatmapByFlight[key];
+                                    // const key = String(flight.id);  <-- removed
+                                    const pricing = pricingByFlight[key] ?? pricingByFlight[String(flight.id)];
+                                    const seatmap = seatmapByFlight[key] ?? seatmapByFlight[String(flight.id)];
 
                                     // normalize pricing wrapper to access traveler pricings easily
                                     const offerFromPricing =
@@ -786,14 +821,14 @@ export default function FlightResults({
                                                   <div className="text-muted-foreground">{powerInfo.powerType ?? (powerInfo.available ? 'Có ổ sạc' : '')}</div>
                                                 </div>
                                               )}
-                                              {refundForDetails && (
+                                              {/* {refundForDetails && (
                                                 <div className="flex items-center gap-2">
                                                   <Shield className="h-4 w-4 text-green-600" />
                                                   <div className="text-muted-foreground">
                                                     Giá trị hoàn lại ước tính: {parsedRefundForDetails.amount != null ? `${parsedRefundForDetails.amount.toLocaleString()} ${offerFromPricing?.price?.currency ?? 'VND'}` : String(parsedRefundForDetails.raw)}
                                                   </div>
                                                 </div>
-                                              )}
+                                              )} */}
                                             </div>
                                           </div>
 
@@ -847,8 +882,7 @@ export default function FlightResults({
                                 <TabsContent value="benefits" className="space-y-3">
                                   <div className="space-y-3">
                                     {(() => {
-                                      const key = String(flight.id);
-                                      const p = pricingByFlight[key];
+                                      const p = pricingByFlight[key] ?? pricingByFlight[String(flight.id)];
                                       const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
                                       const anyRefundable = detectAnyRefundable(p, offer, flight);
                                       const changeable = detectChangeable(p, offer);
@@ -876,8 +910,7 @@ export default function FlightResults({
 
                                 <TabsContent value="refund" className="space-y-3">
                                   {(() => {
-                                    const key = String(flight.id);
-                                    const p = pricingByFlight[key];
+                                    const p = pricingByFlight[key] ?? pricingByFlight[String(flight.id)];
                                     const offer =
                                       p?.data?.flightOffers?.[0] ??
                                       (Array.isArray(p?.data) ? p.data[0] : p?.data ?? p ?? null);
@@ -937,10 +970,10 @@ export default function FlightResults({
                                               <TabsTrigger
                                                 value="policy"
                                                 className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors
-                data-[state=active]:border-blue-500 data-[state=active]:font-semibold
-                data-[state=active]:text-black data-[state=active]:bg-white
-                data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
-                hover:bg-gray-50"
+                                                data-[state=active]:border-blue-500 data-[state=active]:font-semibold
+                                                data-[state=active]:text-black data-[state=active]:bg-white
+                                                data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
+                                                hover:bg-gray-50"
                                               >
                                                 Chính sách hoàn vé của bạn
                                               </TabsTrigger>
@@ -948,10 +981,10 @@ export default function FlightResults({
                                               <TabsTrigger
                                                 value="estimate"
                                                 className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors
-                data-[state=active]:border-blue-500 data-[state=active]:font-semibold
-                data-[state=active]:text-black data-[state=active]:bg-white
-                data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
-                hover:bg-gray-50"
+                                                data-[state=active]:border-blue-500 data-[state=active]:font-semibold
+                                                data-[state=active]:text-black data-[state=active]:bg-white
+                                                data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
+                                                hover:bg-gray-50"
                                               >
                                                 Giá trị hoàn lại ước tính
                                               </TabsTrigger>
@@ -959,10 +992,10 @@ export default function FlightResults({
                                               <TabsTrigger
                                                 value="procedure"
                                                 className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors
-                data-[state=active]:border-blue-500 data-[state=active]:font-semibold
-                data-[state=active]:text-black data-[state=active]:bg-white
-                data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
-                hover:bg-gray-50"
+                                                    data-[state=active]:border-blue-500 data-[state=active]:font-semibold
+                                                    data-[state=active]:text-black data-[state=active]:bg-white
+                                                    data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700
+                                                    hover:bg-gray-50"
                                               >
                                                 Quy trình hoàn lại vé
                                               </TabsTrigger>
@@ -1075,8 +1108,7 @@ export default function FlightResults({
                                 {/* Tab Đổi lịch */}
                                 <TabsContent value="change" className="space-y-3">
                                   {(() => {
-                                    const key = String(flight.id);
-                                    const p = pricingByFlight[key];
+                                    const p = pricingByFlight[key] ?? pricingByFlight[String(flight.id)];
                                     const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
                                     const changeable = detectChangeable(p, offer);
                                     const changeFee = changeable ? '720.000 VND + Chênh lệch giá vé' : 'Không đổi lịch';
@@ -1114,19 +1146,10 @@ export default function FlightResults({
                                 {/* CHI TIẾT VÉ: show travelerPricings from normalized pricing response */}
                                 <TabsContent value="detailsCharge" className="space-y-3">
                                   {(() => {
-                                    const key = String(flight.id);
-                                    const p = pricingByFlight[key];
-                                    // Normalize pricing shape:
-                                    // Possible shapes:
-                                    // 1) { data: { type: 'flight-offers-pricing', flightOffers: [ offer ] } }
-                                    // 2) { data: [ offer ] } or { data: offer }
-                                    // 3) offer object itself
+                                    const p = pricingByFlight[key] ?? pricingByFlight[String(flight.id)];
                                     const offer =
-                                      // Amadeus pricing wrapper with flightOffers
                                       p?.data?.flightOffers?.[0] ??
-                                      // data is array of offers
-                                      (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? null)) ??
-                                      // maybe the stored value was the offer already
+                                      (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null)) ??
                                       p ?? null;
 
                                     const travelerPricings = offer?.travelerPricings ?? offer?.travelerPricings ?? [];
@@ -1254,4 +1277,3 @@ export default function FlightResults({
     </div>
   );
 }
-
