@@ -342,6 +342,13 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     }
   };
 
+  // Default return date = today + 2 days (formatted YYYY-MM-DD)
+  const defaultReturnDateStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().split('T')[0];
+  })();
+
   return (
     <div className="w-full max-w-6xl mx-auto">
       <Tabs defaultValue={activeTab || "flight"} value={activeTab} className="w-full">
@@ -458,6 +465,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     className="block h-12 bg-white shadow-md text-black w-full"
                     value={flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}
                     onChange={e => setFlightDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                    min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
 
@@ -468,8 +476,9 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     <Input
                       type="date"
                       className="block h-12 bg-white shadow-md text-black w-full"
-                      value={flightReturn ? flightReturn.toISOString().split('T')[0] : ''}
+                      value={flightReturn ? flightReturn.toISOString().split('T')[0] : defaultReturnDateStr}
                       onChange={e => setFlightReturn(e.target.value ? new Date(e.target.value) : undefined)}
+                      min={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 )}
@@ -629,6 +638,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     className="block h-12 bg-white shadow-md text-black w-full"
                     value={busDeparture ? busDeparture.toISOString().split('T')[0] : ''}
                     onChange={e => setBusDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                    min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
                 <div className="flex items-end">
@@ -678,6 +688,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     className="block h-12 bg-white shadow-md text-black w-full"
                     value={tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''}
                     onChange={e => setTourDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                    min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
                 <div className="flex items-end">

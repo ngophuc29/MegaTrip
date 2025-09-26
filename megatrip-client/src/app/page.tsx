@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '../app/components/Layout';
 import TravelokaBanner from '../app/components/TravelokaBanner';
-import WeatherWidget from '../app/components/WeatherWidget';
 import LiveStats from '../app/components/LiveStats';
 import { Button } from '../app/components/ui/button';
 import { Badge } from '../app/components/ui/badge';
@@ -219,6 +218,11 @@ const whyChooseUs = [
     icon: Users,
     title: 'Đổi/hủy rõ ràng',
     description: 'Chính sách đổi/hủy minh bạch, dễ hiểu',
+  },
+  {
+    icon: Star,
+    title: 'Mạng lưới rộng khắp',
+    description: 'Hợp tác với nhiều hãng & nhà cung cấp trên toàn quốc',
   },
 ];
 
@@ -449,35 +453,28 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Weather and Why Choose Us */}
+      {/* Why Choose Us (widget removed; layout adjusted) */}
       <section className="py-12 lg:py-16 bg-gray-50">
         <div className="container">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-            <div className="lg:col-span-1">
-              <WeatherWidget />
-            </div>
-            <div className="lg:col-span-2">
-              <h2 className="text-2xl lg:text-3xl font-bold mb-8">
-                Tại sao chọn MegaTrip?
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {whyChooseUs.map((item, index) => (
-                  <div key={index} className="text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{background: 'hsl(var(--primary))/0.1', color: 'hsl(var(--primary))'}}>
-                      <item.icon className="h-8 w-8" />
-                    </div>
-                    <h3 className="font-semibold mb-2">{item.title}</h3>
-                    <p className="text-sm" style={{color: 'hsl(var(--muted-foreground))'}}>{item.description}</p>
-                  </div>
-                ))}
+          <h2 className="text-2xl lg:text-3xl font-bold mb-8 text-center">
+            Tại sao chọn MegaTrip?
+          </h2>
+          <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {whyChooseUs.map((item, index) => (
+              <div key={index} className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{background: 'hsl(var(--primary))/0.1', color: 'hsl(var(--primary))'}}>
+                  <item.icon className="h-8 w-8" />
+                </div>
+                <h3 className="font-semibold mb-2">{item.title}</h3>
+                <p className="text-sm" style={{color: 'hsl(var(--muted-foreground))'}}>{item.description}</p>
               </div>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Latest News */}
-      <section className="py-12 lg:py-16 bg-gray-50">
+      <section className="mb-8 bg-gray-50">
         <div className="container">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl lg:text-3xl font-bold">Tin tức & Blog</h2>

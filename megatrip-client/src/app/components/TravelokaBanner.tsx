@@ -113,7 +113,13 @@ const sidebarPromotions = [
 export default function TravelokaBanner() {
   const [activeTab, setActiveTab] = useState('flights');
   const [fromDate, setFromDate] = useState<Date>(new Date());
-  const [toDate, setToDate] = useState<Date>(new Date());
+  // default return date = today + 2 days
+  const defaultReturnDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d;
+  })();
+  const [toDate, setToDate] = useState<Date>(defaultReturnDate);
   const [passengers, setPassengers] = useState(1);
   const [tripType, setTripType] = useState('oneway');
   const [headerSolid, setHeaderSolid] = useState(false);
@@ -475,6 +481,7 @@ export default function TravelokaBanner() {
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
                         onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
+                        min={new Date().toISOString().split('T')[0]}
                       />
                     </div>
 
@@ -487,6 +494,7 @@ export default function TravelokaBanner() {
                           className="block h-12 bg-white shadow-md text-black w-full"
                           value={toDate ? toDate.toISOString().split('T')[0] : ''}
                           onChange={e => { if (e.target.value) setToDate(new Date(e.target.value)); }}
+                          min={new Date().toISOString().split('T')[0]}
                         />
                       </div>
                     )}
@@ -675,6 +683,7 @@ export default function TravelokaBanner() {
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
                         onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
+                        min={new Date().toISOString().split('T')[0]}
                       />
                     </div>
 
@@ -725,6 +734,7 @@ export default function TravelokaBanner() {
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
                         onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
+                        min={new Date().toISOString().split('T')[0]}
                       />
                     </div>
 
