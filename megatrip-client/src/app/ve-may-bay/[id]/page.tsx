@@ -291,175 +291,146 @@ export default function ChiTietVeMayBay() {
     useEffect(() => {
         if (!id) return;
         try {
-            // route param may be URL-encoded (e.g. "1%3A%3A72865655") — decode to match composite cache keys ("1::72865655")
             const lookupId = decodeURIComponent(String(id));
             const stored = loadCacheFromStorage();
-            // LOG: kiểm tra cache cho id này (use decoded lookupId)
             console.log('[Flight detail] id=', lookupId, 'cache present:', Boolean(stored));
-            // --- NEW: detect roundtrip wrapper composed as "<outKey>__<inKey>" ---
-            if (String(lookupId).includes('__')) {
-                const [outKey, inKey] = String(lookupId).split('__');
+
+            let derivedParticipants = { adults: 1, children: 0, infants: 0 };
+
+            // Hàm helper để lấy số lượng hành khách từ pricing
+            const deriveParticipants = (pricing: any) => {
+                const offer = extractOfferFromPricing(pricing);
+                const tps = Array.isArray(offer?.travelerPricings) ? offer.travelerPricings : [];
+                if (tps.length > 0) {
+                    const adults = tps.filter((t: any) => String(t?.travelerType ?? '').toUpperCase().startsWith('ADULT')).length;
+                    const children = tps.filter((t: any) => /CHILD/i.test(String(t?.travelerType ?? ''))).length;
+                    const infants = tps.filter((t: any) => /INFANT/i.test(String(t?.travelerType ?? ''))).length;
+                    return { adults, children, infants };
+                }
+                return null;
+            };
+
+            if (lookupId.includes('__')) {
+                const [outKey, inKey] = lookupId.split('__');
                 const outPricing = stored?.pricing?.[outKey] ?? null;
                 const inPricing = stored?.pricing?.[inKey] ?? null;
-                console.log('[Flight detail] roundtrip wrapper detected, outKey=', outKey, 'inKey=', inKey, 'outPricing=', !!outPricing, 'inPricing=', !!inPricing);
-                if (outPricing || inPricing) {
-                    setIsRoundtrip(true);
-                    setOutboundCachedPricing(outPricing);
-                    setInboundCachedPricing(inPricing);
-                    // For backward compatibility with single-offer UI, set cachedPricing to outbound if present
-                    if (outPricing) setCachedPricing(outPricing);
-                    else if (inPricing) setCachedPricing(inPricing);
+                console.log('[Flight detail] roundtrip wrapper detected, outKey=', outKey, 'inKey=', inKey);
 
-                    // Try loading seatmaps for both legs if available and parse them
-                    if (stored?.seatmap?.[outKey]) {
-                        const rawOut = stored.seatmap[outKey];
-                        setCachedSeatmap((prev) => ({ ...(prev || {}), outbound: rawOut }));
-                        const parsedOut = parseSeatmap(rawOut);
-                        setParsedSeatmaps(prev => ({ ...(prev || {}), outbound: parsedOut.rows }));
-                        setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), outbound: parsedOut.amenities }));
-                        setSeatmapSummary(parsedOut.summary);
-                        setAircraftAmenities(parsedOut.amenities);
-                        // auto-assign free seats if user hasn't selected any yet
-                        const totalNeeded = participants.adults + participants.children + participants.infants;
-                        if (parsedOut.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['outbound'].length === 0) {
-                            setSelectedSeatsByLeg(prev => ({ ...prev, outbound: parsedOut.freeSeats.slice(0, Math.min(totalNeeded, parsedOut.freeSeats.length)) }));
-                        }
-                        // show outbound rows by default
-                        setSeatRows(parsedOut.rows);
-                    }
-                    if (stored?.seatmap?.[inKey]) {
-                        const rawIn = stored.seatmap[inKey];
-                        setCachedSeatmap((prev) => ({ ...(prev || {}), inbound: rawIn }));
-                        const parsedIn = parseSeatmap(rawIn);
-                        setParsedSeatmaps(prev => ({ ...(prev || {}), inbound: parsedIn.rows }));
-                        setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), inbound: parsedIn.amenities }));
-                        // do not overwrite seatRows/selectedSeats unless user switches to inbound
-                        const totalNeeded = participants.adults + participants.children + participants.infants;
+                setIsRoundtrip(true);
+                setOutboundCachedPricing(outPricing);
+                setInboundCachedPricing(inPricing);
+                if (outPricing) setCachedPricing(outPricing);
+                else if (inPricing) setCachedPricing(inPricing);
 
-                        if (parsedIn.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['inbound'].length === 0) {
-                            setSelectedSeatsByLeg(prev => ({ ...prev, inbound: parsedIn.freeSeats.slice(0, Math.min(totalNeeded, parsedIn.freeSeats.length)) }));
-                        }
+                // Lấy số lượng hành khách từ cả hai chặng và đảm bảo nhất quán
+                const outParticipants = deriveParticipants(outPricing);
+                const inParticipants = deriveParticipants(inPricing);
+                if (outParticipants && inParticipants) {
+                    // Kiểm tra sự nhất quán
+                    if (
+                        outParticipants.adults !== inParticipants.adults ||
+                        outParticipants.children !== inParticipants.children ||
+                        outParticipants.infants !== inParticipants.infants
+                    ) {
+                        console.warn('Participant counts mismatch between outbound and inbound', outParticipants, inParticipants);
                     }
-                    // leave mappedOffer as-is (we compute normalizedOffer later based on selectedLeg)
+                    // Lấy số lượng từ outbound (ưu tiên) hoặc inbound
+                    derivedParticipants = outParticipants || inParticipants;
+                } else if (outParticipants) {
+                    derivedParticipants = outParticipants;
+                } else if (inParticipants) {
+                    derivedParticipants = inParticipants;
                 }
-            }
 
-            // --- existing single-leg handling (unchanged path) ---
-            if (stored && stored.pricing && stored.pricing[lookupId]) {
-                setCachedPricing(stored.pricing[lookupId]);
-                // normalize/derive offer
-                const offer =
-                    stored.pricing[lookupId]?.data?.flightOffers?.[0] ??
-                    (Array.isArray(stored.pricing[lookupId]?.data) ? stored.pricing[lookupId].data[0] : (stored.pricing[lookupId]?.data ?? stored.pricing[lookupId] ?? null));
-                const travelerCount = (offer?.travelerPricings && offer.travelerPricings.length) || (offer?.travelerPricings?.length) || 0;
-                const mapped = {
-                    numberOfBookableSeats: offer?.numberOfBookableSeats ?? stored.pricing[lookupId]?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? null,
-                    total: offer?.price?.total ?? stored.pricing[lookupId]?.price?.total ?? null,
-                    currency: offer?.price?.currency ?? stored.pricing[lookupId]?.price?.currency ?? null,
-                    travelerPricingsCount: travelerCount,
-                    validatingAirlines: offer?.validatingAirlineCodes ?? stored.pricing[lookupId]?.validatingAirlineCodes ?? [],
-                    lastTicketingDate: offer?.lastTicketingDate ?? null,
-                    rawOffer: offer
-                };
-                setMappedOffer(mapped);
-                console.log('[Flight detail] mappedOffer=', mapped);
-
-                // --- NEW: derive participants counts from offer.travelerPricings (fix missing CHILD/INFANT counts) ---
-                try {
+                // Cập nhật seatmaps
+                if (stored?.seatmap?.[outKey]) {
+                    const rawOut = stored.seatmap[outKey];
+                    setCachedSeatmap((prev) => ({ ...(prev || {}), outbound: rawOut }));
+                    const parsedOut = parseSeatmap(rawOut);
+                    setParsedSeatmaps((prev) => ({ ...(prev || {}), outbound: parsedOut.rows }));
+                    setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), outbound: parsedOut.amenities }));
+                    setSeatmapSummary(parsedOut.summary);
+                    setAircraftAmenities(parsedOut.amenities);
+                    setSeatRows(parsedOut.rows);
+                }
+                if (stored?.seatmap?.[inKey]) {
+                    const rawIn = stored.seatmap[inKey];
+                    setCachedSeatmap((prev) => ({ ...(prev || {}), inbound: rawIn }));
+                    const parsedIn = parseSeatmap(rawIn);
+                    setParsedSeatmaps((prev) => ({ ...(prev || {}), inbound: parsedIn.rows }));
+                    setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), inbound: parsedIn.amenities }));
+                }
+            } else {
+                if (stored?.pricing?.[lookupId]) {
+                    setCachedPricing(stored.pricing[lookupId]);
+                    const offer = extractOfferFromPricing(stored.pricing[lookupId]);
                     const tps = Array.isArray(offer?.travelerPricings) ? offer.travelerPricings : [];
                     if (tps.length > 0) {
-                        const adults = tps.filter((t: any) => String(t?.travelerType ?? '').toUpperCase().startsWith('ADULT')).length;
-                        const children = tps.filter((t: any) => /CHILD/i.test(String(t?.travelerType ?? ''))).length;
-                        const infants = tps.filter((t: any) => /INFANT/i.test(String(t?.travelerType ?? ''))).length;
-                        // only update if totals differ (avoid unnecessary re-renders)
-                        const totalDerived = (adults || 0) + (children || 0) + (infants || 0);
-                        const totalCurrent = participants.adults + participants.children + participants.infants;
-                        if (totalDerived > 0 && totalDerived !== totalCurrent) {
-                            setParticipants({
-                                adults: Math.max(1, adults || 1),
-                                children: children || 0,
-                                infants: infants || 0,
-                            });
-                        }
+                        derivedParticipants = {
+                            adults: tps.filter((t: any) => String(t?.travelerType ?? '').toUpperCase().startsWith('ADULT')).length,
+                            children: tps.filter((t: any) => /CHILD/i.test(String(t?.travelerType ?? ''))).length,
+                            infants: tps.filter((t: any) => /INFANT/i.test(String(t?.travelerType ?? ''))).length,
+                        };
                     }
-                } catch (e) {
-                    console.warn('Error deriving participants from offer', e);
+                    setMappedOffer({
+                        numberOfBookableSeats: offer?.numberOfBookableSeats ?? null,
+                        total: offer?.price?.total ?? null,
+                        currency: offer?.price?.currency ?? 'VND',
+                        travelerPricingsCount: tps.length,
+                        validatingAirlines: offer?.validatingAirlineCodes ?? [],
+                        lastTicketingDate: offer?.lastTicketingDate ?? null,
+                        rawOffer: offer,
+                    });
+                }
+                if (stored?.seatmap?.[lookupId]) {
+                    const raw = stored.seatmap[lookupId];
+                    setCachedSeatmap(raw);
+                    const parsed = parseSeatmap(raw);
+                    setSeatRows(parsed.rows);
+                    setParsedSeatmaps((prev) => ({ ...(prev || {}), outbound: parsed.rows }));
+                    setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), outbound: parsed.amenities }));
+                    setSeatmapSummary(parsed.summary);
+                    setAircraftAmenities(parsed.amenities);
                 }
             }
 
-            // --- NEW: handle seatmap loading for roundtrip legs (outbound/inbound) ---
-            if (stored && stored.seatmap && stored.seatmap[lookupId]) {
-                setCachedSeatmap(stored.seatmap[lookupId]);
-                const summary = {
-                    aircraftCode: stored.seatmap[lookupId]?.aircraft?.code ?? stored.seatmap[lookupId]?.data?.aircraft?.code ?? null,
-                    availableSeatsCounters: stored.seatmap[lookupId]?.availableSeatsCounters ?? stored.seatmap[lookupId]?.data?.availableSeatsCounters ?? null,
-                    rawSeatmap: stored.seatmap[lookupId]
-                };
-                setSeatmapSummary(summary);
-                console.log('[Flight detail] seatmapSummary=', summary);
-                const raw = stored.seatmap[lookupId];
-                const parsed = parseSeatmap(raw);
-                setSeatRows(parsed.rows);
-                setParsedSeatmaps(prev => ({ ...(prev || {}), outbound: parsed.rows }));
-                setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), outbound: parsed.amenities }));
-                setAircraftAmenities(parsed.amenities);
-                // Auto-assign free seats for oneway
-                const totalNeeded = participants.adults + participants.children + participants.infants;
-                if (parsed.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['outbound'].length === 0) {
-                    setSelectedSeatsByLeg(prev => ({
-                        ...prev,
-                        outbound: parsed.freeSeats.slice(0, Math.min(totalNeeded, parsed.freeSeats.length))
-                    }));
-                }
+            // Cập nhật participants chỉ khi khác với trạng thái hiện tại
+            const totalCurrent = participants.adults + participants.children + participants.infants;
+            const totalDerived = derivedParticipants.adults + derivedParticipants.children + derivedParticipants.infants;
+            if (totalDerived > 0 && totalDerived !== totalCurrent) {
+                setParticipants({
+                    adults: Math.max(1, derivedParticipants.adults || 1),
+                    children: derivedParticipants.children || 0,
+                    infants: derivedParticipants.infants || 0,
+                });
             }
 
-            // map ALL included resources into add-on-like items (merge with static addOnServices)
-            // If this lookupId is a roundtrip wrapper, merge included items from both legs
+            // Xử lý add-ons
             let inc: any = {};
-            if (String(lookupId).includes('__')) {
-                const [outKey, inKey] = String(lookupId).split('__');
+            if (lookupId.includes('__')) {
+                const [outKey, inKey] = lookupId.split('__');
                 inc = {
-                    ...(stored.pricing?.[outKey]?.included ?? stored.pricing?.[outKey]?.data?.included ?? {}),
-                    ...(stored.pricing?.[inKey]?.included ?? stored.pricing?.[inKey]?.data?.included ?? {})
+                    ...(stored.pricing?.[outKey]?.included ?? {}),
+                    ...(stored.pricing?.[inKey]?.included ?? {}),
                 };
             } else {
-                inc = stored.pricing[lookupId]?.included ?? stored.pricing[lookupId]?.data?.included ?? {};
+                inc = stored.pricing?.[lookupId]?.included ?? {};
             }
-            console.log('[Flight detail] included keys:', Object.keys(inc));
             const includedAddOns: any[] = [];
             for (const [key, val] of Object.entries(inc || {})) {
-                // SKIP: do not map detailed fare rules or credit-card-fees into add-on list
-                if (key === 'detailed-fare-rules' || key === 'credit-card-fees') {
-                    console.log(`[Flight detail] skipping included key for add-ons: ${key}`);
-                    continue;
-                }
-                // val can be an object mapping ids -> resources, or an array
-                if (!val) continue;
+                if (key === 'detailed-fare-rules' || key === 'credit-card-fees') continue;
                 if (Array.isArray(val)) {
                     val.forEach((entry, idx) => {
-                        // SPECIAL: if key === 'bags' we want to include quantity meaning
                         const price = entry?.price?.amount ?? entry?.amount ?? null;
-                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? null;
+                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? 'VND';
                         const qty = entry?.quantity ?? null;
                         const baseName = entry?.name ?? `${key} ${idx + 1}`;
                         const name = key === 'bags' && qty ? `${baseName} (${qty} kiện)` : baseName;
-                        let desc = entry?.description ?? entry?.text ?? (entry?.fareNotes?.descriptions?.[0]?.text ?? null);
+                        let desc = entry?.description ?? entry?.text ?? (entry?.fareNotes?.descriptions?.[0]?.text ?? key);
                         if (key === 'bags') {
-                            // Giải thích đơn giản về số kiện, đoạn bay, hành khách
-                            const segs = Array.isArray(entry?.segmentIds)
-                                ? `Đoạn bay: ${entry.segmentIds.join(', ')}`
-                                : '';
-                            const travs = Array.isArray(entry?.travelerIds)
-                                ? `Hành khách: ${entry.travelerIds.join(', ')}`
-                                : '';
-                            const qtyNote = qty
-                                ? `Số kiện: ${qty}`
-                                : '';
-
-                            // Ghép thành nhiều dòng cho dễ đọc
-                            desc = [qtyNote, segs, travs, desc].filter(Boolean).join('\n');
+                            const qtyNote = qty ? `Số kiện: ${qty}` : '';
+                            desc = [qtyNote, desc].filter(Boolean).join('\n');
                         }
-
                         includedAddOns.push({
                             id: `${key}_${idx}`,
                             name,
@@ -467,27 +438,21 @@ export default function ChiTietVeMayBay() {
                             currency: currency ?? 'VND',
                             description: desc ? String(desc).slice(0, 300) : key,
                             raw: entry,
-                            sourceKey: key
+                            sourceKey: key,
                         });
                     });
                 } else if (typeof val === 'object') {
-                    // object keyed by id
                     Object.entries(val).forEach(([subKey, entry]: any, idx) => {
                         if (!entry) return;
                         const price = entry?.price?.amount ?? entry?.amount ?? entry?.amount?.value ?? null;
-                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? entry?.currency ?? null;
+                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? entry?.currency ?? 'VND';
                         const qty = entry?.quantity ?? null;
                         let name = entry?.name ?? entry?.brand ?? `${key} ${subKey}`;
-                        let desc = entry?.fareNotes?.descriptions?.[0]?.text ?? entry?.text ?? entry?.description ?? null;
+                        let desc = entry?.fareNotes?.descriptions?.[0]?.text ?? entry?.text ?? entry?.description ?? key;
                         if (key === 'bags') {
-                            // object-style bags (keyed by id) -> include quantity note as above
                             name = entry?.name ? `${entry.name}${qty ? ` (${qty} kiện)` : ''}` : `${key} ${subKey}${qty ? ` (${qty} kiện)` : ''}`;
-                            // const segs = Array.isArray(entry?.segmentIds) ? `Chặng: ${entry.segmentIds.join(', ')}` : '';
-                            // const travs = Array.isArray(entry?.travelerIds) ? `Hành khách: ${entry.travelerIds.join(', ')}` : '';
-                            const qtyNote = qty ? `Số kiện: ${qty} (số kiện ký gửi mặc định cho lựa chọn này (23kg/1 kiện))` : '';
-                            // desc = [qtyNote, segs, travs, desc].filter(Boolean).join('\n');
+                            const qtyNote = qty ? `Số kiện: ${qty}` : '';
                             desc = [qtyNote, desc].filter(Boolean).join('\n');
-
                         }
                         includedAddOns.push({
                             id: `${key}_${subKey}`,
@@ -496,21 +461,16 @@ export default function ChiTietVeMayBay() {
                             currency: currency ?? 'VND',
                             description: desc ? String(desc).slice(0, 300) : key,
                             raw: entry,
-                            sourceKey: key
+                            sourceKey: key,
                         });
                     });
                 }
             }
-            // merge static + includedAddOns (static first)
-            const merged = [
-                ...addOnServices,
-                ...includedAddOns.filter(ia => !addOnServices.some(s => s.id === ia.id))
-            ];
-            setDynamicAddOnServices(merged);
+            setDynamicAddOnServices([...addOnServices, ...includedAddOns.filter(ia => !addOnServices.some(s => s.id === ia.id))]);
         } catch (e) {
             console.warn('Error loading cached pricing/seatmap', e);
         }
-    }, [id, participants.adults, participants.children, participants.infants]);
+    }, [id]);
 
     // MOVE: formatPrice must be defined before we derive/display prices
     const formatPrice = (price: number) => {
@@ -691,20 +651,20 @@ export default function ChiTietVeMayBay() {
         const childTotal = childUnit * participants.children;
         const infantTotal = infantUnit * participants.infants;
 
-        const addOnTotal = (leg: "outbound" | "inbound") =>
+        const addOnTotal = (leg: 'outbound' | 'inbound') =>
             selectedAddOnsByLeg[leg].reduce((total, addOnId) => {
                 const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
                 if (!addOn) return total;
                 const per = addOnPerPassenger[addOnId] ?? false;
-                const qty = per ? participants.adults + participants.children + participants.infants : 1;
+                const qty = per ? totalParticipants : 1;
                 return total + (addOn.price || 0) * qty;
             }, 0);
 
-        const seatTotal = (leg: "outbound" | "inbound") =>
+        const seatTotal = (leg: 'outbound' | 'inbound') =>
             selectedSeatsByLeg[leg].reduce((sum, s) => sum + (s.price || 0), 0);
 
-        const outboundTotal = adultTotal + childTotal + infantTotal + addOnTotal("outbound") + seatTotal("outbound");
-        const inboundTotal = isRoundtrip ? adultTotal + childTotal + infantTotal + addOnTotal("inbound") + seatTotal("inbound") : 0;
+        const outboundTotal = adultTotal + childTotal + infantTotal + addOnTotal('outbound') + seatTotal('outbound');
+        const inboundTotal = isRoundtrip ? adultTotal + childTotal + infantTotal + addOnTotal('inbound') + seatTotal('inbound') : 0;
 
         return outboundTotal + inboundTotal;
     };
@@ -950,26 +910,29 @@ export default function ChiTietVeMayBay() {
 
     useEffect(() => {
         const max = participants.adults + participants.children + participants.infants;
-        const legs = isRoundtrip ? ["outbound", "inbound"] : ["outbound"];
+        const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
         legs.forEach((leg) => {
-            if (selectedSeatsByLeg[leg].length > max) {
+            const currentSeats = selectedSeatsByLeg[leg] || [];
+            // Cắt bớt nếu số ghế vượt quá số hành khách
+            if (currentSeats.length > max) {
                 setSelectedSeatsByLeg((prev) => ({
                     ...prev,
                     [leg]: prev[leg].slice(0, max),
                 }));
                 return;
             }
-            if (selectedSeatsByLeg[leg].length < max && parsedSeatmaps[leg]?.length > 0) {
-                const alreadyIds = new Set(selectedSeatsByLeg[leg].map((s) => s.id));
+            // Gán thêm ghế miễn phí nếu cần
+            if (currentSeats.length < max && parsedSeatmaps[leg]?.length > 0) {
+                const alreadyIds = new Set(currentSeats.map((s) => s.id));
                 const allSeats = parsedSeatmaps[leg].flatMap((r) => r.seats || []);
                 const freeSeats = allSeats.filter((s) => {
                     const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
-                    const hasCH = chars.includes("CH");
+                    const hasCH = chars.includes('CH');
                     const priceIsZero = Number(s.price || 0) === 0;
-                    return s.availability === "AVAILABLE" && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+                    return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
                 });
                 if (freeSeats.length > 0) {
-                    const need = Math.min(max - selectedSeatsByLeg[leg].length, freeSeats.length);
+                    const need = Math.min(max - currentSeats.length, freeSeats.length);
                     setSelectedSeatsByLeg((prev) => ({
                         ...prev,
                         [leg]: [...prev[leg], ...freeSeats.slice(0, need)],
@@ -977,7 +940,7 @@ export default function ChiTietVeMayBay() {
                 }
             }
         });
-    }, [participants.adults, participants.children, participants.infants, parsedSeatmaps, isRoundtrip]);
+    }, [participants.adults, participants.children, participants.infants, parsedSeatmaps, isRoundtrip, selectedLeg]);
 
     // --- NEW: safe number parser + derive traveler-level pricing when available ---
     const parseNumberSafe = (v: any) => {
@@ -1679,53 +1642,30 @@ export default function ChiTietVeMayBay() {
                                     <div className="flex items-center justify-between mb-2">
                                         <span className="font-medium">Chuyến đi</span>
                                         <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            {(isRoundtrip ? outboundCachedPricing : cachedPricing)
-                                                ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline
-                                                : flightDetails.airline}
-                                            {(isRoundtrip ? outboundCachedPricing : cachedPricing)
-                                                ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber
-                                                : flightDetails.flightNumber}
+                                            {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                            {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
                                         </span>
                                     </div>
                                     <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
-                                            ? `${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`
-                                            : `${flightDetails.departure.airport} (${flightDetails.departure.city}) → ${flightDetails.arrival.airport} (${flightDetails.arrival.city})`}
+                                        {`${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`}
                                         <br />
-                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
-                                            ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[0] ?? flightDetails.date
-                                            : flightDetails.date} •{" "}
-                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
-                                            ? `${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - ${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}`
-                                            : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`}
+                                        {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
                                     </div>
                                     <div className="space-y-1 mt-2">
                                         <div className="flex justify-between">
                                             <span>Người lớn ({participants.adults})</span>
-                                            <span>
-                                                {currency === "VND"
-                                                    ? formatPrice(Math.round((derived.adultsUnit || priceNumber) * participants.adults))
-                                                    : `${Math.round((derived.adultsUnit || priceNumber) * participants.adults).toLocaleString()} ${currency}`}
-                                            </span>
+                                            <span>{currency === 'VND' ? formatPrice(Math.round(derived.adultsUnit * participants.adults)) : `${Math.round(derived.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
                                         </div>
                                         {participants.children > 0 && (
                                             <div className="flex justify-between">
                                                 <span>Trẻ em ({participants.children})</span>
-                                                <span>
-                                                    {currency === "VND"
-                                                        ? formatPrice(Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children))
-                                                        : `${Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children).toLocaleString()} ${currency}`}
-                                                </span>
+                                                <span>{currency === 'VND' ? formatPrice(Math.round(derived.childrenUnit * participants.children)) : `${Math.round(derived.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
                                             </div>
                                         )}
                                         {participants.infants > 0 && (
                                             <div className="flex justify-between">
                                                 <span>Em bé ({participants.infants})</span>
-                                                <span>
-                                                    {currency === "VND"
-                                                        ? formatPrice(Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants))
-                                                        : `${Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants).toLocaleString()} ${currency}`}
-                                                </span>
+                                                <span>{currency === 'VND' ? formatPrice(Math.round(derived.infantsUnit * participants.infants)) : `${Math.round(derived.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
                                             </div>
                                         )}
                                         {selectedAddOnsByLeg.outbound.length > 0 && (
@@ -1738,11 +1678,7 @@ export default function ChiTietVeMayBay() {
                                                     return (
                                                         <div key={addOnId} className="flex justify-between text-sm">
                                                             <span>{addOn.name} ({qty})</span>
-                                                            <span>
-                                                                {addOn.currency && addOn.currency !== "VND"
-                                                                    ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}`
-                                                                    : formatPrice(addOn.price * qty)}
-                                                            </span>
+                                                            <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
                                                         </div>
                                                     );
                                                 })}
@@ -1753,11 +1689,7 @@ export default function ChiTietVeMayBay() {
                                                 {selectedSeatsByLeg.outbound.map((s) => (
                                                     <div key={s.id} className="flex justify-between text-sm">
                                                         <span>Ghế {s.number}</span>
-                                                        <span>
-                                                            {s.currency && s.currency !== "VND"
-                                                                ? `${s.price.toLocaleString()} ${s.currency}`
-                                                                : formatPrice(s.price || 0)}
-                                                        </span>
+                                                        <span>{s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -1766,9 +1698,7 @@ export default function ChiTietVeMayBay() {
                                             <span>Tổng chuyến đi</span>
                                             <span className="text-[hsl(var(--primary))]">
                                                 {(() => {
-                                                    const base = (derived.adultsUnit || priceNumber) * participants.adults +
-                                                        (derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children +
-                                                        (derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants;
+                                                    const base = derived.adultsUnit * participants.adults + derived.childrenUnit * participants.children + derived.infantsUnit * participants.infants;
                                                     const addOns = selectedAddOnsByLeg.outbound.reduce((sum, id) => {
                                                         const addOn = dynamicAddOnServices.find((s) => s.id === id);
                                                         if (!addOn) return sum;
@@ -1777,14 +1707,14 @@ export default function ChiTietVeMayBay() {
                                                     }, 0);
                                                     const seats = selectedSeatsByLeg.outbound.reduce((sum, s) => sum + (s.price || 0), 0);
                                                     const total = base + addOns + seats;
-                                                    return currency === "VND" ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
+                                                    return currency === 'VND' ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
                                                 })()}
                                             </span>
                                         </div>
                                     </div>
                                 </div>
                                 <Separator />
-                                {/* Inbound Flight (if roundtrip) */}
+                                {/* Inbound Flight */}
                                 {isRoundtrip && inboundCachedPricing && (
                                     <>
                                         <div>
@@ -1798,36 +1728,23 @@ export default function ChiTietVeMayBay() {
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">
                                                 {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
                                                 <br />
-                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[0] ?? flightDetails.date} •{" "}
-                                                {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}`}
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
                                             </div>
                                             <div className="space-y-1 mt-2">
                                                 <div className="flex justify-between">
                                                     <span>Người lớn ({participants.adults})</span>
-                                                    <span>
-                                                        {currency === "VND"
-                                                            ? formatPrice(Math.round((derived.adultsUnit || priceNumber) * participants.adults))
-                                                            : `${Math.round((derived.adultsUnit || priceNumber) * participants.adults).toLocaleString()} ${currency}`}
-                                                    </span>
+                                                    <span>{currency === 'VND' ? formatPrice(Math.round(derived.adultsUnit * participants.adults)) : `${Math.round(derived.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
                                                 </div>
                                                 {participants.children > 0 && (
                                                     <div className="flex justify-between">
                                                         <span>Trẻ em ({participants.children})</span>
-                                                        <span>
-                                                            {currency === "VND"
-                                                                ? formatPrice(Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children))
-                                                                : `${Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children).toLocaleString()} ${currency}`}
-                                                        </span>
+                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derived.childrenUnit * participants.children)) : `${Math.round(derived.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
                                                     </div>
                                                 )}
                                                 {participants.infants > 0 && (
                                                     <div className="flex justify-between">
                                                         <span>Em bé ({participants.infants})</span>
-                                                        <span>
-                                                            {currency === "VND"
-                                                                ? formatPrice(Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants))
-                                                                : `${Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants).toLocaleString()} ${currency}`}
-                                                        </span>
+                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derived.infantsUnit * participants.infants)) : `${Math.round(derived.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
                                                     </div>
                                                 )}
                                                 {selectedAddOnsByLeg.inbound.length > 0 && (
@@ -1840,11 +1757,7 @@ export default function ChiTietVeMayBay() {
                                                             return (
                                                                 <div key={addOnId} className="flex justify-between text-sm">
                                                                     <span>{addOn.name} ({qty})</span>
-                                                                    <span>
-                                                                        {addOn.currency && addOn.currency !== "VND"
-                                                                            ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}`
-                                                                            : formatPrice(addOn.price * qty)}
-                                                                    </span>
+                                                                    <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
                                                                 </div>
                                                             );
                                                         })}
@@ -1855,11 +1768,7 @@ export default function ChiTietVeMayBay() {
                                                         {selectedSeatsByLeg.inbound.map((s) => (
                                                             <div key={s.id} className="flex justify-between text-sm">
                                                                 <span>Ghế {s.number}</span>
-                                                                <span>
-                                                                    {s.currency && s.currency !== "VND"
-                                                                        ? `${s.price.toLocaleString()} ${s.currency}`
-                                                                        : formatPrice(s.price || 0)}
-                                                                </span>
+                                                                <span>{s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -1868,9 +1777,7 @@ export default function ChiTietVeMayBay() {
                                                     <span>Tổng chuyến về</span>
                                                     <span className="text-[hsl(var(--primary))]">
                                                         {(() => {
-                                                            const base = (derived.adultsUnit || priceNumber) * participants.adults +
-                                                                (derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children +
-                                                                (derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants;
+                                                            const base = derived.adultsUnit * participants.adults + derived.childrenUnit * participants.children + derived.infantsUnit * participants.infants;
                                                             const addOns = selectedAddOnsByLeg.inbound.reduce((sum, id) => {
                                                                 const addOn = dynamicAddOnServices.find((s) => s.id === id);
                                                                 if (!addOn) return sum;
@@ -1879,7 +1786,7 @@ export default function ChiTietVeMayBay() {
                                                             }, 0);
                                                             const seats = selectedSeatsByLeg.inbound.reduce((sum, s) => sum + (s.price || 0), 0);
                                                             const total = base + addOns + seats;
-                                                            return currency === "VND" ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
+                                                            return currency === 'VND' ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
                                                         })()}
                                                     </span>
                                                 </div>
@@ -1892,9 +1799,7 @@ export default function ChiTietVeMayBay() {
                                 <div className="flex justify-between font-bold text-lg">
                                     <span>Tổng cộng</span>
                                     <span className="text-[hsl(var(--primary))]">
-                                        {currency === "VND"
-                                            ? formatPrice(Math.round(calculateTotal()))
-                                            : `${Math.round(calculateTotal()).toLocaleString()} ${currency}`}
+                                        {currency === 'VND' ? formatPrice(Math.round(calculateTotal())) : `${Math.round(calculateTotal()).toLocaleString()} ${currency}`}
                                     </span>
                                 </div>
                                 <div className="text-xs text-[hsl(var(--muted-foreground))]">

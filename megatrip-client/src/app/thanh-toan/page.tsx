@@ -1414,7 +1414,37 @@ export default function ThanhToan() {
                                                     )}
 
                                                     <div className="flex justify-between text-sm"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
-                                                    {seatsTotal > 0 && <div className="flex justify-between text-sm"><span>Phí ghế</span><span>{formatPrice(seatsTotal)}</span></div>}
+                                                    {/* {seatsTotal > 0 && <div className="flex justify-between text-sm"><span>Phí ghế</span><span>{formatPrice(seatsTotal)}</span></div>} */}
+                                                    <div
+                                                        className="flex items-center justify-between text-sm cursor-pointer"
+                                                        onClick={() => setShowFareDetails(prev => ({ ...prev, [legKey]: !prev[legKey] }))}
+                                                    >
+                                                        <div>Phí ghế</div>
+                                                        <div className="flex items-center gap-4">
+                                                            <span>{formatPrice(seatsTotal)}</span>
+                                                            <ChevronDown className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? 'rotate-180' : ''}`} />
+                                                        </div>
+                                                    </div>
+                                                    {showFareDetails[legKey] && (
+                                                        <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                            {seatsArr.filter(s => (s.leg ?? null) === legKey).length > 0 ? (
+                                                                <div className="space-y-2">
+                                                                    {seatsArr.filter(s => (s.leg ?? null) === legKey).map((s: any, idx: number) => (
+                                                                        <div key={idx} className="flex justify-between">
+                                                                            <div>Ghế {s.number}</div>
+                                                                            <div>{formatPrice(Number(s.price ?? 0))}</div>
+                                                                        </div>
+                                                                    ))}
+                                                                    <div className="flex justify-between font-medium pt-2 border-t">
+                                                                        <div>Tổng phí ghế</div>
+                                                                        <div>{formatPrice(seatsTotal)}</div>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-muted-foreground">Không có ghế được chọn cho {label.toLowerCase()}</div>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     <div className="flex justify-between font-semibold text-base mt-2">
                                                         <span>Tổng {label.toLowerCase()}</span>
                                                         <span className="text-[hsl(var(--primary))]">{formatPrice(total)}</span>
