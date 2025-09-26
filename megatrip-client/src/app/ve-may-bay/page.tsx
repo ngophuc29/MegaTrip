@@ -1542,6 +1542,32 @@ export default function VeMayBay() {
             const inRes = await handlePriceOfferSingle(selectedInbound);
             console.log('Inbound pricing result:', inRes);
             console.log('Both legs processed.');
+
+            // --- NEW: when both legs priced, create a combined wrapper cache entry and navigate to detail page ---
+            try {
+                if (outRes && inRes && outRes.key && inRes.key) {
+                    // Compose combined id using separator "__"
+                    const combinedKey = `${outRes.key}__${inRes.key}`;
+
+                    // load existing cache and add a small wrapper entry referencing both pricing keys
+                    const existing = loadCacheFromStorage() || {};
+                    existing.pricing = existing.pricing || {};
+                    // do not duplicate existing keys; store lightweight wrapper object
+                    existing.pricing[combinedKey] = {
+                        wrapper: true,
+                        outboundKey: outRes.key,
+                        inboundKey: inRes.key,
+                        ts: Date.now()
+                    };
+                    saveCacheToStorage(existing);
+                    console.log('[pricing-cache] saved roundtrip wrapper for', combinedKey);
+
+                    // navigate to detail page for this combined key (detail page will detect wrapper and load both legs)
+                    router.push(`/ve-may-bay/${encodeURIComponent(combinedKey)}`);
+                }
+            } catch (e) {
+                console.warn('[pricing-cache] failed to save combined wrapper or navigate', e);
+            }
         } finally {
             setPricingLoadingRT(false);
         }
@@ -2198,7 +2224,7 @@ export default function VeMayBay() {
                                                                                                 <div>
                                                                                                     <div className="font-medium">Xách tay</div>
                                                                                                     <div className="text-muted-foreground">
-                                                                                                        {flight.baggage.handbag.weight} • {flight.baggage.handbag.pieces}
+                                                                                                        {selectedOutbound.baggage.handbag.weight} • {selectedOutbound.baggage.handbag.pieces}
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
@@ -2207,7 +2233,7 @@ export default function VeMayBay() {
                                                                                                 <div>
                                                                                                     <div className="font-medium">Ký gửi</div>
                                                                                                     <div className="text-muted-foreground">
-                                                                                                        {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`}
+                                                                                                        {selectedOutbound.baggage.checkin.weight} • {selectedOutbound.baggage.checkin.pieces ?? `kiện`}
                                                                                                     </div>
                                                                                                 </div>
                                                                                             </div>
@@ -2219,11 +2245,11 @@ export default function VeMayBay() {
                                                                                             <div className="flex items-center gap-2">
                                                                                                 <Wifi className="h-4 w-4" />
                                                                                                 <div>
-                                                                                                    {flight.amenities.wifi.available ? (
+                                                                                                    {selectedOutbound.amenities.wifi.available ? (
                                                                                                         <>
                                                                                                             <div className="font-medium">WiFi</div>
                                                                                                             <div className="text-muted-foreground">
-                                                                                                                {flight.amenities.wifi.free ? 'Miễn phí' : flight.amenities.wifi.price}
+                                                                                                                {selectedOutbound.amenities.wifi.free ? 'Miễn phí' : selectedOutbound.amenities.wifi.price}
                                                                                                             </div>
                                                                                                         </>
                                                                                                     ) : (
@@ -2234,36 +2260,36 @@ export default function VeMayBay() {
                                                                                             <div className="flex items-center gap-2">
                                                                                                 <Utensils className="h-4 w-4" />
                                                                                                 <div>
-                                                                                                    {flight.amenities.meal.included ? (
+                                                                                                    {selectedOutbound.amenities.meal.included ? (
                                                                                                         <>
                                                                                                             <div className="font-medium">Bữa ăn</div>
-                                                                                                            <div className="text-muted-foreground">{flight.amenities.meal.type}</div>
+                                                                                                            <div className="text-muted-foreground">{selectedOutbound.amenities.meal.type}</div>
                                                                                                         </>
-                                                                                                    ) : flight.amenities.meal.available ? (
+                                                                                                    ) : selectedOutbound.amenities.meal.available ? (
                                                                                                         <>
                                                                                                             <div className="font-medium">Bữa ăn có phí</div>
-                                                                                                            <div className="text-muted-foreground">{flight.amenities.meal.price}</div>
+                                                                                                            <div className="text-muted-foreground">{selectedOutbound.amenities.meal.price}</div>
                                                                                                         </>
                                                                                                     ) : (
                                                                                                         <span className="text-muted-foreground">Không bán suất ăn</span>
                                                                                                     )}
                                                                                                 </div>
                                                                                             </div>
-                                                                                            {flight.amenities.entertainment?.available && (
+                                                                                            {selectedOutbound.amenities.entertainment?.available && (
                                                                                                 <div className="flex items-center gap-2">
                                                                                                     <Tv className="h-4 w-4" />
                                                                                                     <div>
                                                                                                         <div className="font-medium">Giải trí</div>
-                                                                                                        <div className="text-muted-foreground">{flight.amenities.entertainment.screens}</div>
+                                                                                                        <div className="text-muted-foreground">{selectedOutbound.amenities.entertainment.screens}</div>
                                                                                                     </div>
                                                                                                 </div>
                                                                                             )}
-                                                                                            {flight.amenities.power?.available && (
+                                                                                            {selectedOutbound.amenities.power?.available && (
                                                                                                 <div className="flex items-center gap-2">
                                                                                                     <Battery className="h-4 w-4" />
                                                                                                     <div>
                                                                                                         <div className="font-medium">Sạc điện</div>
-                                                                                                        <div className="text-muted-foreground">{flight.amenities.power.type}</div>
+                                                                                                        <div className="text-muted-foreground">{selectedOutbound.amenities.power.type}</div>
                                                                                                     </div>
                                                                                                 </div>
                                                                                             )}
@@ -2273,13 +2299,13 @@ export default function VeMayBay() {
                                                                                         <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
                                                                                         <div className="space-y-2 text-sm">
                                                                                             <div>
-                                                                                                <span className="font-medium">Máy bay:</span> {flight.aircraft}
+                                                                                                <span className="font-medium">Máy bay:</span> {selectedOutbound.aircraft}
                                                                                             </div>
                                                                                             <div>
-                                                                                                <span className="font-medium">Hạng vé:</span> {flight.class}
+                                                                                                <span className="font-medium">Hạng vé:</span> {selectedOutbound.class}
                                                                                             </div>
                                                                                             <div>
-                                                                                                <span className="font-medium">Còn lại:</span> {flight.availableSeats} ghế
+                                                                                                <span className="font-medium">Còn lại:</span> {selectedOutbound.availableSeats} ghế
                                                                                             </div>
                                                                                         </div>
                                                                                     </div>
@@ -2298,19 +2324,19 @@ export default function VeMayBay() {
                                                                             </TabsContent>
                                                                             <TabsContent value="refund" className="space-y-3">
                                                                                 <div className="flex items-start gap-3">
-                                                                                    {flight.policies.cancellable ? (
+                                                                                    {selectedOutbound.policies.cancellable ? (
                                                                                         <Shield className="h-5 w-5 text-green-500 mt-0.5" />
                                                                                     ) : (
                                                                                         <X className="h-5 w-5 text-red-500 mt-0.5" />
                                                                                     )}
                                                                                     <div>
                                                                                         <h4 className="font-medium mb-2">
-                                                                                            {flight.policies.cancellable ? 'Có thể hoàn vé' : 'Không hoàn vé'}
+                                                                                            {selectedOutbound.policies.cancellable ? 'Có thể hoàn vé' : 'Không hoàn vé'}
                                                                                         </h4>
-                                                                                        {flight.policies.cancellable ? (
+                                                                                        {selectedOutbound.policies.cancellable ? (
                                                                                             <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
-                                                                                                <div>• Phí hủy: {flight.policies.cancellationFee}</div>
-                                                                                                <div>• {flight.policies.refundable}</div>
+                                                                                                <div>• Phí hủy: {selectedOutbound.policies.cancellationFee}</div>
+                                                                                                <div>• {selectedOutbound.policies.refundable}</div>
                                                                                                 <div>• Thời gian xử lý: 7-14 ngày làm việc</div>
                                                                                             </div>
                                                                                         ) : (
@@ -2323,18 +2349,18 @@ export default function VeMayBay() {
                                                                             </TabsContent>
                                                                             <TabsContent value="change" className="space-y-3">
                                                                                 <div className="flex items-start gap-3">
-                                                                                    {flight.policies.changeable ? (
+                                                                                    {selectedOutbound.policies.changeable ? (
                                                                                         <RefreshCw className="h-5 w-5 text-blue-500 mt-0.5" />
                                                                                     ) : (
                                                                                         <X className="h-5 w-5 text-red-500 mt-0.5" />
                                                                                     )}
                                                                                     <div>
                                                                                         <h4 className="font-medium mb-2">
-                                                                                            {flight.policies.changeable ? 'Có thể đổi lịch' : 'Không đổi lịch'}
+                                                                                            {selectedOutbound.policies.changeable ? 'Có thể đổi lịch' : 'Không đổi lịch'}
                                                                                         </h4>
-                                                                                        {flight.policies.changeable ? (
+                                                                                        {selectedOutbound.policies.changeable ? (
                                                                                             <div className="text-sm text-[hsl(var(--muted-foreground))] space-y-1">
-                                                                                                <div>• Phí đổi: {flight.policies.changeFee}</div>
+                                                                                                <div>• Phí đổi: {selectedOutbound.policies.changeFee}</div>
                                                                                                 <div>• Áp dụng: Trước 24h khởi hành</div>
                                                                                                 <div>• Số lần đổi: Không giới hạn</div>
                                                                                             </div>
@@ -2347,10 +2373,10 @@ export default function VeMayBay() {
                                                                                 </div>
                                                                             </TabsContent>
                                                                             <TabsContent value="promotions" className="space-y-3">
-                                                                                {flight.promotions && flight.promotions.length > 0 ? (
+                                                                                {selectedOutbound.promotions && selectedOutbound.promotions.length > 0 ? (
                                                                                     <div className="space-y-3">
                                                                                         <h4 className="font-medium">Khuyến mãi áp dụng</h4>
-                                                                                        {flight.promotions.map((promo: any, index: number) => (
+                                                                                        {selectedOutbound.promotions.map((promo: any, index: number) => (
                                                                                             <Card key={index} className="p-3">
                                                                                                 <div className="flex items-start gap-3">
                                                                                                     <Gift className="h-5 w-5 text-orange-500 mt-0.5" />
@@ -2568,6 +2594,7 @@ export default function VeMayBay() {
                                                 <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
                                                 <div className="flex-1 h-px bg-gray-300"></div>
                                             </div>
+                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div>
                                         </div>
 
                                         <div className="text-center">
@@ -2623,6 +2650,7 @@ export default function VeMayBay() {
                                                 <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
                                                 <div className="flex-1 h-px bg-gray-300"></div>
                                             </div>
+                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div>
                                         </div>
                                         <div className="text-center">
                                             <div className="font-bold text-lg">{selectedInbound.arrival.time}</div>
@@ -2654,6 +2682,8 @@ export default function VeMayBay() {
                     </div>
                 </div>
             )}
+
+            
 
             {/* Modal chi tiết chuyến bay đi (Outbound) */}
 
@@ -2991,7 +3021,7 @@ export default function VeMayBay() {
                                         <div className="text-sm text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.airport}</div>
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedInbound.arrival.city}</div>
                                     </div>
-                                    
+
                                 </div>
                                 <Tabs defaultValue="details" className="w-full">
                                     <TabsList className="grid w-full grid-cols-5">
@@ -3201,8 +3231,6 @@ export default function VeMayBay() {
                     </div>
                 </div>
             )}
-
-
         </>
     );
 }

@@ -118,11 +118,103 @@ export default function ChiTietVeMayBay() {
     const [cachedSeatmap, setCachedSeatmap] = useState<any | null>(null);
     const [mappedOffer, setMappedOffer] = useState<any | null>(null);
     const [seatmapSummary, setSeatmapSummary] = useState<any | null>(null);
+
+    // --- NEW: roundtrip and per-leg cached pricing state (prevent ReferenceError) ---
+    const [isRoundtrip, setIsRoundtrip] = useState<boolean>(false);
+    const [selectedLeg, setSelectedLeg] = useState<'outbound' | 'inbound'>('outbound');
+    const [outboundCachedPricing, setOutboundCachedPricing] = useState<any | null>(null);
+    const [inboundCachedPricing, setInboundCachedPricing] = useState<any | null>(null);
+
+    // --- NEW: parsed seatmaps / amenities per leg (used to switch UI between outbound/inbound) ---
+    const [parsedSeatmaps, setParsedSeatmaps] = useState<Record<string, any[]>>({});
+    const [parsedAmenitiesByLeg, setParsedAmenitiesByLeg] = useState<Record<string, any>>({});
+
+    // --- NEW: small helper to extract a usable flight-offer object from pricing payloads ---
+    const extractOfferFromPricing = (pricing: any) => {
+        if (!pricing) return null;
+        // Common shapes: pricing.data.flightOffers?.[0], pricing.data[0], or pricing.data itself
+        try {
+            const offer =
+                pricing?.data?.flightOffers?.[0] ??
+                (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing);
+            return offer ?? null;
+        } catch {
+            return null;
+        }
+    };
+
+    // --- NEW: helper to parse a seatmap payload into rows/summary/amenities and suggest free seats ---
+    const parseSeatmap = (raw: any) => {
+        try {
+            const decks = raw?.decks ?? [];
+            const allSeats: any[] = [];
+            for (const d of decks) {
+                for (const s of (d.seats ?? [])) {
+                    const seatNum = s.number ?? '';
+                    const rowMatch = String(seatNum).match(/\d+/);
+                    const row = rowMatch ? rowMatch[0] : '0';
+
+                    let travEntry: any = null;
+                    if (Array.isArray(s.travelerPricing) && s.travelerPricing.length > 0) travEntry = s.travelerPricing[0];
+                    else if (s.travelerPricing && typeof s.travelerPricing === 'object') travEntry = s.travelerPricing;
+
+                    const availability = travEntry?.seatAvailabilityStatus ?? 'UNKNOWN';
+                    const priceRaw = travEntry?.price?.total ?? travEntry?.price?.amount ?? null;
+                    const price = priceRaw != null ? Number(String(priceRaw).replace(/[^\d.-]/g, '')) : 0;
+                    const currency = travEntry?.price?.currency ?? travEntry?.price?.currencyCode ?? 'VND';
+                    const characteristics = s.characteristicsCodes ?? s.characteristics ?? [];
+
+                    allSeats.push({
+                        id: seatNum,
+                        number: seatNum,
+                        row,
+                        availability,
+                        price: Number.isFinite(price) ? price : 0,
+                        currency: currency ?? 'VND',
+                        coords: s.coordinates ?? null,
+                        characteristics,
+                        raw: s
+                    });
+                }
+            }
+
+            const rowsMap: Record<string, any[]> = {};
+            allSeats.forEach(s => {
+                rowsMap[s.row] = rowsMap[s.row] ?? [];
+                rowsMap[s.row].push(s);
+            });
+            const rows = Object.keys(rowsMap)
+                .map(r => ({ row: r, seats: rowsMap[r].sort((a, b) => a.number.localeCompare(b.number)) }))
+                .sort((a, b) => Number(a.row) - Number(b.row));
+
+            const summary = {
+                aircraftCode: raw?.aircraft?.code ?? raw?.data?.aircraft?.code ?? null,
+                availableSeatsCounters: raw?.availableSeatsCounters ?? raw?.data?.availableSeatsCounters ?? null,
+                rawSeatmap: raw
+            };
+
+            const amenities = raw?.aircraftCabinAmenities ?? null;
+
+            // Suggest free seats: AVAILABLE, price === 0, NOT marked CH
+            const freeSeats = allSeats.filter(s => {
+                const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                const hasCH = chars.includes('CH');
+                const priceIsZero = Number(s.price || 0) === 0;
+                return s.availability === 'AVAILABLE' && priceIsZero && !hasCH;
+            });
+
+            return { rows, summary, amenities, freeSeats };
+        } catch (e) {
+            console.warn('parseSeatmap error', e);
+            return { rows: [], summary: null, amenities: null, freeSeats: [] };
+        }
+    };
+
     // dynamic add-ons: static fallback + any included resources from pricing (bags, credit-card-fees, other-services, detailed-fare-rules, ...)
     const [dynamicAddOnServices, setDynamicAddOnServices] = useState<typeof addOnServices>(addOnServices);
     // seatmap UI state
     const [seatRows, setSeatRows] = useState<Array<{ row: string; seats: any[] }>>([]);
-    const [selectedSeats, setSelectedSeats] = useState<any[]>([]);
+    // const [selectedSeats, setSelectedSeats] = useState<any[]>([]);
     // convenience: aircraft amenities loaded from seatmap
     const [aircraftAmenities, setAircraftAmenities] = useState<any | null>(null);
     // seatmap ref + instruction banner for UX when seat-selection addon enabled
@@ -137,11 +229,21 @@ export default function ChiTietVeMayBay() {
     });
     const [selectedFare, setSelectedFare] = useState('basic');
     const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+
     // per-addOn flag: true = mua cho tất cả hành khách, false = chỉ 1 (khi người dùng xác nhận)
     const [addOnPerPassenger, setAddOnPerPassenger] = useState<Record<string, boolean>>({});
     // prevent duplicate confirmations / re-entrant calls for same add-on
     const addOnProcessingRef = useRef<Record<string, boolean>>({});
+    // New state for per-leg add-ons and seats
+    const [selectedAddOnsByLeg, setSelectedAddOnsByLeg] = useState<{
+        outbound: string[];
+        inbound: string[];
+    }>({ outbound: [], inbound: [] });
 
+    const [selectedSeatsByLeg, setSelectedSeatsByLeg] = useState<{
+        outbound: any[];
+        inbound: any[];
+    }>({ outbound: [], inbound: [] });
     const [passengerInfo, setPassengerInfo] = useState({
         title: 'Mr',
         firstName: '',
@@ -158,28 +260,33 @@ export default function ChiTietVeMayBay() {
     });
 
     // add: validation state for lead passenger + contact
-	const [passengerErrors, setPassengerErrors] = useState<Record<string, string>>({});
-	const [contactErrors, setContactErrors] = useState<Record<string, string>>({});
+    const [passengerErrors, setPassengerErrors] = useState<Record<string, string>>({});
+    const [contactErrors, setContactErrors] = useState<Record<string, string>>({});
 
-	const validateLeadPassengerAndContact = () => {
-		const pErr: Record<string, string> = {};
-		const cErr: Record<string, string> = {};
+    const validateLeadPassengerAndContact = () => {
+        const pErr: Record<string, string> = {};
+        const cErr: Record<string, string> = {};
 
-		// passenger required fields (lead passenger)
-		if (!passengerInfo.firstName || String(passengerInfo.firstName).trim() === '') pErr.firstName = 'Họ và tên đệm bắt buộc';
-		if (!passengerInfo.lastName || String(passengerInfo.lastName).trim() === '') pErr.lastName = 'Tên bắt buộc';
-		if (!passengerInfo.dateOfBirth || String(passengerInfo.dateOfBirth).trim() === '') pErr.dateOfBirth = 'Ngày sinh bắt buộc';
-		if (!passengerInfo.idNumber || String(passengerInfo.idNumber).trim() === '') pErr.idNumber = 'Số giấy tờ bắt buộc';
+        if (!passengerInfo.firstName.trim()) pErr.firstName = 'Họ và tên đệm bắt buộc';
+        if (!passengerInfo.lastName.trim()) pErr.lastName = 'Tên bắt buộc';
+        if (!passengerInfo.dateOfBirth) pErr.dateOfBirth = 'Ngày sinh bắt buộc';
+        else {
+            const dob = new Date(passengerInfo.dateOfBirth);
+            if (isNaN(dob.getTime()) || dob > new Date()) pErr.dateOfBirth = 'Ngày sinh không hợp lệ';
+        }
+        if (!passengerInfo.idNumber.trim()) pErr.idNumber = 'Số giấy tờ bắt buộc';
+        else if (passengerInfo.idType === 'cccd' && !/^\d{12}$/.test(passengerInfo.idNumber)) pErr.idNumber = 'CCCD phải có 12 chữ số';
 
-		// contact required
-		if (!contactInfo.email || String(contactInfo.email).trim() === '') cErr.email = 'Email liên hệ bắt buộc';
-		if (!contactInfo.phone || String(contactInfo.phone).trim() === '') cErr.phone = 'Số điện thoại liên hệ bắt buộc';
+        if (!contactInfo.email.trim()) cErr.email = 'Email liên hệ bắt buộc';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactInfo.email)) cErr.email = 'Email không hợp lệ';
+        if (!contactInfo.phone.trim()) cErr.phone = 'Số điện thoại liên hệ bắt buộc';
+        else if (!/^\d{10,11}$/.test(contactInfo.phone)) cErr.phone = 'Số điện thoại không hợp lệ';
 
-		setPassengerErrors(pErr);
-		setContactErrors(cErr);
+        setPassengerErrors(pErr);
+        setContactErrors(cErr);
 
-		return Object.keys(pErr).length === 0 && Object.keys(cErr).length === 0;
-	};
+        return Object.keys(pErr).length === 0 && Object.keys(cErr).length === 0;
+    };
 
     useEffect(() => {
         if (!id) return;
@@ -189,9 +296,55 @@ export default function ChiTietVeMayBay() {
             const stored = loadCacheFromStorage();
             // LOG: kiểm tra cache cho id này (use decoded lookupId)
             console.log('[Flight detail] id=', lookupId, 'cache present:', Boolean(stored));
-            console.log('[Flight detail] pricing for id=', lookupId, stored?.pricing?.[lookupId]);
-            console.log('[Flight detail] seatmap for id=', lookupId, stored?.seatmap?.[lookupId]);
-            console.log('[Flight detail] signature for id=', lookupId, stored?.signatures?.[lookupId]);
+            // --- NEW: detect roundtrip wrapper composed as "<outKey>__<inKey>" ---
+            if (String(lookupId).includes('__')) {
+                const [outKey, inKey] = String(lookupId).split('__');
+                const outPricing = stored?.pricing?.[outKey] ?? null;
+                const inPricing = stored?.pricing?.[inKey] ?? null;
+                console.log('[Flight detail] roundtrip wrapper detected, outKey=', outKey, 'inKey=', inKey, 'outPricing=', !!outPricing, 'inPricing=', !!inPricing);
+                if (outPricing || inPricing) {
+                    setIsRoundtrip(true);
+                    setOutboundCachedPricing(outPricing);
+                    setInboundCachedPricing(inPricing);
+                    // For backward compatibility with single-offer UI, set cachedPricing to outbound if present
+                    if (outPricing) setCachedPricing(outPricing);
+                    else if (inPricing) setCachedPricing(inPricing);
+
+                    // Try loading seatmaps for both legs if available and parse them
+                    if (stored?.seatmap?.[outKey]) {
+                        const rawOut = stored.seatmap[outKey];
+                        setCachedSeatmap((prev) => ({ ...(prev || {}), outbound: rawOut }));
+                        const parsedOut = parseSeatmap(rawOut);
+                        setParsedSeatmaps(prev => ({ ...(prev || {}), outbound: parsedOut.rows }));
+                        setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), outbound: parsedOut.amenities }));
+                        setSeatmapSummary(parsedOut.summary);
+                        setAircraftAmenities(parsedOut.amenities);
+                        // auto-assign free seats if user hasn't selected any yet
+                        const totalNeeded = participants.adults + participants.children + participants.infants;
+                        if (parsedOut.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['outbound'].length === 0) {
+                            setSelectedSeatsByLeg(prev => ({ ...prev, outbound: parsedOut.freeSeats.slice(0, Math.min(totalNeeded, parsedOut.freeSeats.length)) }));
+                        }
+                        // show outbound rows by default
+                        setSeatRows(parsedOut.rows);
+                    }
+                    if (stored?.seatmap?.[inKey]) {
+                        const rawIn = stored.seatmap[inKey];
+                        setCachedSeatmap((prev) => ({ ...(prev || {}), inbound: rawIn }));
+                        const parsedIn = parseSeatmap(rawIn);
+                        setParsedSeatmaps(prev => ({ ...(prev || {}), inbound: parsedIn.rows }));
+                        setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), inbound: parsedIn.amenities }));
+                        // do not overwrite seatRows/selectedSeats unless user switches to inbound
+                        const totalNeeded = participants.adults + participants.children + participants.infants;
+
+                        if (parsedIn.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['inbound'].length === 0) {
+                            setSelectedSeatsByLeg(prev => ({ ...prev, inbound: parsedIn.freeSeats.slice(0, Math.min(totalNeeded, parsedIn.freeSeats.length)) }));
+                        }
+                    }
+                    // leave mappedOffer as-is (we compute normalizedOffer later based on selectedLeg)
+                }
+            }
+
+            // --- existing single-leg handling (unchanged path) ---
             if (stored && stored.pricing && stored.pricing[lookupId]) {
                 setCachedPricing(stored.pricing[lookupId]);
                 // normalize/derive offer
@@ -233,6 +386,8 @@ export default function ChiTietVeMayBay() {
                     console.warn('Error deriving participants from offer', e);
                 }
             }
+
+            // --- NEW: handle seatmap loading for roundtrip legs (outbound/inbound) ---
             if (stored && stored.seatmap && stored.seatmap[lookupId]) {
                 setCachedSeatmap(stored.seatmap[lookupId]);
                 const summary = {
@@ -242,75 +397,34 @@ export default function ChiTietVeMayBay() {
                 };
                 setSeatmapSummary(summary);
                 console.log('[Flight detail] seatmapSummary=', summary);
-                // parse seatmap -> rows by numeric row extracted from seat.number
                 const raw = stored.seatmap[lookupId];
-                const decks = raw?.decks ?? [];
-                const allSeats: any[] = [];
-                for (const d of decks) {
-                    for (const s of (d.seats ?? [])) {
-                        const seatNum = s.number ?? '';
-                        const rowMatch = String(seatNum).match(/\d+/);
-                        const row = rowMatch ? rowMatch[0] : '0';
-
-                        // travelerPricing might be an array of objects or an object — pick the first meaningful entry
-                        let travEntry: any = null;
-                        if (Array.isArray(s.travelerPricing) && s.travelerPricing.length > 0) travEntry = s.travelerPricing[0];
-                        else if (s.travelerPricing && typeof s.travelerPricing === 'object') travEntry = s.travelerPricing;
-
-                        // availability string (e.g. "AVAILABLE","BLOCKED", etc.)
-                        const availability = travEntry?.seatAvailabilityStatus ?? 'UNKNOWN';
-
-                        // price can be under price.total / price.amount; sometimes string -> normalize to number
-                        const priceRaw = travEntry?.price?.total ?? travEntry?.price?.amount ?? null;
-                        const price = priceRaw != null ? Number(String(priceRaw).replace(/[^\d.-]/g, '')) : 0;
-                        const currency = travEntry?.price?.currency ?? travEntry?.price?.currencyCode ?? 'VND';
-
-                        // characteristics: prefer characteristicsCodes (as in set.json), fallback to characteristics
-                        const characteristics = s.characteristicsCodes ?? s.characteristics ?? [];
-
-                        allSeats.push({
-                            id: seatNum,
-                            number: seatNum,
-                            row,
-                            availability,
-                            // numeric
-                            price: Number.isFinite(price) ? price : 0,
-                            currency: currency ?? 'VND',
-                            coords: s.coordinates ?? null,
-                            characteristics,
-                            raw: s
-                        });
-                    }
-                }
-                // group by row (sorted)
-                const rowsMap: Record<string, any[]> = {};
-                allSeats.forEach(s => {
-                    rowsMap[s.row] = rowsMap[s.row] ?? [];
-                    rowsMap[s.row].push(s);
-                });
-                const rows = Object.keys(rowsMap)
-                    .map(r => ({ row: r, seats: rowsMap[r].sort((a, b) => a.number.localeCompare(b.number)) }))
-                    .sort((a, b) => Number(a.row) - Number(b.row));
-                setSeatRows(rows);
-                // load amenities
-                setAircraftAmenities(raw?.aircraftCabinAmenities ?? null);
-                // auto-assign free seats if available and not yet selected
-
-                // Auto-assign up to totalParticipants free seats (AVAILABLE, price === 0, and NOT marked CH)
+                const parsed = parseSeatmap(raw);
+                setSeatRows(parsed.rows);
+                setParsedSeatmaps(prev => ({ ...(prev || {}), outbound: parsed.rows }));
+                setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), outbound: parsed.amenities }));
+                setAircraftAmenities(parsed.amenities);
+                // Auto-assign free seats for oneway
                 const totalNeeded = participants.adults + participants.children + participants.infants;
-                const freeSeats = allSeats.filter(s => {
-                    const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-                    const hasCH = chars.includes('CH');
-                    const priceIsZero = Number(s.price || 0) === 0;
-                    return s.availability === 'AVAILABLE' && priceIsZero && !hasCH;
-                });
-                // Only auto-assign when user hasn't selected any seats yet
-                if (freeSeats.length > 0 && totalNeeded > 0 && selectedSeats.length === 0) {
-                    setSelectedSeats(freeSeats.slice(0, Math.min(totalNeeded, freeSeats.length)));
+                if (parsed.freeSeats.length > 0 && totalNeeded > 0 && selectedSeatsByLeg['outbound'].length === 0) {
+                    setSelectedSeatsByLeg(prev => ({
+                        ...prev,
+                        outbound: parsed.freeSeats.slice(0, Math.min(totalNeeded, parsed.freeSeats.length))
+                    }));
                 }
             }
+
             // map ALL included resources into add-on-like items (merge with static addOnServices)
-            const inc = stored.pricing[lookupId]?.included ?? stored.pricing[lookupId]?.data?.included ?? {};
+            // If this lookupId is a roundtrip wrapper, merge included items from both legs
+            let inc: any = {};
+            if (String(lookupId).includes('__')) {
+                const [outKey, inKey] = String(lookupId).split('__');
+                inc = {
+                    ...(stored.pricing?.[outKey]?.included ?? stored.pricing?.[outKey]?.data?.included ?? {}),
+                    ...(stored.pricing?.[inKey]?.included ?? stored.pricing?.[inKey]?.data?.included ?? {})
+                };
+            } else {
+                inc = stored.pricing[lookupId]?.included ?? stored.pricing[lookupId]?.data?.included ?? {};
+            }
             console.log('[Flight detail] included keys:', Object.keys(inc));
             const includedAddOns: any[] = [];
             for (const [key, val] of Object.entries(inc || {})) {
@@ -407,7 +521,13 @@ export default function ChiTietVeMayBay() {
     };
 
     // --- NEW: derive normalized fields from cached pricing for direct mapping into UI ---
-    const normalizedOffer = mappedOffer?.rawOffer ?? null;
+    const normalizedOffer = (() => {
+        if (isRoundtrip) {
+            const chosenPricing = selectedLeg === 'outbound' ? outboundCachedPricing ?? cachedPricing : inboundCachedPricing ?? cachedPricing;
+            return extractOfferFromPricing(chosenPricing) ?? null;
+        }
+        return mappedOffer?.rawOffer ?? null;
+    })();
     const priceRaw = normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? flightDetails.price;
     const priceNumber = Number(String(priceRaw).replace(/[^\d.-]/g, '')) || Number(flightDetails.price);
     const currency = normalizedOffer?.price?.currency ?? cachedPricing?.price?.currency ?? 'VND';
@@ -453,53 +573,108 @@ export default function ChiTietVeMayBay() {
     const totalParticipants = participants.adults + participants.children + participants.infants;
     const addOnClickRef = useRef(false); // Theo dõi trạng thái click
 
+    // const toggleAddOn = (addOnId: string) => {
+    //     if (addOnClickRef.current) return; // prevent rapid double-invokes
+    //     addOnClickRef.current = true;
+
+    //     try {
+    //         const currentlySelected = selectedAddOns.includes(addOnId);
+
+    //         // If currently selected -> remove immediately
+    //         if (currentlySelected) {
+    //             setSelectedAddOns(prev => prev.filter(id => id !== addOnId));
+    //             setAddOnPerPassenger(prevFlags => {
+    //                 const copy = { ...prevFlags };
+    //                 delete copy[addOnId];
+    //                 return copy;
+    //             });
+    //             if (addOnId === 'seat_selection') setShowSeatSelectionInstruction(false);
+    //             return;
+    //         }
+
+    //         // Not selected -> determine per-passenger behavior (call confirm once if needed)
+    //         const total = participants.adults + participants.children + participants.infants;
+    //         let perPassenger = false;
+
+    //         if (addOnId === 'seat_selection') {
+    //             // seat selection: show instruction and scroll
+    //             setShowSeatSelectionInstruction(true);
+    //             if (seatmapRef.current && typeof seatmapRef.current.scrollIntoView === 'function') {
+    //                 try { seatmapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* ignore */ }
+    //             }
+    //         } else if (addOnId === 'travel_insurance') {
+    //             // always per passenger
+    //             perPassenger = true;
+    //         } else if (total > 1) {
+    //             // ask user once (synchronous) and use answer
+    //             const ok = window.confirm(`Bạn có ${total} hành khách. Bạn muốn mua dịch vụ này cho tất cả ${total} hành khách? (OK = tất cả, Cancel = chỉ 1)`);
+    //             perPassenger = !!ok;
+    //         }
+
+    //         // apply decision to state (single update per state)
+    //         setAddOnPerPassenger(prevFlags => ({ ...prevFlags, [addOnId]: perPassenger }));
+    //         setSelectedAddOns(prev => [...prev, addOnId]);
+    //     } finally {
+    //         // small timeout to allow event loop to finish before releasing lock
+    //         setTimeout(() => { addOnClickRef.current = false; }, 0);
+    //     }
+    // };
+    // Hàm cập nhật số lượng khách
+
     const toggleAddOn = (addOnId: string) => {
-        if (addOnClickRef.current) return; // prevent rapid double-invokes
+        if (addOnClickRef.current) return;
         addOnClickRef.current = true;
 
         try {
-            const currentlySelected = selectedAddOns.includes(addOnId);
+            const leg = selectedLeg; // 'outbound' or 'inbound'
+            const currentlySelected = selectedAddOnsByLeg[leg].includes(addOnId);
 
-            // If currently selected -> remove immediately
             if (currentlySelected) {
-                setSelectedAddOns(prev => prev.filter(id => id !== addOnId));
-                setAddOnPerPassenger(prevFlags => {
+                setSelectedAddOnsByLeg((prev) => ({
+                    ...prev,
+                    [leg]: prev[leg].filter((id) => id !== addOnId),
+                }));
+                setAddOnPerPassenger((prevFlags) => {
                     const copy = { ...prevFlags };
                     delete copy[addOnId];
                     return copy;
                 });
-                if (addOnId === 'seat_selection') setShowSeatSelectionInstruction(false);
+                if (addOnId === "seat_selection") setShowSeatSelectionInstruction(false);
                 return;
             }
 
-            // Not selected -> determine per-passenger behavior (call confirm once if needed)
             const total = participants.adults + participants.children + participants.infants;
             let perPassenger = false;
 
-            if (addOnId === 'seat_selection') {
-                // seat selection: show instruction and scroll
+            if (addOnId === "seat_selection") {
                 setShowSeatSelectionInstruction(true);
-                if (seatmapRef.current && typeof seatmapRef.current.scrollIntoView === 'function') {
-                    try { seatmapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch { /* ignore */ }
+                if (seatmapRef.current && typeof seatmapRef.current.scrollIntoView === "function") {
+                    try {
+                        seatmapRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+                    } catch {
+                        /* ignore */
+                    }
                 }
-            } else if (addOnId === 'travel_insurance') {
-                // always per passenger
+            } else if (addOnId === "travel_insurance") {
                 perPassenger = true;
             } else if (total > 1) {
-                // ask user once (synchronous) and use answer
-                const ok = window.confirm(`Bạn có ${total} hành khách. Bạn muốn mua dịch vụ này cho tất cả ${total} hành khách? (OK = tất cả, Cancel = chỉ 1)`);
+                const ok = window.confirm(
+                    `Bạn có ${total} hành khách. Bạn muốn mua dịch vụ này cho tất cả ${total} hành khách? (OK = tất cả, Cancel = chỉ 1)`
+                );
                 perPassenger = !!ok;
             }
 
-            // apply decision to state (single update per state)
-            setAddOnPerPassenger(prevFlags => ({ ...prevFlags, [addOnId]: perPassenger }));
-            setSelectedAddOns(prev => [...prev, addOnId]);
+            setAddOnPerPassenger((prevFlags) => ({ ...prevFlags, [addOnId]: perPassenger }));
+            setSelectedAddOnsByLeg((prev) => ({
+                ...prev,
+                [leg]: [...prev[leg], addOnId],
+            }));
         } finally {
-            // small timeout to allow event loop to finish before releasing lock
-            setTimeout(() => { addOnClickRef.current = false; }, 0);
+            setTimeout(() => {
+                addOnClickRef.current = false;
+            }, 0);
         }
     };
-    // Hàm cập nhật số lượng khách
     const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
         setParticipants(prev => ({
             ...prev,
@@ -508,32 +683,30 @@ export default function ChiTietVeMayBay() {
     };
     // Tính tổng tiền
     const calculateTotal = () => {
-        // Prefer derived per-unit prices when available (more robust if traveler breakdown exists),
-        // otherwise fallback to fareRules-based approximations.
-        const adultUnit = (derived.adultsUnit && derived.adultsUnit > 0)
-            ? derived.adultsUnit
-            : flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price;
-        const childUnit = (derived.childrenUnit && derived.childrenUnit > 0)
-            ? derived.childrenUnit
-            : Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75);
-        const infantUnit = (derived.infantsUnit && derived.infantsUnit > 0)
-            ? derived.infantsUnit
-            : Math.round(flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2);
+        const adultUnit = derived.adultsUnit || parseNumberSafe(normalizedOffer?.price?.total ?? flightDetails.fareRules[selectedFare].price);
+        const childUnit = derived.childrenUnit || Math.round(adultUnit * 0.75);
+        const infantUnit = derived.infantsUnit || Math.round(adultUnit * 0.2);
 
         const adultTotal = adultUnit * participants.adults;
         const childTotal = childUnit * participants.children;
         const infantTotal = infantUnit * participants.infants;
 
-        const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
-            const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-            if (!addOn) return total;
-            const per = addOnPerPassenger[addOnId] ?? false;
-            const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
-            return total + ((addOn?.price || 0) * qty);
-        }, 0);
+        const addOnTotal = (leg: "outbound" | "inbound") =>
+            selectedAddOnsByLeg[leg].reduce((total, addOnId) => {
+                const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                if (!addOn) return total;
+                const per = addOnPerPassenger[addOnId] ?? false;
+                const qty = per ? participants.adults + participants.children + participants.infants : 1;
+                return total + (addOn.price || 0) * qty;
+            }, 0);
 
-        const seatSelectedTotal = selectedSeats.reduce((sum, s) => sum + (s.price || 0), 0);
-        return adultTotal + childTotal + infantTotal + addOnTotal + seatSelectedTotal;
+        const seatTotal = (leg: "outbound" | "inbound") =>
+            selectedSeatsByLeg[leg].reduce((sum, s) => sum + (s.price || 0), 0);
+
+        const outboundTotal = adultTotal + childTotal + infantTotal + addOnTotal("outbound") + seatTotal("outbound");
+        const inboundTotal = isRoundtrip ? adultTotal + childTotal + infantTotal + addOnTotal("inbound") + seatTotal("inbound") : 0;
+
+        return outboundTotal + inboundTotal;
     };
 
     // compute only extras (add-ons + seat fees) to be added on top of derived.offerTotal when present
@@ -564,42 +737,90 @@ export default function ChiTietVeMayBay() {
     };
 
     // --- CHANGED: toggleSeat with confirm-on-change and confirm-on-paid logic ---
-    const toggleSeat = (seat: any) => {
-        if (!seat || seat.availability !== 'AVAILABLE') return;
+    // const toggleSeat = (seat: any) => {
+    //     if (!seat || seat.availability !== 'AVAILABLE') return;
 
-        const exists = selectedSeats.find(s => s.id === seat.id);
+    //     const exists = selectedSeats.find(s => s.id === seat.id);
+    //     if (exists) {
+    //         // deselect
+    //         setSelectedSeats(prev => prev.filter(s => s.id !== seat.id));
+    //         return;
+    //     }
+
+    //     // detect paid seat: require CH AND numeric price
+    //     const chars = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+    //     const hasCH = chars.includes('CH');
+    //     const explicitPrice = Number(seat.price || 0) > 0;
+    //     const isPaidSeat = hasCH && explicitPrice;
+    //     const max = participants.adults + participants.children + participants.infants;
+
+    //     // if selecting a paid seat, ask user confirm
+    //     if (isPaidSeat) {
+    //         const msgPrice = seat.currency && seat.currency !== 'VND' ? `${seat.price.toLocaleString()} ${seat.currency}` : formatPrice(seat.price);
+    //         const ok = window.confirm(`Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`);
+    //         if (!ok) return;
+    //     }
+    //     // if already selected max seats, ask to replace first selected seat
+    //     if (selectedSeats.length >= max && max > 0) {
+    //         const toReplace = selectedSeats[0];
+    //         const ok = window.confirm(`Bạn đã chọn đủ ${max} ghế. Thay thế ghế ${toReplace.number} bằng ghế ${seat.number}?`);
+    //         if (!ok) return;
+    //         setSelectedSeats(prev => [...prev.slice(1), seat]);
+    //         return;
+    //     }
+
+    //     // normal add
+    //     setSelectedSeats(prev => [...prev, seat]);
+    // };
+    const toggleSeat = (seat: any) => {
+        if (!seat || seat.availability !== "AVAILABLE") return;
+
+        const leg = selectedLeg;
+        const exists = selectedSeatsByLeg[leg].find((s) => s.id === seat.id);
+
         if (exists) {
-            // deselect
-            setSelectedSeats(prev => prev.filter(s => s.id !== seat.id));
+            setSelectedSeatsByLeg((prev) => ({
+                ...prev,
+                [leg]: prev[leg].filter((s) => s.id !== seat.id),
+            }));
             return;
         }
 
-        // detect paid seat: require CH AND numeric price
         const chars = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-        const hasCH = chars.includes('CH');
+        const hasCH = chars.includes("CH");
         const explicitPrice = Number(seat.price || 0) > 0;
         const isPaidSeat = hasCH && explicitPrice;
         const max = participants.adults + participants.children + participants.infants;
 
-        // if selecting a paid seat, ask user confirm
         if (isPaidSeat) {
-            const msgPrice = seat.currency && seat.currency !== 'VND' ? `${seat.price.toLocaleString()} ${seat.currency}` : formatPrice(seat.price);
-            const ok = window.confirm(`Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`);
+            const msgPrice =
+                seat.currency && seat.currency !== "VND"
+                    ? `${seat.price.toLocaleString()} ${seat.currency}`
+                    : formatPrice(seat.price);
+            const ok = window.confirm(
+                `Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`
+            );
             if (!ok) return;
         }
-        // if already selected max seats, ask to replace first selected seat
-        if (selectedSeats.length >= max && max > 0) {
-            const toReplace = selectedSeats[0];
-            const ok = window.confirm(`Bạn đã chọn đủ ${max} ghế. Thay thế ghế ${toReplace.number} bằng ghế ${seat.number}?`);
+
+        if (selectedSeatsByLeg[leg].length >= max && max > 0) {
+            const toReplace = selectedSeatsByLeg[leg][0];
+            const ok = window.confirm(
+                `Bạn đã chọn đủ ${max} ghế. Thay thế ghế ${toReplace.number} bằng ghế ${seat.number}?`
+            );
             if (!ok) return;
-            setSelectedSeats(prev => [...prev.slice(1), seat]);
+            setSelectedSeatsByLeg((prev) => ({
+                ...prev,
+                [leg]: [...prev[leg].slice(1), seat],
+            }));
             return;
         }
 
-        // normal add
-        setSelectedSeats(prev => [...prev, seat]);
+        setSelectedSeatsByLeg((prev) => ({
+            ...prev,
+            [leg]: [...prev[leg], seat],
+        }));
     };
-
     {/* Component Legend nhỏ gọn */ }
     function Legend({ color, label }: { color: string; label: string }) {
         return (
@@ -616,7 +837,7 @@ export default function ChiTietVeMayBay() {
             .map((s: any) => {
                 const seatLetter = s.number.replace(/^\d+/, '');
                 const chars = (s.characteristics || []).map((c: string) => c.toUpperCase());
-                const isSelected = selectedSeats.some((ss) => ss.id === s.id);
+                const isSelected = selectedSeatsByLeg[selectedLeg].some((ss) => ss.id === s.id);
                 // detect paid seat: require CH in characteristics AND price > 0 (parsed into s.price)
                 const hasCH = chars.includes('CH');
                 const explicitPrice = Number(s.price || 0) > 0;
@@ -700,32 +921,63 @@ export default function ChiTietVeMayBay() {
     };
 
     // ensure selectedSeats always matches participants count:
+    // useEffect(() => {
+    //     const max = participants.adults + participants.children + participants.infants;
+    //     // trim if too many selected
+    //     if (selectedSeats.length > max) {
+    //         setSelectedSeats(prev => prev.slice(0, max));
+    //         return;
+    //     }
+
+    //     // if fewer than needed, try to auto-assign additional free seats
+    //     if (selectedSeats.length < max && seatRows.length > 0) {
+    //         const alreadyIds = new Set(selectedSeats.map(s => s.id));
+    //         // gather all seats from seatRows
+    //         const allSeats = seatRows.flatMap(r => r.seats || []);
+    //         // filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
+    //         const freeSeats = allSeats.filter(s => {
+    //             const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+    //             const hasCH = chars.includes('CH');
+    //             const priceIsZero = Number(s.price || 0) === 0;
+    //             return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+    //         });
+    //         if (freeSeats.length > 0) {
+    //             const need = Math.min(max - selectedSeats.length, freeSeats.length);
+    //             setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
+    //         }
+    //     }
+    // }, [participants.adults, participants.children, participants.infants, seatRows]);
+
     useEffect(() => {
         const max = participants.adults + participants.children + participants.infants;
-        // trim if too many selected
-        if (selectedSeats.length > max) {
-            setSelectedSeats(prev => prev.slice(0, max));
-            return;
-        }
-
-        // if fewer than needed, try to auto-assign additional free seats
-        if (selectedSeats.length < max && seatRows.length > 0) {
-            const alreadyIds = new Set(selectedSeats.map(s => s.id));
-            // gather all seats from seatRows
-            const allSeats = seatRows.flatMap(r => r.seats || []);
-            // filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
-            const freeSeats = allSeats.filter(s => {
-                const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-                const hasCH = chars.includes('CH');
-                const priceIsZero = Number(s.price || 0) === 0;
-                return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
-            });
-            if (freeSeats.length > 0) {
-                const need = Math.min(max - selectedSeats.length, freeSeats.length);
-                setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
+        const legs = isRoundtrip ? ["outbound", "inbound"] : ["outbound"];
+        legs.forEach((leg) => {
+            if (selectedSeatsByLeg[leg].length > max) {
+                setSelectedSeatsByLeg((prev) => ({
+                    ...prev,
+                    [leg]: prev[leg].slice(0, max),
+                }));
+                return;
             }
-        }
-    }, [participants.adults, participants.children, participants.infants, seatRows]);
+            if (selectedSeatsByLeg[leg].length < max && parsedSeatmaps[leg]?.length > 0) {
+                const alreadyIds = new Set(selectedSeatsByLeg[leg].map((s) => s.id));
+                const allSeats = parsedSeatmaps[leg].flatMap((r) => r.seats || []);
+                const freeSeats = allSeats.filter((s) => {
+                    const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
+                    const hasCH = chars.includes("CH");
+                    const priceIsZero = Number(s.price || 0) === 0;
+                    return s.availability === "AVAILABLE" && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+                });
+                if (freeSeats.length > 0) {
+                    const need = Math.min(max - selectedSeatsByLeg[leg].length, freeSeats.length);
+                    setSelectedSeatsByLeg((prev) => ({
+                        ...prev,
+                        [leg]: [...prev[leg], ...freeSeats.slice(0, need)],
+                    }));
+                }
+            }
+        });
+    }, [participants.adults, participants.children, participants.infants, parsedSeatmaps, isRoundtrip]);
 
     // --- NEW: safe number parser + derive traveler-level pricing when available ---
     const parseNumberSafe = (v: any) => {
@@ -812,12 +1064,71 @@ export default function ChiTietVeMayBay() {
         return total + ((Number(addOn.price) || 0) * qty);
     }, 0);
 
-    const seatSelectedTotalForDisplay = selectedSeats.reduce((t, s) => t + (Number(s.price) || 0), 0);
+    const seatSelectedTotalForDisplay = selectedSeatsByLeg[selectedLeg].reduce((t, s) => t + (Number(s.price) || 0), 0);
 
-    const totalCombined = (derived.offerTotal && derived.offerTotal > 0)
-        ? (Number(derived.offerTotal || 0) + addOnTotalForDisplay + seatSelectedTotalForDisplay)
-        : calculateTotal();
+    // const totalCombined = (derived.offerTotal && derived.offerTotal > 0)
+    //     ? (Number(derived.offerTotal || 0) + addOnTotalForDisplay + seatSelectedTotalForDisplay)
+    //     : calculateTotal();
+    const totalCombined = calculateTotal();
+    // --- NEW: when user switches selectedLeg show parsed seatmap/amenities/pricing for that leg if available ---
+    // useEffect(() => {
+    //     if (!isRoundtrip) return;
+    //     const leg = selectedLeg;
+    //     // prefer parsed seatmap rows when present (set by parseSeatmap earlier)
+    //     const parsed = parsedSeatmaps[leg];
+    //     if (parsed && parsed.length > 0) {
+    //         setSeatRows(parsed);
+    //     } else if (cachedSeatmap && cachedSeatmap[leg]) {
+    //         // fallback: try to parse cachedSeatmap[leg] on the fly
+    //         try {
+    //             const parsedOnTheFly = parseSeatmap(cachedSeatmap[leg]);
+    //             setSeatRows(parsedOnTheFly.rows || []);
+    //             setParsedSeatmaps(prev => ({ ...(prev || {}), [leg]: parsedOnTheFly.rows }));
+    //             setParsedAmenitiesByLeg(prev => ({ ...(prev || {}), [leg]: parsedOnTheFly.amenities }));
+    //         } catch { /* ignore */ }
+    //     }
 
+    //     // amenities
+    //     const amen = parsedAmenitiesByLeg[leg] ?? (cachedSeatmap?.[leg]?.aircraftCabinAmenities ?? null);
+    //     if (amen) setAircraftAmenities(amen);
+
+    //     // ensure normalizedOffer/cachedPricing reflect the selected leg (so price/details update)
+    //     if (leg === 'outbound' && outboundCachedPricing) {
+    //         setCachedPricing(outboundCachedPricing);
+    //     } else if (leg === 'inbound' && inboundCachedPricing) {
+    //         setCachedPricing(inboundCachedPricing);
+    //     }
+    // }, [selectedLeg, parsedSeatmaps, parsedAmenitiesByLeg, cachedSeatmap, outboundCachedPricing, inboundCachedPricing, isRoundtrip]);
+    useEffect(() => {
+        if (!isRoundtrip) return;
+        const leg = selectedLeg;
+        const parsed = parsedSeatmaps[leg];
+        if (parsed && parsed.length > 0) {
+            setSeatRows(parsed);
+        } else if (cachedSeatmap && cachedSeatmap[leg]) {
+            const parsedOnTheFly = parseSeatmap(cachedSeatmap[leg]);
+            setSeatRows(parsedOnTheFly.rows || []);
+            setParsedSeatmaps((prev) => ({ ...prev, [leg]: parsedOnTheFly.rows }));
+            setParsedAmenitiesByLeg((prev) => ({ ...prev, [leg]: parsedOnTheFly.amenities }));
+        }
+
+        const amen = parsedAmenitiesByLeg[leg] ?? cachedSeatmap?.[leg]?.aircraftCabinAmenities ?? null;
+        if (amen) setAircraftAmenities(amen);
+
+        if (leg === "outbound" && outboundCachedPricing) {
+            setCachedPricing(outboundCachedPricing);
+        } else if (leg === "inbound" && inboundCachedPricing) {
+            setCachedPricing(inboundCachedPricing);
+        }
+    }, [
+        selectedLeg,
+        parsedSeatmaps,
+        parsedAmenitiesByLeg,
+        cachedSeatmap,
+        outboundCachedPricing,
+        inboundCachedPricing,
+        isRoundtrip,
+    ]);
     return (
         <>
             {/* Breadcrumb */}
@@ -834,12 +1145,51 @@ export default function ChiTietVeMayBay() {
             </div>
 
             <div className="container py-6">
+                {/* --- NEW: Roundtrip leg tabs (minimal, only affects leg selection/display) --- */}
+                {isRoundtrip && (
+                    <div className="mb-4 flex items-center gap-3">
+                        <div className="inline-flex rounded-md bg-[hsl(var(--muted))]/5 p-1">
+                            <button
+                                onClick={() => setSelectedLeg('outbound')}
+                                className={`px-4 py-1 rounded-md ${selectedLeg === 'outbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}
+                            >
+                                Chuyến đi
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                    {(() => {
+                                        const o = extractOfferFromPricing(outboundCachedPricing) ?? mappedOffer?.rawOffer ?? null;
+                                        const p = o?.price?.total ?? cachedPricing?.price?.total ?? null;
+                                        if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
+                                        return null;
+                                    })()}
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => setSelectedLeg('inbound')}
+                                disabled={!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound}
+                                className={`px-4 py-1 rounded-md ${selectedLeg === 'inbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'} ${(!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                                Chuyến về
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                    {(() => {
+                                        const i = extractOfferFromPricing(inboundCachedPricing) ?? null;
+                                        const p = i?.price?.total ?? null;
+                                        if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
+                                        return null;
+                                    })()}
+                                </div>
+                            </button>
+                        </div>
+
+                        {/* quick indicator which leg is shown */}
+                        <div className="text-sm text-[hsl(var(--muted-foreground))] ml-2">
+                            Hiển thị: {selectedLeg === 'outbound' ? 'Chuyến đi' : 'Chuyến về'}
+                        </div>
+                    </div>
+                )}
+
                 <div className="flex flex-col lg:flex-row gap-8">
                     {/* Main Content */}
                     <div className="flex-1 space-y-6">
-                        {/* If cached pricing present, map fields directly into UI elements below (no separate summary card) */}
-                        {/* (mappedOffer/seatmapSummary used to derive values; UI below uses derived variables) */}
-
                         {/* Back Button */}
                         <Button variant="outline" asChild className="w-fit">
                             <Link prefetch={false} href="/ve-may-bay">
@@ -857,9 +1207,19 @@ export default function ChiTietVeMayBay() {
                                             <Plane className="h-5 w-5 text-[hsl(var(--primary))]" />
                                         </div>
                                         <div>
-                                            <div className="text-xl">{flightDetails.airline}</div>
+                                            <div className="text-xl">
+                                                {isRoundtrip
+                                                    ? (selectedLeg === 'outbound'
+                                                        ? extractOfferFromPricing(outboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline
+                                                        : extractOfferFromPricing(inboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline)
+                                                    : extractOfferFromPricing(cachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline}
+                                            </div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))] font-normal">
-                                                {flightDetails.flightNumber} • {flightDetails.aircraft}
+                                                {isRoundtrip
+                                                    ? (selectedLeg === 'outbound'
+                                                        ? `${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`
+                                                        : `${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`)
+                                                    : `${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`}
                                             </div>
                                         </div>
                                     </CardTitle>
@@ -875,7 +1235,7 @@ export default function ChiTietVeMayBay() {
                                         { /* prefer times from pricing itineraries if present */}
                                         <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time}</div>
                                         <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport}</div>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.departure.city}</div>
+                                        {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.departure.city}</div> */}
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* departure terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.terminal ?? flightDetails.departure.terminal}</div>
                                         <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date}</div>
                                     </div>
@@ -893,7 +1253,7 @@ export default function ChiTietVeMayBay() {
                                     <div className="text-center">
                                         <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}</div>
                                         <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport}</div>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.city}</div>
+                                        {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.city}</div> */}
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* arrival terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.slice(-1)[0]?.arrival?.terminal ?? flightDetails.arrival.terminal}</div>
                                         <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[0] ?? flightDetails.date}</div>
 
@@ -910,13 +1270,13 @@ export default function ChiTietVeMayBay() {
                                             <div className="flex items-center gap-2">
                                                 <Luggage className="h-4 w-4" />
                                                 {/*                                                Xách tay: {flightDetails.baggage.handbag} */}
-                                                -                                                Xách tay: {displayCabin}
+                                                {/* -                                                Xách tay: {displayCabin} */}
                                                 Xách tay: {displayCabin}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Luggage className="h-4 w-4" />
                                                 {/*                                                Ký gửi: {flightDetails.baggage.checkin} */}
-                                                -                                                Ký gửi: {displayChecked}
+                                                {/* -                                                Ký gửi: {displayChecked} */}
                                                 Ký gửi: {displayChecked}
                                             </div>
                                         </div>
@@ -964,19 +1324,25 @@ export default function ChiTietVeMayBay() {
                                     {dynamicAddOnServices.map((service) => (
                                         <div
                                             key={service.id}
-                                            className={`border rounded-lg p-4 transition-colors ${selectedAddOns.includes(service.id) ? 'border-primary bg-[hsl(var(--primary))/0.05]' : 'hover:bg-[hsl(var(--muted))]'}`}
+                                            className={`border rounded-lg p-4 transition-colors ${selectedAddOnsByLeg[selectedLeg].includes(service.id)
+                                                ? 'border-primary bg-[hsl(var(--primary))/0.05]'
+                                                : 'hover:bg-[hsl(var(--muted))]'
+                                                }`}
                                             onClick={() => toggleAddOn(service.id)}
                                         >
                                             <div className="flex items-start space-x-3">
                                                 <Checkbox
-                                                    checked={selectedAddOns.includes(service.id)}
-                                                    onClick={(e) => e.stopPropagation()} // Giữ để ngăn lan truyền
+                                                    checked={selectedAddOnsByLeg[selectedLeg].includes(service.id)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    onCheckedChange={() => toggleAddOn(service.id)}
                                                 />
                                                 <div className="flex-1">
                                                     <div className="flex items-center justify-between">
                                                         <h4 className="font-medium">{service.name}</h4>
                                                         <span className="font-bold text-[hsl(var(--primary))]">
-                                                            {service.currency && service.currency !== 'VND' ? `${Number(service.price).toLocaleString()} ${service.currency}` : formatPrice(Number(service.price))}
+                                                            {service.currency && service.currency !== 'VND'
+                                                                ? `${Number(service.price).toLocaleString()} ${service.currency}`
+                                                                : formatPrice(Number(service.price))}
                                                         </span>
                                                     </div>
                                                     <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
@@ -985,7 +1351,6 @@ export default function ChiTietVeMayBay() {
                                                 </div>
                                             </div>
                                         </div>
-
                                     ))}
                                 </div>
                             </CardContent>
@@ -1064,7 +1429,7 @@ export default function ChiTietVeMayBay() {
                                                     return <div key={idx} className="w-11 h-11" />;
                                                 }
 
-                                                const isSelected = !!selectedSeats.find(ss => ss.id === s.id);
+                                                const isSelected = !!selectedSeatsByLeg[selectedLeg].find(ss => ss.id === s.id);
                                                 const unavailable = s.availability !== 'AVAILABLE';
 
 
@@ -1213,16 +1578,16 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="firstName">Họ và tên đệm</Label>
                                                 <Input id="firstName" value={passengerInfo.firstName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, firstName: e.target.value }))} placeholder="VD: NGUYEN VAN" />
-                                                { passengerErrors.firstName && (
-	<div className="text-xs text-red-600 mt-1">{passengerErrors.firstName}</div>
-) }
+                                                {passengerErrors.firstName && (
+                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.firstName}</div>
+                                                )}
                                             </div>
                                             <div>
                                                 <Label htmlFor="lastName">Tên</Label>
                                                 <Input id="lastName" value={passengerInfo.lastName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, lastName: e.target.value }))} placeholder="VD: AN" />
-                                                { passengerErrors.lastName && (
-	<div className="text-xs text-red-600 mt-1">{passengerErrors.lastName}</div>
-) }
+                                                {passengerErrors.lastName && (
+                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.lastName}</div>
+                                                )}
                                             </div>
                                         </div>
 
@@ -1232,9 +1597,9 @@ export default function ChiTietVeMayBay() {
                                                 <Input id="dateOfBirth" type="date"
                                                     className="block h-12 bg-white shadow-md text-black w-full"
                                                     value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
-                                                    { passengerErrors.dateOfBirth && (
-	<div className="text-xs text-red-600 mt-1">{passengerErrors.dateOfBirth}</div>
-) }
+                                                {passengerErrors.dateOfBirth && (
+                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.dateOfBirth}</div>
+                                                )}
                                             </div>
                                             <div>
                                                 <Label htmlFor="nationality">Quốc tịch</Label>
@@ -1268,9 +1633,9 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="idNumber">Số giấy tờ</Label>
                                                 <Input id="idNumber" value={passengerInfo.idNumber} onChange={(e) => setPassengerInfo(prev => ({ ...prev, idNumber: e.target.value }))} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
-                                                { passengerErrors.idNumber && (
-	<div className="text-xs text-red-600 mt-1">{passengerErrors.idNumber}</div>
-) }
+                                                {passengerErrors.idNumber && (
+                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.idNumber}</div>
+                                                )}
                                             </div>
                                         </div>
                                     </TabsContent>
@@ -1280,16 +1645,16 @@ export default function ChiTietVeMayBay() {
                                             <div>
                                                 <Label htmlFor="email">Email *</Label>
                                                 <Input id="email" type="email" value={contactInfo.email} onChange={(e) => setContactInfo(prev => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" />
-                                                { contactErrors.email && (
-	<div className="text-xs text-red-600 mt-1">{contactErrors.email}</div>
-) }
+                                                {contactErrors.email && (
+                                                    <div className="text-xs text-red-600 mt-1">{contactErrors.email}</div>
+                                                )}
                                             </div>
                                             <div>
                                                 <Label htmlFor="phone">Số điện thoại *</Label>
                                                 <Input id="phone" value={contactInfo.phone} onChange={(e) => setContactInfo(prev => ({ ...prev, phone: e.target.value }))} placeholder="0912345678" />
-                                                { contactErrors.phone && (
-	<div className="text-xs text-red-600 mt-1">{contactErrors.phone}</div>
-) }
+                                                {contactErrors.phone && (
+                                                    <div className="text-xs text-red-600 mt-1">{contactErrors.phone}</div>
+                                                )}
                                             </div>
                                         </div>
                                         <div>
@@ -1308,182 +1673,234 @@ export default function ChiTietVeMayBay() {
                             <CardHeader>
                                 <CardTitle>Đặt vé máy bay</CardTitle>
                             </CardHeader>
-                            <CardContent className="space-y-1">
-                                {/* Số lượng khách */}
-                                {/* <div>
-                                    <Label className="text-base font-medium mb-3 block">Số lượng khách</Label>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <div className="font-medium">Người lớn</div>
-                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('adults', false)}
-                                                    disabled={participants.adults <= 1}
-                                                >
-                                                    <Minus className="h-4 w-4" />
-                                                </Button>
-                                                <span className="w-8 text-center">{participants.adults}</span>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('adults', true)}
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <div className="font-medium">Trẻ em</div>
-                                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('children', false)}
-                                                    disabled={participants.children <= 0}
-                                                >
-                                                    <Minus className="h-4 w-4" />
-                                                </Button>
-                                                <span className="w-8 text-center">{participants.children}</span>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('children', true)}
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <div className="font-medium">Em bé</div>
-                                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('infants', false)}
-                                                    disabled={participants.infants <= 0}
-                                                >
-                                                    <Minus className="h-4 w-4" />
-                                                </Button>
-                                                <span className="w-8 text-center">{participants.infants}</span>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => updateParticipantCount('infants', true)}
-                                                >
-                                                    <Plus className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div> */}
-                                <Separator />
-                                {/* Flight Summary */}
+                            <CardContent className="space-y-4">
+                                {/* Outbound Flight */}
                                 <div>
                                     <div className="flex items-center justify-between mb-2">
-                                        <span className="font-medium">Chuyến bay</span>
+                                        <span className="font-medium">Chuyến đi</span>
                                         <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
-                                            {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
+                                            {(isRoundtrip ? outboundCachedPricing : cachedPricing)
+                                                ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline
+                                                : flightDetails.airline}
+                                            {(isRoundtrip ? outboundCachedPricing : cachedPricing)
+                                                ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber
+                                                : flightDetails.flightNumber}
                                         </span>
                                     </div>
                                     <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} ({flightDetails.departure.city}) →
-                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} ({flightDetails.arrival.city})<br />
-                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} •
-                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} -
-                                        {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
+                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
+                                            ? `${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`
+                                            : `${flightDetails.departure.airport} (${flightDetails.departure.city}) → ${flightDetails.arrival.airport} (${flightDetails.arrival.city})`}
+                                        <br />
+                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
+                                            ? extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[0] ?? flightDetails.date
+                                            : flightDetails.date} •{" "}
+                                        {(isRoundtrip ? outboundCachedPricing : cachedPricing)
+                                            ? `${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - ${extractOfferFromPricing(isRoundtrip ? outboundCachedPricing : cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}`
+                                            : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`}
                                     </div>
-                                </div>
-                                <Separator />
-                                {/* Pricing Breakdown */}
-                                <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <span>Người lớn ({participants.adults})</span>
-                                        <span>
-                                            {currency === 'VND'
-                                                ? formatPrice(Math.round((derived.adultsUnit || (priceNumber || 0)) * participants.adults))
-                                                : `${Math.round((derived.adultsUnit || (priceNumber || 0)) * participants.adults).toLocaleString()} ${currency}`}
-                                        </span>
-                                    </div>
-                                    {participants.children > 0 && (
+                                    <div className="space-y-1 mt-2">
                                         <div className="flex justify-between">
-                                            <span>Trẻ em ({participants.children})</span>
+                                            <span>Người lớn ({participants.adults})</span>
                                             <span>
-                                                {currency === 'VND'
-                                                    ? formatPrice(Math.round((derived.childrenUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))) * participants.children))
-                                                    : `${Math.round((derived.childrenUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.75))) * participants.children).toLocaleString()} ${currency}`}
+                                                {currency === "VND"
+                                                    ? formatPrice(Math.round((derived.adultsUnit || priceNumber) * participants.adults))
+                                                    : `${Math.round((derived.adultsUnit || priceNumber) * participants.adults).toLocaleString()} ${currency}`}
                                             </span>
                                         </div>
-                                    )}
-                                    {participants.infants > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Em bé ({participants.infants})</span>
-                                            <span>
-                                                {currency === 'VND'
-                                                    ? formatPrice(Math.round((derived.infantsUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))) * participants.infants))
-                                                    : `${Math.round((derived.infantsUnit || Math.round((flightDetails.fareRules[selectedFare as keyof typeof flightDetails.fareRules].price * 0.2))) * participants.infants).toLocaleString()} ${currency}`}
-                                            </span>
-                                        </div>
-                                    )}
-                                    {selectedAddOns.length > 0 && (
-                                        <div className="space-y-1">
-                                            {selectedAddOns.map(addOnId => {
-                                                const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-                                                if (!addOn) return null;
-                                                const per = addOnPerPassenger[addOnId] ?? false;
-                                                const qty = per ? totalParticipants : 1;
-                                                return (
-                                                    <div key={addOnId} className="flex justify-between text-sm">
-                                                        <span>{addOn.name} ({qty})</span>
-                                                        <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
+                                        {participants.children > 0 && (
+                                            <div className="flex justify-between">
+                                                <span>Trẻ em ({participants.children})</span>
+                                                <span>
+                                                    {currency === "VND"
+                                                        ? formatPrice(Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children))
+                                                        : `${Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children).toLocaleString()} ${currency}`}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {participants.infants > 0 && (
+                                            <div className="flex justify-between">
+                                                <span>Em bé ({participants.infants})</span>
+                                                <span>
+                                                    {currency === "VND"
+                                                        ? formatPrice(Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants))
+                                                        : `${Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants).toLocaleString()} ${currency}`}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {selectedAddOnsByLeg.outbound.length > 0 && (
+                                            <div className="space-y-1">
+                                                {selectedAddOnsByLeg.outbound.map((addOnId) => {
+                                                    const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                    if (!addOn) return null;
+                                                    const per = addOnPerPassenger[addOnId] ?? false;
+                                                    const qty = per ? totalParticipants : 1;
+                                                    return (
+                                                        <div key={addOnId} className="flex justify-between text-sm">
+                                                            <span>{addOn.name} ({qty})</span>
+                                                            <span>
+                                                                {addOn.currency && addOn.currency !== "VND"
+                                                                    ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}`
+                                                                    : formatPrice(addOn.price * qty)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        {selectedSeatsByLeg.outbound.length > 0 && (
+                                            <div className="space-y-1">
+                                                {selectedSeatsByLeg.outbound.map((s) => (
+                                                    <div key={s.id} className="flex justify-between text-sm">
+                                                        <span>Ghế {s.number}</span>
+                                                        <span>
+                                                            {s.currency && s.currency !== "VND"
+                                                                ? `${s.price.toLocaleString()} ${s.currency}`
+                                                                : formatPrice(s.price || 0)}
+                                                        </span>
                                                     </div>
-                                                );
-                                            })}
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between font-semibold text-base mt-2">
+                                            <span>Tổng chuyến đi</span>
+                                            <span className="text-[hsl(var(--primary))]">
+                                                {(() => {
+                                                    const base = (derived.adultsUnit || priceNumber) * participants.adults +
+                                                        (derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children +
+                                                        (derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants;
+                                                    const addOns = selectedAddOnsByLeg.outbound.reduce((sum, id) => {
+                                                        const addOn = dynamicAddOnServices.find((s) => s.id === id);
+                                                        if (!addOn) return sum;
+                                                        const qty = addOnPerPassenger[id] ? totalParticipants : 1;
+                                                        return sum + (addOn.price * qty);
+                                                    }, 0);
+                                                    const seats = selectedSeatsByLeg.outbound.reduce((sum, s) => sum + (s.price || 0), 0);
+                                                    const total = base + addOns + seats;
+                                                    return currency === "VND" ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
+                                                })()}
+                                            </span>
                                         </div>
-                                    )}
-                                    {selectedSeats.length > 0 && (
-                                        <div className="space-y-1">
-                                            {selectedSeats.map(s => (
-                                                <div key={s.id} className="flex justify-between text-sm">
-                                                    <span>Ghế {s.number}</span>
-                                                    <span>{s.currency && s.currency !== 'VND' ? `${(s.price).toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    {flightDetails.originalPrice && (
-                                        <div className="flex justify-between text-sm text-muted-foreground">
-                                            <span>Giá gốc</span>
-                                            <span className="line-through">{formatPrice(flightDetails.originalPrice * totalParticipants)}</span>
-                                        </div>
-                                    )}
-                                    <Separator />
-                                    <div className="flex justify-between font-bold text-lg">
-                                        <span>Tổng cộng (giá từ pricing)</span>
-                                        <span className="text-[hsl(var(--primary))]">
-                                            {currency === 'VND'
-                                                ? formatPrice(Math.round(totalCombined))
-                                                : `${Math.round(totalCombined).toLocaleString()} ${currency}`}
-                                        </span>
-                                    </div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
                                     </div>
                                 </div>
-
                                 <Separator />
-
+                                {/* Inbound Flight (if roundtrip) */}
+                                {isRoundtrip && inboundCachedPricing && (
+                                    <>
+                                        <div>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="font-medium">Chuyến về</span>
+                                                <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
+                                                </span>
+                                            </div>
+                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
+                                                <br />
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[0] ?? flightDetails.date} •{" "}
+                                                {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split("T")?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}`}
+                                            </div>
+                                            <div className="space-y-1 mt-2">
+                                                <div className="flex justify-between">
+                                                    <span>Người lớn ({participants.adults})</span>
+                                                    <span>
+                                                        {currency === "VND"
+                                                            ? formatPrice(Math.round((derived.adultsUnit || priceNumber) * participants.adults))
+                                                            : `${Math.round((derived.adultsUnit || priceNumber) * participants.adults).toLocaleString()} ${currency}`}
+                                                    </span>
+                                                </div>
+                                                {participants.children > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Trẻ em ({participants.children})</span>
+                                                        <span>
+                                                            {currency === "VND"
+                                                                ? formatPrice(Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children))
+                                                                : `${Math.round((derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children).toLocaleString()} ${currency}`}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {participants.infants > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Em bé ({participants.infants})</span>
+                                                        <span>
+                                                            {currency === "VND"
+                                                                ? formatPrice(Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants))
+                                                                : `${Math.round((derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants).toLocaleString()} ${currency}`}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {selectedAddOnsByLeg.inbound.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        {selectedAddOnsByLeg.inbound.map((addOnId) => {
+                                                            const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                            if (!addOn) return null;
+                                                            const per = addOnPerPassenger[addOnId] ?? false;
+                                                            const qty = per ? totalParticipants : 1;
+                                                            return (
+                                                                <div key={addOnId} className="flex justify-between text-sm">
+                                                                    <span>{addOn.name} ({qty})</span>
+                                                                    <span>
+                                                                        {addOn.currency && addOn.currency !== "VND"
+                                                                            ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}`
+                                                                            : formatPrice(addOn.price * qty)}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {selectedSeatsByLeg.inbound.length > 0 && (
+                                                    <div className="space-y-1">
+                                                        {selectedSeatsByLeg.inbound.map((s) => (
+                                                            <div key={s.id} className="flex justify-between text-sm">
+                                                                <span>Ghế {s.number}</span>
+                                                                <span>
+                                                                    {s.currency && s.currency !== "VND"
+                                                                        ? `${s.price.toLocaleString()} ${s.currency}`
+                                                                        : formatPrice(s.price || 0)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between font-semibold text-base mt-2">
+                                                    <span>Tổng chuyến về</span>
+                                                    <span className="text-[hsl(var(--primary))]">
+                                                        {(() => {
+                                                            const base = (derived.adultsUnit || priceNumber) * participants.adults +
+                                                                (derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)) * participants.children +
+                                                                (derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)) * participants.infants;
+                                                            const addOns = selectedAddOnsByLeg.inbound.reduce((sum, id) => {
+                                                                const addOn = dynamicAddOnServices.find((s) => s.id === id);
+                                                                if (!addOn) return sum;
+                                                                const qty = addOnPerPassenger[id] ? totalParticipants : 1;
+                                                                return sum + (addOn.price * qty);
+                                                            }, 0);
+                                                            const seats = selectedSeatsByLeg.inbound.reduce((sum, s) => sum + (s.price || 0), 0);
+                                                            const total = base + addOns + seats;
+                                                            return currency === "VND" ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
+                                                        })()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <Separator />
+                                    </>
+                                )}
+                                {/* Grand Total */}
+                                <div className="flex justify-between font-bold text-lg">
+                                    <span>Tổng cộng</span>
+                                    <span className="text-[hsl(var(--primary))]">
+                                        {currency === "VND"
+                                            ? formatPrice(Math.round(calculateTotal()))
+                                            : `${Math.round(calculateTotal()).toLocaleString()} ${currency}`}
+                                    </span>
+                                </div>
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                    Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
+                                </div>
+                                <Separator />
                                 {/* Important Notes */}
                                 <div className="space-y-2">
                                     <div className="flex items-start gap-2">
@@ -1499,133 +1916,332 @@ export default function ChiTietVeMayBay() {
                                         </div>
                                     </div>
                                 </div>
-
                                 {/* Action Buttons */}
                                 <div className="space-y-2 pt-4">
-                                    <Button className="w-full" size="lg" onClick={() => {
-                                        // validate lead passenger + contact (defined above)
-                                        if (!validateLeadPassengerAndContact()) {
-                                            // passengerErrors / contactErrors are set and will be shown under inputs
-                                            // show brief notice and stop navigation
-                                            window.scrollTo({ top: 200, behavior: 'smooth' });
-                                            alert('Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.');
-                                            return;
-                                        }
-
-                                        // Build comprehensive booking payload to pass to payment page
-                                        const paxCount = participants.adults + participants.children + participants.infants;
-
-                                        // pricing breakdown (prefer derived if available)
-                                        const pricingPerPax = {
-                                            adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
-                                            childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
-                                            infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
-                                        };
-                                        const paxTotals = {
-                                            adultsTotal: pricingPerPax.adultUnit * participants.adults,
-                                            childrenTotal: pricingPerPax.childUnit * participants.children,
-                                            infantsTotal: pricingPerPax.infantUnit * participants.infants,
-                                        };
-
-                                        // add-ons with qty determined by addOnPerPassenger flags
-                                        const addOnsDetailed = selectedAddOns.map(id => {
-                                            const svc = dynamicAddOnServices.find(s => s.id === id) ?? { id, name: id, price: 0 };
-                                            const per = addOnPerPassenger[id] ?? false;
-                                            const qty = per ? paxCount : 1;
-                                            return {
-                                                id: svc.id,
-                                                name: svc.name,
-                                                unitPrice: Number(svc.price) || 0,
-                                                qty,
-                                                total: (Number(svc.price) || 0) * qty,
-                                                perPassenger: per
-                                            };
-                                        });
-
-                                        // seats selected
-                                        const seatsDetailed = selectedSeats.map((s) => ({
-                                            id: s.id,
-                                            number: s.number,
-                                            price: Number(s.price) || 0,
-                                            currency: s.currency || currency || 'VND'
-                                        }));
-
-                                        // taxes / fees estimate (keep existing demo calc as fallback)
-                                        const taxesEstimate = (() => {
-                                            // try to derive from cachedPricing / normalizedOffer if possible
-                                            const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
-                                            if (offerTotal && offerTotal > 0) {
-                                                // taxes = offerTotal - sum(pax base totals)
-                                                const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
-                                                const t = Math.max(0, Math.round(offerTotal - paxSum));
-                                                return t || (290000 * paxCount);
+                                    {/* <Button
+                                        className="w-full"
+                                        size="lg"
+                                        onClick={() => {
+                                            if (!validateLeadPassengerAndContact()) {
+                                                window.scrollTo({ top: 200, behavior: "smooth" });
+                                                alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
+                                                return;
                                             }
-                                            return 290000 * paxCount;
-                                        })();
 
-                                        // totals
-                                        const addOnsTotal = addOnsDetailed.reduce((s, a) => s + a.total, 0);
-                                        const seatsTotal = seatsDetailed.reduce((s, a) => s + a.price, 0);
-                                        const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
-                                        const estimatedTotal = passengerBaseTotal + taxesEstimate + addOnsTotal + seatsTotal;
+                                            const paxCount = participants.adults + participants.children + participants.infants;
+                                            const pricingPerPax = {
+                                                adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
+                                                childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
+                                                infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
+                                            };
+                                            const paxTotals = {
+                                                adultsTotal: pricingPerPax.adultUnit * participants.adults,
+                                                childrenTotal: pricingPerPax.childUnit * participants.children,
+                                                infantsTotal: pricingPerPax.infantUnit * participants.infants,
+                                            };
 
-                                        // build booking.flight from real offer/pricing when available (normalizedOffer/mappedOffer/cachedPricing)
-                                        const offerSeg = normalizedOffer?.itineraries?.[0]?.segments?.[0] ?? mappedOffer?.rawOffer?.itineraries?.[0]?.segments?.[0] ?? null;
-                                        const dep = offerSeg?.departure ?? null;
-                                        const arr = offerSeg?.arrival ?? null;
-                                        const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
-                                        const number = offerSeg?.number ?? null;
-                                        const flightNumberStr = carrier && number ? `${carrier}${number}` : (normalizedOffer?.id ?? mappedOffer?.rawOffer?.id ?? flightDetails.flightNumber);
-                                        const airlineName = (normalizedOffer?.validatingAirlineCodes && normalizedOffer.validatingAirlineCodes[0]) || flightDetails.airline;
-                                        const routeStr = `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
-                                        const dateStr = dep?.at?.split('T')?.[0] ?? flightDetails.date;
-                                        const timeStr = (dep?.at ? dep.at.split('T')[1]?.slice(0,5) : null) && (arr?.at ? arr.at.split('T')[1]?.slice(0,5) : null)
-                                        ? `${dep.at.split('T')[1].slice(0,5)} - ${arr.at.split('T')[1].slice(0,5)}`
-                                        : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+                                            const addOnsDetailed = {
+                                                outbound: selectedAddOnsByLeg.outbound.map((id) => {
+                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                    const per = addOnPerPassenger[id] ?? false;
+                                                    const qty = per ? paxCount : 1;
+                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: per, leg: "outbound" };
+                                                }),
+                                                inbound: selectedAddOnsByLeg.inbound.map((id) => {
+                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                    const per = addOnPerPassenger[id] ?? false;
+                                                    const qty = per ? paxCount : 1;
+                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: per, leg: "inbound" };
+                                                }),
+                                            };
 
-                                    const booking = {
-                                        source: 'megatrip-client',
-                                        flight: {
-                                            id: normalizedOffer?.id ?? mappedOffer?.rawOffer?.id ?? flightDetails.id,
-                                            flightNumber: flightNumberStr,
-                                            airline: airlineName,
-                                            route: routeStr,
-                                            date: dateStr,
-                                            time: timeStr,
-                                            itineraries: normalizedOffer?.itineraries ?? mappedOffer?.rawOffer?.itineraries ?? null,
-                                            currency,
-                                        },
-                                        passengers: {
-                                            counts: { ...participants },
-                                            contactInfo,
-                                            leadPassenger: passengerInfo
-                                        },
-                                        pricing: {
-                                            perPax: pricingPerPax,
-                                            paxTotals,
-                                            taxesEstimate,
-                                            addOns: addOnsDetailed,
-                                            seats: seatsDetailed,
-                                            passengerBaseTotal,
-                                            addOnsTotal,
-                                            seatsTotal,
-                                            estimatedTotal,
-                                            offerTotal: derived.offerTotal || null
-                                        },
-                                        rawPricing: cachedPricing ?? mappedOffer?.rawOffer ?? null,
-                                        timestamp: Date.now()
-                                    };
+                                            const seatsDetailed = {
+                                                outbound: selectedSeatsByLeg.outbound.map((s) => ({
+                                                    id: s.id,
+                                                    number: s.number,
+                                                    price: Number(s.price) || 0,
+                                                    currency: s.currency || currency || "VND",
+                                                    leg: "outbound",
+                                                })),
+                                                inbound: selectedSeatsByLeg.inbound.map((s) => ({
+                                                    id: s.id,
+                                                    number: s.number,
+                                                    price: Number(s.price) || 0,
+                                                    currency: s.currency || currency || "VND",
+                                                    leg: "inbound",
+                                                })),
+                                            };
 
-                                        // save to sessionStorage and navigate with bookingKey
-                                        try {
-                                            const bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-                                            sessionStorage.setItem(bookingKey, JSON.stringify(booking));
-                                            router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
-                                        } catch (e) {
-                                            console.error('Lỗi lưu booking', e);
-                                            alert('Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.');
-                                        }
-                                    }}>
+                                            const taxesEstimate = (() => {
+                                                const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
+                                                if (offerTotal && offerTotal > 0) {
+                                                    const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
+                                                    const t = Math.max(0, Math.round(offerTotal - paxSum));
+                                                    return t || 290000 * paxCount;
+                                                }
+                                                return 290000 * paxCount;
+                                            })();
+
+                                            const addOnsTotal = addOnsDetailed.outbound.reduce((s, a) => s + a.total, 0) + addOnsDetailed.inbound.reduce((s, a) => s + a.total, 0);
+                                            const seatsTotal = seatsDetailed.outbound.reduce((s, a) => s + a.price, 0) + seatsDetailed.inbound.reduce((s, a) => s + a.price, 0);
+                                            const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
+                                            const estimatedTotal = passengerBaseTotal * (isRoundtrip ? 2 : 1) + taxesEstimate * (isRoundtrip ? 2 : 1) + addOnsTotal + seatsTotal;
+
+                                            const buildFlight = (pricing: any, isInbound: boolean = false) => {
+                                                const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                const dep = offerSeg?.departure ?? null;
+                                                const arr = offerSeg?.arrival ?? null;
+                                                const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
+                                                const number = offerSeg?.number ?? null;
+                                                const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
+                                                const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
+                                                const routeStr = isInbound
+                                                    ? `${arr?.iataCode ?? flightDetails.arrival.airport} → ${dep?.iataCode ?? flightDetails.departure.airport}`
+                                                    : `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
+                                                const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
+                                                const timeStr = dep?.at && arr?.at
+                                                    ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
+                                                    : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+
+                                                return {
+                                                    id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
+                                                    flightNumber: flightNumberStr,
+                                                    airline: airlineName,
+                                                    route: routeStr,
+                                                    date: dateStr,
+                                                    time: timeStr,
+                                                    itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
+                                                    currency,
+                                                };
+                                            };
+
+                                            const booking = {
+                                                source: "megatrip-client",
+                                                flights: {
+                                                    outbound: buildFlight(outboundCachedPricing || cachedPricing),
+                                                    inbound: isRoundtrip && inboundCachedPricing ? buildFlight(inboundCachedPricing, true) : null,
+                                                },
+                                                passengers: {
+                                                    counts: { ...participants },
+                                                    contactInfo,
+                                                    leadPassenger: passengerInfo,
+                                                },
+                                                pricing: {
+                                                    perPax: pricingPerPax,
+                                                    paxTotals,
+                                                    taxesEstimate,
+                                                    addOns: [...addOnsDetailed.outbound, ...addOnsDetailed.inbound],
+                                                    seats: [...seatsDetailed.outbound, ...seatsDetailed.inbound],
+                                                    passengerBaseTotal,
+                                                    addOnsTotal,
+                                                    seatsTotal,
+                                                    estimatedTotal,
+                                                    offerTotal: derived.offerTotal || null,
+                                                },
+                                                rawPricing: {
+                                                    outbound: outboundCachedPricing ?? cachedPricing ?? null,
+                                                    inbound: inboundCachedPricing ?? null,
+                                                },
+                                                timestamp: Date.now(),
+                                            };
+
+                                            try {
+                                                const bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                                                sessionStorage.setItem(bookingKey, JSON.stringify(booking));
+                                                router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
+                                            } catch (e) {
+                                                console.error("Lỗi lưu booking", e);
+                                                alert("Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.");
+                                            }
+                                        }}
+                                    >
+                                        Tiếp tục thanh toán
+                                    </Button> */}
+
+                                    <Button
+                                        className="w-full"
+                                        size="lg"
+                                        onClick={() => {
+                                            if (!validateLeadPassengerAndContact()) {
+                                                window.scrollTo({ top: 200, behavior: "smooth" });
+                                                alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
+                                                return;
+                                            }
+
+                                            // Hàm dọn dẹp booking cũ
+                                            const cleanOldBookings = () => {
+                                                Object.keys(sessionStorage).forEach(key => {
+                                                    if (key.startsWith('booking_')) {
+                                                        try {
+                                                            const data = JSON.parse(sessionStorage.getItem(key) || '{}');
+                                                            const isCurrentFlight = data.flights?.outbound?.id === id;
+                                                            const isExpired = Date.now() - (data.timestamp || 0) > 15 * 60 * 1000; // Hết hạn sau 15 phút
+                                                            if (isCurrentFlight && isExpired) {
+                                                                sessionStorage.removeItem(key);
+                                                            }
+                                                        } catch (e) {
+                                                            console.warn('Lỗi khi dọn dẹp booking cũ:', e);
+                                                        }
+                                                    }
+                                                });
+                                            };
+
+                                            // Hàm lấy bookingKey hiện có
+                                            const getExistingBookingKey = () => {
+                                                for (const key of Object.keys(sessionStorage)) {
+                                                    if (key.startsWith('booking_')) {
+                                                        try {
+                                                            const data = JSON.parse(sessionStorage.getItem(key) || '{}');
+                                                            if (
+                                                                data.flights?.outbound?.id === id &&
+                                                                Date.now() - (data.timestamp || 0) <= 15 * 60 * 1000 // Còn hạn trong 15 phút
+                                                            ) {
+                                                                return key;
+                                                            }
+                                                        } catch (e) {
+                                                            console.warn('Lỗi khi kiểm tra bookingKey:', e);
+                                                        }
+                                                    }
+                                                }
+                                                return null;
+                                            };
+
+                                            // Tính toán dữ liệu booking
+                                            const paxCount = participants.adults + participants.children + participants.infants;
+                                            const pricingPerPax = {
+                                                adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
+                                                childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
+                                                infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
+                                            };
+                                            const paxTotals = {
+                                                adultsTotal: pricingPerPax.adultUnit * participants.adults,
+                                                childrenTotal: pricingPerPax.childUnit * participants.children,
+                                                infantsTotal: pricingPerPax.infantUnit * participants.infants,
+                                            };
+
+                                            const addOnsDetailed = {
+                                                outbound: selectedAddOnsByLeg.outbound.map((id) => {
+                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                    const per = addOnPerPassenger[id] ?? false;
+                                                    const qty = per ? paxCount : 1;
+                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: per, leg: "outbound" };
+                                                }),
+                                                inbound: selectedAddOnsByLeg.inbound.map((id) => {
+                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                    const per = addOnPerPassenger[id] ?? false;
+                                                    const qty = per ? paxCount : 1;
+                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: per, leg: "inbound" };
+                                                }),
+                                            };
+
+                                            const seatsDetailed = {
+                                                outbound: selectedSeatsByLeg.outbound.map((s) => ({
+                                                    id: s.id,
+                                                    number: s.number,
+                                                    price: Number(s.price) || 0,
+                                                    currency: s.currency || currency || "VND",
+                                                    leg: "outbound",
+                                                })),
+                                                inbound: selectedSeatsByLeg.inbound.map((s) => ({
+                                                    id: s.id,
+                                                    number: s.number,
+                                                    price: Number(s.price) || 0,
+                                                    currency: s.currency || currency || "VND",
+                                                    leg: "inbound",
+                                                })),
+                                            };
+
+                                            const taxesEstimate = (() => {
+                                                const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
+                                                if (offerTotal && offerTotal > 0) {
+                                                    const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
+                                                    const t = Math.max(0, Math.round(offerTotal - paxSum));
+                                                    return t || 290000 * paxCount;
+                                                }
+                                                return 290000 * paxCount;
+                                            })();
+
+                                            const addOnsTotal = addOnsDetailed.outbound.reduce((s, a) => s + a.total, 0) + addOnsDetailed.inbound.reduce((s, a) => s + a.total, 0);
+                                            const seatsTotal = seatsDetailed.outbound.reduce((s, a) => s + a.price, 0) + seatsDetailed.inbound.reduce((s, a) => s + a.price, 0);
+                                            const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
+                                            const estimatedTotal = passengerBaseTotal * (isRoundtrip ? 2 : 1) + taxesEstimate * (isRoundtrip ? 2 : 1) + addOnsTotal + seatsTotal;
+
+                                            const buildFlight = (pricing: any, isInbound: boolean = false) => {
+                                                const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                const dep = offerSeg?.departure ?? null;
+                                                const arr = offerSeg?.arrival ?? null;
+                                                const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
+                                                const number = offerSeg?.number ?? null;
+                                                const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
+                                                const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
+                                                const routeStr = isInbound
+                                                    ? `${arr?.iataCode ?? flightDetails.arrival.airport} → ${dep?.iataCode ?? flightDetails.departure.airport}`
+                                                    : `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
+                                                const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
+                                                const timeStr = dep?.at && arr?.at
+                                                    ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
+                                                    : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+
+                                                return {
+                                                    id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
+                                                    flightNumber: flightNumberStr,
+                                                    airline: airlineName,
+                                                    route: routeStr,
+                                                    date: dateStr,
+                                                    time: timeStr,
+                                                    itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
+                                                    currency,
+                                                };
+                                            };
+
+                                            const booking = {
+                                                source: "megatrip-client",
+                                                flights: {
+                                                    outbound: buildFlight(outboundCachedPricing || cachedPricing),
+                                                    inbound: isRoundtrip && inboundCachedPricing ? buildFlight(inboundCachedPricing, true) : null,
+                                                },
+                                                passengers: {
+                                                    counts: { ...participants },
+                                                    contactInfo,
+                                                    leadPassenger: passengerInfo,
+                                                },
+                                                pricing: {
+                                                    perPax: pricingPerPax,
+                                                    paxTotals,
+                                                    taxesEstimate,
+                                                    addOns: [...addOnsDetailed.outbound, ...addOnsDetailed.inbound],
+                                                    seats: [...seatsDetailed.outbound, ...seatsDetailed.inbound],
+                                                    passengerBaseTotal,
+                                                    addOnsTotal,
+                                                    seatsTotal,
+                                                    estimatedTotal,
+                                                    offerTotal: derived.offerTotal || null,
+                                                },
+                                                rawPricing: {
+                                                    outbound: outboundCachedPricing ?? cachedPricing ?? null,
+                                                    inbound: inboundCachedPricing ?? null,
+                                                },
+                                                timestamp: Date.now(),
+                                            };
+
+                                            try {
+                                                // Dọn dẹp booking cũ
+                                                cleanOldBookings();
+                                                // Lấy bookingKey hiện có hoặc tạo mới
+                                                let bookingKey = getExistingBookingKey();
+                                                if (!bookingKey) {
+                                                    bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                                                }
+                                                // Lưu booking vào sessionStorage
+                                                sessionStorage.setItem(bookingKey, JSON.stringify(booking));
+                                                // Chuyển hướng
+                                                router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
+                                            } catch (e) {
+                                                console.error("Lỗi lưu booking", e);
+                                                alert("Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.");
+                                            }
+                                        }}
+                                    >
                                         Tiếp tục thanh toán
                                     </Button>
                                     <Button variant="outline" className="w-full">

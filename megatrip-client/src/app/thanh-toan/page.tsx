@@ -145,7 +145,7 @@ const getBookingData = (searchParams: URLSearchParams) => {
         if (stored) {
             try {
                 return JSON.parse(stored);
-            } catch {}
+            } catch { }
         }
     }
 
@@ -186,7 +186,7 @@ const getInitialPassengers = (searchParams: URLSearchParams) => {
                 adults = p.adults || adults;
                 children = p.children || children;
                 infants = p.infants || infants;
-            } catch {}
+            } catch { }
         }
     }
     const arr = [];
@@ -230,8 +230,54 @@ export default function ThanhToan() {
     }, [searchParams]);
 
     // Normalized view of booking payload: support both legacy bookingData.details and new booking.flight shape
-    const normalizedDetails = bookingData ? (bookingData?.flight ?? bookingData?.details ?? {}) : {};
-    const normalizedPricing = bookingData ? (bookingData?.pricing ?? bookingData?.pricingEstimate ?? bookingData?.price ?? {}) : {};
+    const normalizedDetails = (() => {
+        if (!bookingData) return {};
+        // prefer explicit flight / details
+        if (bookingData.flight) return bookingData.flight;
+        if (bookingData.details) return bookingData.details;
+
+        // support booking created by chi-tiet page: booking.flights.outbound
+        if (bookingData.flights?.outbound) {
+            const out = bookingData.flights.outbound;
+            // attempt to derive passenger count from bookingData.passengers.counts if present
+            const counts = bookingData.passengers?.counts;
+            const paxCnt = counts ? (Number(counts.adults || 0) + Number(counts.children || 0) + Number(counts.infants || 0)) : (bookingData.passengers?.length ?? 1);
+            return {
+                flightNumber: out.flightNumber ?? out.flightNo ?? out.number ?? '',
+                route: out.route ?? '',
+                date: out.date ?? '',
+                time: out.time ?? '',
+                airline: out.airline ?? '',
+                passengers: paxCnt,
+            };
+        }
+
+        // fallback
+        return bookingData.details ?? {};
+    })();
+
+    const normalizedPricing = (() => {
+        if (!bookingData) return {};
+        const p = bookingData.pricing ?? bookingData.pricingEstimate ?? bookingData.price ?? {};
+        // ensure addOns is array and addOnsTotal/seats are available for summary rendering
+        const addOnsArr = Array.isArray(p.addOns) ? p.addOns : (p.addOns ? [p.addOns] : []);
+        const addOnsTotal = Number(p.addOnsTotal ?? p.addOnsAmount ?? (addOnsArr.reduce((s: number, a: any) => {
+            const unit = Number(a?.unitPrice ?? a?.price ?? 0);
+            const qty = Number(a?.qty ?? 1);
+            const total = Number(a?.total ?? (unit * qty) ?? 0);
+            return s + (Number.isFinite(total) ? total : 0);
+        }, 0)));
+        const seatsArr = Array.isArray(p.seats) ? p.seats : (p.seats ? [p.seats] : []);
+        const total = Number(p.total ?? p.estimatedTotal ?? p.estimatedTotalAmount ?? p.offerTotal ?? p.total ?? 0);
+        return {
+            ...p,
+            addOns: addOnsArr,
+            addOnsTotal,
+            seats: seatsArr,
+            seatsTotal: Number(p.seatsTotal ?? seatsArr.reduce((s: number, sitem: any) => s + (Number(sitem?.price ?? 0)), 0)),
+            total,
+        };
+    })();
 
     // keep bookingType in sync if bookingData changes (e.g. loaded from sessionStorage)
     useEffect(() => {
@@ -256,9 +302,9 @@ export default function ThanhToan() {
     const [agreeTerms, setAgreeTerms] = useState(false);
 
     // New: toggle states for showing details
-    const [showFareDetails, setShowFareDetails] = useState(false);
-    const [showAddonsDetails, setShowAddonsDetails] = useState(false);
-
+    const [showFareDetails, setShowFareDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
+    const [showAddonsDetails, setShowAddonsDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
+    const [showTotalFareDetails, setShowTotalFareDetails] = useState<boolean>(false);
     const [contactInfo, setContactInfo] = useState({
         email: '',
         phone: '',
@@ -369,31 +415,31 @@ export default function ThanhToan() {
             setErrors(prev => { const c = { ...prev }; delete c['agreeTerms']; return c; });
         }
 
-         // Lưu dữ liệu booking (toàn bộ payload) vào sessionStorage tại bookingKey nếu có,
-         // hoặc tạo bookingKey mới để các bước sau có thể truy xuất payload đầy đủ.
-         try {
-             if (typeof window !== 'undefined') {
-                 // always persist participants to localStorage for quick UI restore
-                 window.localStorage.setItem('participants', JSON.stringify(passengers));
- 
-                 // persist booking payload to sessionStorage under bookingKey (preserve full payload)
-                 if (bookingKey) {
-                     sessionStorage.setItem(bookingKey, JSON.stringify(bookingData));
-                 } else {
-                     const newKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-                     sessionStorage.setItem(newKey, JSON.stringify(bookingData));
-                     setBookingKey(newKey);
-                     // update URL to include bookingKey for bookmarking/share flow
-                     try {
-                         const url = new URL(window.location.href);
-                         url.searchParams.set('bookingKey', newKey);
-                         window.history.replaceState({}, '', url.toString());
-                     } catch { /* ignore */ }
-                 }
-             }
-         } catch (e) {
-             console.warn('Could not persist booking payload', e);
-         }
+        // Lưu dữ liệu booking (toàn bộ payload) vào sessionStorage tại bookingKey nếu có,
+        // hoặc tạo bookingKey mới để các bước sau có thể truy xuất payload đầy đủ.
+        try {
+            if (typeof window !== 'undefined') {
+                // always persist participants to localStorage for quick UI restore
+                window.localStorage.setItem('participants', JSON.stringify(passengers));
+
+                // persist booking payload to sessionStorage under bookingKey (preserve full payload)
+                if (bookingKey) {
+                    sessionStorage.setItem(bookingKey, JSON.stringify(bookingData));
+                } else {
+                    const newKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                    sessionStorage.setItem(newKey, JSON.stringify(bookingData));
+                    setBookingKey(newKey);
+                    // update URL to include bookingKey for bookmarking/share flow
+                    try {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('bookingKey', newKey);
+                        window.history.replaceState({}, '', url.toString());
+                    } catch { /* ignore */ }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not persist booking payload', e);
+        }
 
         // Handle payment processing
         console.log('Processing payment...', {
@@ -411,7 +457,7 @@ export default function ThanhToan() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? normalizedPricing?.offerTotal ??  bookingData.pricing?.total ?? 50000),
+                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? normalizedPricing?.offerTotal ?? bookingData.pricing?.total ?? 50000),
                         orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
                         ip: '127.0.0.1',
                         returnUrl: 'http://localhost:7000/vnpay/check-payment',
@@ -627,15 +673,16 @@ export default function ThanhToan() {
         }
     }, [bookingData]);
 
+
     return (
         <>
             {/* Breadcrumb */}
             <div className="border-b">
                 <div className="container py-4">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Link prefetch={false}  href="/" className="hover:text-primary">Trang chủ</Link>
+                        <Link prefetch={false} href="/" className="hover:text-primary">Trang chủ</Link>
                         <span>/</span>
-                        <Link prefetch={false}  href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
+                        <Link prefetch={false} href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
                         <span>/</span>
                         <span>Thanh toán</span>
                     </div>
@@ -650,8 +697,8 @@ export default function ThanhToan() {
                             <div key={step.number} className="flex items-center">
                                 <div className="flex flex-col items-center">
                                     <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${currentStep >= step.number
-                                            ? 'bg-primary border-primary text-primary-foreground'
-                                            : 'border-gray-300 text-gray-400'
+                                        ? 'bg-primary border-primary text-primary-foreground'
+                                        : 'border-gray-300 text-gray-400'
                                         }`}>
                                         {currentStep > step.number ? (
                                             <CheckCircle className="h-5 w-5" />
@@ -701,9 +748,9 @@ export default function ThanhToan() {
                                                     onChange={(e) => setContactInfo(prev => ({ ...prev, fullName: e.target.value }))}
                                                     placeholder="Nhập họ và tên"
                                                 />
-                                            {errors['contact.fullName'] && (
-                                                <p className="text-red-500 text-xs mt-1">{errors['contact.fullName']}</p>
-                                            )}
+                                                {errors['contact.fullName'] && (
+                                                    <p className="text-red-500 text-xs mt-1">{errors['contact.fullName']}</p>
+                                                )}
                                             </div>
                                             <div>
                                                 <Label htmlFor="phone">Số điện thoại *</Label>
@@ -713,9 +760,9 @@ export default function ThanhToan() {
                                                     onChange={(e) => setContactInfo(prev => ({ ...prev, phone: e.target.value }))}
                                                     placeholder="0912345678"
                                                 />
-                                            {errors['contact.phone'] && (
-                                                <p className="text-red-500 text-xs mt-1">{errors['contact.phone']}</p>
-                                            )}
+                                                {errors['contact.phone'] && (
+                                                    <p className="text-red-500 text-xs mt-1">{errors['contact.phone']}</p>
+                                                )}
                                             </div>
                                         </div>
                                         <div>
@@ -727,9 +774,9 @@ export default function ThanhToan() {
                                                 onChange={(e) => setContactInfo(prev => ({ ...prev, email: e.target.value }))}
                                                 placeholder="email@example.com"
                                             />
-                                        {errors['contact.email'] && (
-                                            <p className="text-red-500 text-xs mt-1">{errors['contact.email']}</p>
-                                        )}
+                                            {errors['contact.email'] && (
+                                                <p className="text-red-500 text-xs mt-1">{errors['contact.email']}</p>
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -775,16 +822,16 @@ export default function ThanhToan() {
                                                         <div>
                                                             <Label>Họ và tên đệm *</Label>
                                                             <Input value={p.firstName} onChange={e => handlePassengerChange(idx, 'firstName', e.target.value)} placeholder="VD: NGUYEN VAN" />
-                                                        {errors[`passenger.${idx}.firstName`] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.firstName`]}</p>
-                                                        )}
+                                                            {errors[`passenger.${idx}.firstName`] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.firstName`]}</p>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <Label>Tên *</Label>
                                                             <Input value={p.lastName} onChange={e => handlePassengerChange(idx, 'lastName', e.target.value)} placeholder="VD: AN" />
-                                                        {errors[`passenger.${idx}.lastName`] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.lastName`]}</p>
-                                                        )}
+                                                            {errors[`passenger.${idx}.lastName`] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.lastName`]}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -792,16 +839,16 @@ export default function ThanhToan() {
                                                         <div>
                                                             <Label>Họ và tên đệm *</Label>
                                                             <Input value={p.firstName} onChange={e => handlePassengerChange(idx, 'firstName', e.target.value)} placeholder="VD: NGUYEN VAN" />
-                                                        {errors[`passenger.${idx}.firstName`] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.firstName`]}</p>
-                                                        )}
+                                                            {errors[`passenger.${idx}.firstName`] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.firstName`]}</p>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <Label>Tên *</Label>
                                                             <Input value={p.lastName} onChange={e => handlePassengerChange(idx, 'lastName', e.target.value)} placeholder="VD: AN" />
-                                                        {errors[`passenger.${idx}.lastName`] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.lastName`]}</p>
-                                                        )}
+                                                            {errors[`passenger.${idx}.lastName`] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.lastName`]}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 )}
@@ -809,9 +856,9 @@ export default function ThanhToan() {
                                                     <div>
                                                         <Label>Ngày sinh *</Label>
                                                         <Input type="date" value={p.dateOfBirth} onChange={e => handlePassengerChange(idx, 'dateOfBirth', e.target.value)} />
-                                                    {errors[`passenger.${idx}.dateOfBirth`] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.dateOfBirth`]}</p>
-                                                    )}
+                                                        {errors[`passenger.${idx}.dateOfBirth`] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.dateOfBirth`]}</p>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         <Label>Quốc tịch</Label>
@@ -844,9 +891,9 @@ export default function ThanhToan() {
                                                     <div>
                                                         <Label>Số giấy tờ *</Label>
                                                         <Input value={p.idNumber} onChange={e => handlePassengerChange(idx, 'idNumber', e.target.value)} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
-                                                    {errors[`passenger.${idx}.idNumber`] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.idNumber`]}</p>
-                                                    )}
+                                                        {errors[`passenger.${idx}.idNumber`] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.idNumber`]}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -926,9 +973,9 @@ export default function ThanhToan() {
                                                             onChange={(e) => setPaymentInfo(prev => ({ ...prev, cardNumber: e.target.value }))}
                                                             placeholder="1234 5678 9012 3456"
                                                         />
-                                                    {errors['payment.cardNumber'] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors['payment.cardNumber']}</p>
-                                                    )}
+                                                        {errors['payment.cardNumber'] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors['payment.cardNumber']}</p>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         <Label htmlFor="cardHolder">Tên chủ thẻ *</Label>
@@ -938,9 +985,9 @@ export default function ThanhToan() {
                                                             onChange={(e) => setPaymentInfo(prev => ({ ...prev, cardHolder: e.target.value }))}
                                                             placeholder="NGUYEN VAN A"
                                                         />
-                                                    {errors['payment.cardHolder'] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors['payment.cardHolder']}</p>
-                                                    )}
+                                                        {errors['payment.cardHolder'] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors['payment.cardHolder']}</p>
+                                                        )}
                                                     </div>
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div>
@@ -951,9 +998,9 @@ export default function ThanhToan() {
                                                                 onChange={(e) => setPaymentInfo(prev => ({ ...prev, expiryDate: e.target.value }))}
                                                                 placeholder="MM/YY"
                                                             />
-                                                        {errors['payment.expiryDate'] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors['payment.expiryDate']}</p>
-                                                        )}
+                                                            {errors['payment.expiryDate'] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors['payment.expiryDate']}</p>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <Label htmlFor="cvv">CVV *</Label>
@@ -963,9 +1010,9 @@ export default function ThanhToan() {
                                                                 onChange={(e) => setPaymentInfo(prev => ({ ...prev, cvv: e.target.value }))}
                                                                 placeholder="123"
                                                             />
-                                                        {errors['payment.cvv'] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors['payment.cvv']}</p>
-                                                        )}
+                                                            {errors['payment.cvv'] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors['payment.cvv']}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1005,9 +1052,9 @@ export default function ThanhToan() {
                                                                 onChange={(e) => setInvoiceInfo(prev => ({ ...prev, companyName: e.target.value }))}
                                                                 placeholder="Công ty TNHH ABC"
                                                             />
-                                                        {errors['invoice.companyName'] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors['invoice.companyName']}</p>
-                                                        )}
+                                                            {errors['invoice.companyName'] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors['invoice.companyName']}</p>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <Label htmlFor="taxCode">Mã số thuế *</Label>
@@ -1017,9 +1064,9 @@ export default function ThanhToan() {
                                                                 onChange={(e) => setInvoiceInfo(prev => ({ ...prev, taxCode: e.target.value }))}
                                                                 placeholder="0123456789"
                                                             />
-                                                        {errors['invoice.taxCode'] && (
-                                                            <p className="text-red-500 text-xs mt-1">{errors['invoice.taxCode']}</p>
-                                                        )}
+                                                            {errors['invoice.taxCode'] && (
+                                                                <p className="text-red-500 text-xs mt-1">{errors['invoice.taxCode']}</p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <div>
@@ -1030,9 +1077,9 @@ export default function ThanhToan() {
                                                             onChange={(e) => setInvoiceInfo(prev => ({ ...prev, address: e.target.value }))}
                                                             placeholder="Địa chỉ trụ sở chính"
                                                         />
-                                                    {errors['invoice.address'] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors['invoice.address']}</p>
-                                                    )}
+                                                        {errors['invoice.address'] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors['invoice.address']}</p>
+                                                        )}
                                                     </div>
                                                     <div>
                                                         <Label htmlFor="invoiceEmail">Email nhận hóa đơn *</Label>
@@ -1043,9 +1090,9 @@ export default function ThanhToan() {
                                                             onChange={(e) => setInvoiceInfo(prev => ({ ...prev, email: e.target.value }))}
                                                             placeholder="ketoan@company.com"
                                                         />
-                                                    {errors['invoice.email'] && (
-                                                        <p className="text-red-500 text-xs mt-1">{errors['invoice.email']}</p>
-                                                    )}
+                                                        {errors['invoice.email'] && (
+                                                            <p className="text-red-500 text-xs mt-1">{errors['invoice.email']}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1115,11 +1162,11 @@ export default function ThanhToan() {
                                                 <div className="flex-1">
                                                     <Label htmlFor="agreeTerms" className="text-sm cursor-pointer">
                                                         Tôi đồng ý với{' '}
-                                                        <Link prefetch={false}  href="/dieu-khoan" className="text-primary hover:underline">
+                                                        <Link prefetch={false} href="/dieu-khoan" className="text-primary hover:underline">
                                                             Điều khoản sử dụng
                                                         </Link>
                                                         {' '}và{' '}
-                                                        <Link prefetch={false}  href="/chinh-sach-bao-mat" className="text-primary hover:underline">
+                                                        <Link prefetch={false} href="/chinh-sach-bao-mat" className="text-primary hover:underline">
                                                             Chính sách bảo mật
                                                         </Link>
                                                         {' '}của MegaTrip
@@ -1183,27 +1230,32 @@ export default function ThanhToan() {
                                 {/* Booking Details - Hiển thị theo loại booking (dùng normalizedDetails cho an toàn).
                                     Delay rendering until mounted so server/client initial markup matches and avoids hydration errors */}
                                 {mounted && bookingType === 'flight' && (
-                                     <div>
+                                    <div>
                                         <div className="flex items-center gap-2 mb-2">
                                             <Plane className="h-4 w-4 text-primary" />
                                             <span className="font-medium">Vé máy bay</span>
                                         </div>
+
+                                    </div>
+                                )}
+                                {mounted && bookingType === 'bus' && (
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Users className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">Vé xe du lịch</span>
+                                        </div>
                                         <div className="text-sm text-muted-foreground space-y-1">
                                             <div className="flex justify-between">
-                                                <span>Chuyến bay:</span>
-                                                <span>{normalizedDetails.flightNumber ?? '—'}</span>
+                                                <span>Tuyến xe:</span>
+                                                <span>{normalizedDetails.route ?? '---'}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>Tuyến:</span>
-                                                <span>{normalizedDetails.route ?? '—'}</span>
+                                                <span>Ngày đi:</span>
+                                                <span>{normalizedDetails.date ?? '---'}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span>Ngày bay:</span>
-                                                <span>{normalizedDetails.date ?? '—'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Giờ bay:</span>
-                                                <span>{normalizedDetails.time ?? '—'}</span>
+                                                <span>Giờ xuất phát:</span>
+                                                <span>{normalizedDetails.time ?? '---'}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span>Hành khách:</span>
@@ -1212,211 +1264,281 @@ export default function ThanhToan() {
                                         </div>
                                     </div>
                                 )}
-                                {mounted && bookingType === 'bus' && (
-                                     <div>
-                                         <div className="flex items-center gap-2 mb-2">
-                                             <Users className="h-4 w-4 text-primary" />
-                                             <span className="font-medium">Vé xe du lịch</span>
-                                         </div>
-                                         <div className="text-sm text-muted-foreground space-y-1">
-                                             <div className="flex justify-between">
-                                                 <span>Tuyến xe:</span>
-                                                 <span>{normalizedDetails.route ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Ngày đi:</span>
-                                                 <span>{normalizedDetails.date ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Giờ xuất phát:</span>
-                                                 <span>{normalizedDetails.time ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Hành khách:</span>
-                                                 <span>{passengers.length} người</span>
-                                             </div>
-                                         </div>
-                                     </div>
-                                 )}
                                 {mounted && bookingType === 'tour' && (
-                                     <div>
-                                         <div className="flex items-center gap-2 mb-2">
-                                             <MapPin className="h-4 w-4 text-primary" />
-                                             <span className="font-medium">Đặt tour</span>
-                                         </div>
-                                         <div className="text-sm text-muted-foreground space-y-1">
-                                             <div className="flex justify-between">
-                                                 <span>Tên tour:</span>
-                                                 <span>{normalizedDetails.route ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Ngày khởi hành:</span>
-                                                 <span>{normalizedDetails.date ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Giờ khởi hành:</span>
-                                                 <span>{normalizedDetails.time ?? '---'}</span>
-                                             </div>
-                                             <div className="flex justify-between">
-                                                 <span>Hành khách:</span>
-                                                 <span>{passengers.length} người</span>
-                                             </div>
-                                         </div>
-                                     </div>
-                                 )}
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <MapPin className="h-4 w-4 text-primary" />
+                                            <span className="font-medium">Đặt tour</span>
+                                        </div>
+                                        <div className="text-sm text-muted-foreground space-y-1">
+                                            <div className="flex justify-between">
+                                                <span>Tên tour:</span>
+                                                <span>{normalizedDetails.route ?? '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày khởi hành:</span>
+                                                <span>{normalizedDetails.date ?? '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Giờ khởi hành:</span>
+                                                <span>{normalizedDetails.time ?? '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Hành khách:</span>
+                                                <span>{passengers.length} người</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                                 <Separator />
-                                 {/* Pricing Breakdown (dùng normalizedPricing để hiện đúng các giá trị từ booking payload) */}
-                                 {/* Pricing: hỗ trợ nhiều shape của payload -> lấy trường phù hợp nhất từ payload (ghi nhận tất cả) */}
-                                 {mounted ? (() => {
-                                     const p = normalizedPricing || {};
-                                     // base: prefer explicit totals (passengerBaseTotal / perPax sums) then fallback
-                                     const base = Number(p.basePrice ?? p.passengerBaseTotal ?? p.passengerBase ?? p.perPax?.adultUnit ?? p.perPax?.unit ?? 0);
-                                     // taxes
-                                     const taxes = Number(p.taxes ?? p.taxesEstimate ?? p.taxesEstimateAmount ?? p.taxesAmount ?? 0);
-                                     // addons: handle array shape safely (sum items) or total field
-                                     let addons = 0;
-                                     if (Array.isArray(p.addOns)) {
-                                         addons = Number(p.addOnsTotal ?? p.addOns.reduce((s: number, a: any) => {
-                                             const itemTotal = Number(a.total ?? a.totalPrice ?? a.unitPrice ?? 0);
-                                             if (Number.isFinite(itemTotal)) return s + itemTotal;
-                                             const unit = Number(a.unitPrice ?? 0);
-                                             const qty = Number(a.qty ?? 1);
-                                             return s + ((Number.isNaN(unit) ? 0 : unit) * (Number.isNaN(qty) ? 1 : qty));
-                                         }, 0));
-                                     } else {
-                                         addons = Number(p.addOnsTotal ?? p.addOns ?? p.addOnsAmount ?? p.addOnsTotalAmount ?? 0);
-                                     }
-                                     const discount = Number(p.discount ?? p.discountAmount ?? 0);
-                                     // total priority: explicit total fields on payload
-                                     const totalFromPayload = (p.total ?? p.estimatedTotal ?? p.estimatedTotalAmount ?? p.offerTotal ?? p.estimatedTotalPrice) ?? null;
-                                     const totalComputed = totalFromPayload != null ? Number(totalFromPayload) : (base + taxes + addons + discount);
- 
-                                // --- New: compute counts and per-type unit prices ---
-                                const adultsCount = passengers.filter((x: any) => x.type === 'adult').length;
-                                const childrenCount = passengers.filter((x: any) => x.type === 'child').length;
-                                const infantsCount = passengers.filter((x: any) => x.type === 'infant').length;
-                                const passengerCount = Math.max(1, adultsCount + childrenCount + infantsCount);
- 
-                                // prefer explicit per-pax unit fields if present
-                                const adultUnit = Number(p.perPax?.adultUnit ?? p.perPax?.adult ?? p.perPax?.unit ?? (passengerCount ? (Number(p.passengerBaseTotal ?? p.basePrice ?? base) / passengerCount) : 0));
-                                const childUnit = Number(p.perPax?.childUnit ?? p.perPax?.child ?? (Number.isFinite(adultUnit) ? adultUnit : 0));
-                                const infantUnit = Number(p.perPax?.infantUnit ?? p.perPax?.infant ?? 0);
- 
-                                // Prepare aggregated fare lines
-                                const fareLines: { label: string; count: number; unit: number; total: number }[] = [];
-                                if (adultsCount > 0) fareLines.push({ label: 'Người lớn', count: adultsCount, unit: adultUnit, total: adultUnit * adultsCount });
-                                if (childrenCount > 0) fareLines.push({ label: 'Trẻ em', count: childrenCount, unit: childUnit, total: childUnit * childrenCount });
-                                if (infantsCount > 0) fareLines.push({ label: 'Em bé', count: infantsCount, unit: infantUnit, total: infantUnit * infantsCount });
- 
-                                const fallbackSplitUnit = passengerCount ? (Number(p.passengerBaseTotal ?? p.basePrice ?? base) / passengerCount) : 0;
-                                const usingFallback = !p.perPax && !(p.passengerBaseTotal) && !p.basePrice;
- 
-                                     // Compute a per-passenger price guess (safe fallback)
-                                     // keep perPaxPrice for backward compatibility (single unit shown per individual if needed)
-                                     const perPaxPrice = Number(p.perPax?.unit ?? fallbackSplitUnit);
- 
-                                     // Prepare addons detail list if available
-                                     const addonsList = Array.isArray(p.addOns) ? p.addOns.map((a: any, i: number) => {
-                                         const name = a.name ?? a.title ?? `Addon ${i + 1}`;
-                                         const qty = Number(a.qty ?? 1);
-                                         const unit = Number(a.unitPrice ?? a.price ?? 0);
-                                         const total = Number(a.total ?? (unit * qty));
-                                         return { name, qty, unit, total };
-                                     }) : [];
-  
-                                     return (
-                                         <>
-                                             {/* Fare row with toggle */}
-                                             <div
-                                                 className="flex items-center justify-between text-sm cursor-pointer"
-                                                 onClick={() => setShowFareDetails(prev => !prev)}
-                                             >
-                                                 <div className="flex items-center gap-2">
-                                                     <span>Giá vé</span>
-                                                     <span className="text-xs text-muted-foreground">{passengers.length} người</span>
-                                                 </div>
-                                                 <div className="flex items-center gap-4">
-                                                     <span>{formatPrice(Number(isNaN(base) ? 0 : base))}</span>
-                                                     <ChevronDown className={`h-4 w-4 transition-transform ${showFareDetails ? 'rotate-180' : ''}`} />
-                                                 </div>
-                                             </div>
-  
-                                            {/* Fare details aggregated by type */}
-                                            {showFareDetails && (
+                                {/* Pricing Breakdown (dùng normalizedPricing để hiện đúng các giá trị từ booking payload) */}
+                                {/* Pricing: hỗ trợ nhiều shape của payload -> lấy trường phù hợp nhất từ payload (ghi nhận tất cả) */}
+                                {mounted ? (() => {
+                                    const p = normalizedPricing || {};
+                                    const flights = bookingData?.flights ?? {};
+                                    const outbound = flights.outbound ?? null;
+                                    const inbound = flights.inbound ?? null;
+
+                                    const passengerBaseTotal = Number(p.passengerBaseTotal ?? p.basePrice ?? 0); // assumed per-leg base
+                                    const taxesPerLeg = Number(p.taxesEstimate ?? p.taxes ?? 0); // per leg per pax (as produced by booking builder)
+                                    const addOnsArr = Array.isArray(p.addOns) ? p.addOns : [];
+                                    const seatsArr = Array.isArray(p.seats) ? p.seats : [];
+
+                                    const sumAddonsForLeg = (leg: string | null) => addOnsArr.filter(a => (a.leg ?? null) === leg).reduce((s: number, a: any) => s + Number(a.total ?? a.unitPrice ?? a.price ?? 0), 0);
+                                    const sumSeatsForLeg = (leg: string | null) => seatsArr.filter(s => (s.leg ?? null) === leg).reduce((s: number, it: any) => s + Number(it.price ?? 0), 0);
+
+                                    const renderLeg = (label: string, flight: any, legKey: 'outbound' | 'inbound') => {
+                                        const addOnTotal = sumAddonsForLeg(legKey);
+                                        const seatsTotal = sumSeatsForLeg(legKey);
+                                        const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+                                        const base = p.perPax ? (
+                                            (Number(p.perPax.adultUnit ?? 0) * counts.adults) +
+                                            (Number(p.perPax.childUnit ?? 0) * counts.children) +
+                                            (Number(p.perPax.infantUnit ?? 0) * counts.infants)
+                                        ) : Number(p.passengerBaseTotal ?? 0);
+                                        const taxes = taxesPerLeg;
+                                        const total = base + taxes + addOnTotal + seatsTotal;
+                                        return (
+                                            <div className="mb-4">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="font-medium">{label}</span>
+                                                    <span className="text-sm text-muted-foreground">
+                                                        {flight?.flightNumber ?? '—'} {flight?.airline ?? ''}
+                                                    </span>
+                                                </div>
+                                                <div className="text-sm text-muted-foreground space-y-1">
+                                                    <div className="flex justify-between"><span>Tuyến:</span><span>{flight?.route ?? '—'}</span></div>
+                                                    <div className="flex justify-between"><span>Ngày:</span><span>{flight?.date ?? '—'}</span></div>
+                                                    <div className="flex justify-between"><span>Giờ:</span><span>{flight?.time ?? '—'}</span></div>
+                                                </div>
+                                                <div className="space-y-2 mt-2">
+                                                    {/* Giá vé with ChevronDown */}
+                                                    <div
+                                                        className="flex items-center justify-between text-sm cursor-pointer"
+                                                        onClick={() => setShowFareDetails(prev => ({ ...prev, [legKey]: !prev[legKey] }))}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span>Giá vé</span>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {counts.adults + counts.children + counts.infants} người
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4">
+                                                            <span>{formatPrice(base)}</span>
+                                                            <ChevronDown className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? 'rotate-180' : ''}`} />
+                                                        </div>
+                                                    </div>
+                                                    {showFareDetails[legKey] && (
+                                                        <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                            {p.perPax ? (
+                                                                <div className="space-y-2">
+                                                                    {counts.adults > 0 && (
+                                                                        <div className="flex justify-between">
+                                                                            <div>Người lớn ({counts.adults})</div>
+                                                                            <div>{formatPrice(Number(p.perPax.adultUnit ?? 0) * counts.adults)}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {counts.children > 0 && (
+                                                                        <div className="flex justify-between">
+                                                                            <div>Trẻ em ({counts.children})</div>
+                                                                            <div>{formatPrice(Number(p.perPax.childUnit ?? 0) * counts.children)}</div>
+                                                                        </div>
+                                                                    )}
+                                                                    {counts.infants > 0 && (
+                                                                        <div className="flex justify-between">
+                                                                            <div>Em bé ({counts.infants})</div>
+                                                                            <div>{formatPrice(Number(p.perPax.infantUnit ?? 0) * counts.infants)}</div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-muted-foreground">Không có dữ liệu chi tiết hành khách</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Dịch vụ thêm with ChevronDown */}
+                                                    {addOnTotal > 0 && (
+                                                        <>
+                                                            <div
+                                                                className="flex items-center justify-between text-sm cursor-pointer"
+                                                                onClick={() => setShowAddonsDetails(prev => ({ ...prev, [legKey]: !prev[legKey] }))}
+                                                            >
+                                                                <div>Dịch vụ thêm</div>
+                                                                <div className="flex items-center gap-4">
+                                                                    <span>{formatPrice(addOnTotal)}</span>
+                                                                    <ChevronDown className={`h-4 w-4 transition-transform ${showAddonsDetails[legKey] ? 'rotate-180' : ''}`} />
+                                                                </div>
+                                                            </div>
+                                                            {showAddonsDetails[legKey] && (
+                                                                <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                                    {addOnsArr.filter(a => (a.leg ?? null) === legKey).length > 0 ? (
+                                                                        <div className="space-y-2">
+                                                                            {addOnsArr.filter(a => (a.leg ?? null) === legKey).map((a: any, idx: number) => (
+                                                                                <div key={idx} className="flex justify-between">
+                                                                                    <div>{a.name}{a.qty && a.qty > 1 ? ` ×${a.qty}` : ''}</div>
+                                                                                    <div>{formatPrice(Number(a.total ?? a.unitPrice ?? 0))}</div>
+                                                                                </div>
+                                                                            ))}
+                                                                            <div className="flex justify-between font-medium pt-2 border-t">
+                                                                                <div>Tổng dịch vụ</div>
+                                                                                <div>{formatPrice(addOnTotal)}</div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="text-muted-foreground">Không có dịch vụ thêm cho {label.toLowerCase()}</div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                    <div className="flex justify-between text-sm"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
+                                                    {seatsTotal > 0 && <div className="flex justify-between text-sm"><span>Phí ghế</span><span>{formatPrice(seatsTotal)}</span></div>}
+                                                    <div className="flex justify-between font-semibold text-base mt-2">
+                                                        <span>Tổng {label.toLowerCase()}</span>
+                                                        <span className="text-[hsl(var(--primary))]">{formatPrice(total)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    };
+
+                                    // Grand total: prefer explicit total on payload
+                                    // Compute grand total as sum of outbound + inbound when available,
+                                    // otherwise fall back to explicit payload total fields (legacy).
+                                    const computeLegTotal = (legKey: 'outbound' | 'inbound') => {
+                                        const addOnTotal = sumAddonsForLeg(legKey);
+                                        const seatsTotal = sumSeatsForLeg(legKey);
+                                        const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+                                        const base = p.perPax ? (
+                                            (Number(p.perPax.adultUnit ?? 0) * counts.adults) +
+                                            (Number(p.perPax.childUnit ?? 0) * counts.children) +
+                                            (Number(p.perPax.infantUnit ?? 0) * counts.infants)
+                                        ) : Number(p.passengerBaseTotal ?? 0);
+                                        const taxes = taxesPerLeg;
+                                        return Number(base) + Number(taxes) + Number(addOnTotal) + Number(seatsTotal);
+                                    };
+
+                                    const outboundTotal = outbound ? computeLegTotal('outbound') : 0;
+                                    const inboundTotal = inbound ? computeLegTotal('inbound') : 0;
+
+                                    const payloadTotal = Number(p.total ?? p.estimatedTotal ?? p.estimatedTotalAmount ?? p.offerTotal ?? p.estimatedTotal ?? 0);
+                                    const grandTotal = payloadTotal > 0 ? payloadTotal : (outboundTotal + inboundTotal);
+
+                                    return (
+                                        <>
+                                            {/* Per-leg summaries */}
+                                            {outbound && renderLeg('Chuyến đi', outbound, 'outbound')}
+                                            {inbound && renderLeg('Chuyến về', inbound, 'inbound')}
+
+                                            <Separator />
+
+                                            {/* Tổng tiền dịch vụ*/}
+                                            <div
+                                                className="flex items-center justify-between text-sm cursor-pointer mt-2"
+                                                onClick={() => setShowAddonsDetails(prev => !prev)}
+                                            >
+                                                <div className='font-semibold text-base'> Tổng tiền dịch vụ </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(Number(p.addOnsTotal ?? 0))}</span>
+                                                    <ChevronDown className={`h-4 w-4 transition-transform ${showAddonsDetails ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </div>
+
+                                            {showAddonsDetails && (
                                                 <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
-                                                    {fareLines.length > 0 ? (
+                                                    {addOnsArr.length > 0 ? (
                                                         <div className="space-y-2">
-                                                            {fareLines.map((line, idx) => (
+                                                            {addOnsArr.map((a: any, idx: number) => (
                                                                 <div key={idx} className="flex justify-between">
-                                                                    <div>{line.label} {line.count > 1 ? `(${line.count} người)` : ''} <span className="text-xs text-muted-foreground"> - {formatPrice(line.unit)} / người</span></div>
-                                                                    <div>{formatPrice(line.total)}</div>
+                                                                    <div>{a.name}{a.qty && a.qty > 1 ? ` ×${a.qty}` : ''} {a.leg ? `(${a.leg})` : ''}</div>
+                                                                    <div>{formatPrice(Number(a.total ?? a.unitPrice ?? 0))}</div>
                                                                 </div>
                                                             ))}
                                                             <div className="flex justify-between font-medium pt-2 border-t">
-                                                                <div>Tổng</div>
-                                                                <div>{formatPrice(Math.round(Number(isNaN(base) ? 0 : base)))}</div>
+                                                                <div>Tổng dịch vụ</div>
+                                                                <div>{formatPrice(Number(p.addOnsTotal ?? 0))}</div>
                                                             </div>
-                                                            {usingFallback && (
-                                                                <div className="text-xs text-muted-foreground pt-1">Lưu ý: không có dữ liệu giá theo loại trong payload, đang chia đều giá cơ bản ({formatPrice(fallbackSplitUnit)}/người)</div>
-                                                            )}
                                                         </div>
                                                     ) : (
-                                                        <div className="text-muted-foreground">Không có dữ liệu chi tiết hành khách</div>
+                                                        <div className="text-muted-foreground">Không có thông tin dịch vụ thêm</div>
                                                     )}
                                                 </div>
                                             )}
-  
-                                                 <div className="flex justify-between text-sm">
-                                                     <span>Thuế và phí</span>
-                                                     <span>{formatPrice(Number(isNaN(taxes) ? 0 : taxes))}</span>
-                                                 </div>
-  
-                                                 {/* Addons row with toggle */}
-                                                 <div
-                                                     className="flex items-center justify-between text-sm cursor-pointer mt-2"
-                                                     onClick={() => setShowAddonsDetails(prev => !prev)}
-                                                 >
-                                                     <div> Dịch vụ thêm </div>
-                                                     <div className="flex items-center gap-4">
-                                                         <span>{formatPrice(Number(isNaN(addons) ? 0 : addons))}</span>
-                                                         <ChevronDown className={`h-4 w-4 transition-transform ${showAddonsDetails ? 'rotate-180' : ''}`} />
-                                                     </div>
-                                                 </div>
-  
-                                                 {/* Addons details */}
-                                                 {showAddonsDetails && (
-                                                     <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
-                                                         {addonsList.length > 0 ? (
-                                                             <div className="space-y-2">
-                                                                 {addonsList.map((a: any, idx: number) => (
-                                                                     <div key={idx} className="flex justify-between">
-                                                                         <div>{a.name}{a.qty && a.qty > 1 ? ` ×${a.qty}` : ''}</div>
-                                                                         <div>{formatPrice(Number(a.total || 0))}</div>
-                                                                     </div>
-                                                                 ))}
-                                                                 <div className="flex justify-between font-medium pt-2 border-t">
-                                                                     <div>Tổng dịch vụ</div>
-                                                                     <div>{formatPrice(Number(addons))}</div>
-                                                                 </div>
-                                                             </div>
-                                                         ) : (
-                                                             <div className="text-muted-foreground">Không có thông tin dịch vụ thêm</div>
-                                                         )}
-                                                     </div>
-                                                 )}
- 
-                                                 <div className="flex justify-between text-sm text-green-600">
-                                                     <span>Giảm giá</span>
-                                                     <span>{formatPrice(Number(isNaN(discount) ? 0 : discount))}</span>
-                                                 </div>
-                                                 <Separator />
-                                                 <div className="flex justify-between font-bold text-lg">
-                                                     <span>Tổng cộng</span>
-                                                     <span className="text-primary">{formatPrice(Math.round(Number(isNaN(totalComputed) ? 0 : totalComputed)))}</span>
-                                                 </div>
-                                             </>
-                                         );
-                           
+                                            {/* Total fare + collapse (keeps ChevronDown style) */}
+                                            <div
+                                                className="flex items-center justify-between text-sm cursor-pointer"
+                                                onClick={() => setShowTotalFareDetails(prev => !prev)}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className='font-semibold text-base'>Tổng giá vé</span>
+                                                    
+                                                </div>
+                                                <div className="flex items-center gap-4">
+                                                    <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(grandTotal)}</span>
+                                                    <ChevronDown className={`h-4 w-4 transition-transform ${showTotalFareDetails ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </div>
+
+                                            {showTotalFareDetails && (
+                                                <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                    {/* Hiện tổng theo chuyến: Chuyến đi + Chuyến về -> Tổng */}
+                                                    <div className="space-y-2">
+                                                        {outbound && (
+                                                            <div className="flex justify-between">
+                                                                <div>Chuyến đi</div>
+                                                                <div>{formatPrice(outboundTotal)}</div>
+                                                            </div>
+                                                        )}
+                                                        {inbound && (
+                                                            <div className="flex justify-between">
+                                                                <div>Chuyến về</div>
+                                                                <div>{formatPrice(inboundTotal)}</div>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between font-medium pt-2 border-t">
+                                                            <div>Tổng giá vé</div>
+                                                            <div>{formatPrice(grandTotal)}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                           
+
+                                            <div className="flex justify-between text-sm text-green-600">
+                                                <span>Giảm giá</span>
+                                                <span>{formatPrice(Number(p.discount ?? 0))}</span>
+                                            </div>
+
+                                            <Separator />
+                                            <div className="flex justify-between font-bold text-lg">
+                                                <span>Tổng cộng</span>
+                                                <span className="text-primary">{formatPrice(Math.round(Number(grandTotal || p.estimatedTotal || 0)))}</span>
+                                            </div>
+                                        </>
+                                    );
                                 })() : (
                                     <div className="text-sm text-muted-foreground">Đang tải tóm tắt đơn hàng...</div>
                                 )}
