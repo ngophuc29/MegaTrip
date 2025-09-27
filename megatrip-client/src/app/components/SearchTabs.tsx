@@ -61,18 +61,16 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   
   // load airports for flight selects (only)
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch("http://localhost:7700/airports");
-        if (!res.ok) throw new Error("Fetch airports failed");
-        setAirports(await res.json());
-      } catch (err) {
-        console.error("Lỗi fetch airports:", err);
-        setAirports([]); // tránh crash khi airports rỗng
-      }
-    };
-    fetchData();
+    fetch("http://localhost:7700/airports")
+      .then((res) => res.json())
+      .then((data) => {
+        const list = data?.airports ? Object.values(data.airports) : [];
+        setAirports(list);
+      })
+      .catch(() => setAirports([])); // ✅ đặt catch đúng chỗ
   }, []);
+
+
 
   
 

@@ -1873,6 +1873,7 @@ export default function VeMayBay() {
     };
     // Thêm trạng thái mới
     const [pendingExpandFlight, setPendingExpandFlight] = useState<string | null>(null);
+      
     return (
         <>
             {/* Search Section */}
@@ -2471,7 +2472,8 @@ export default function VeMayBay() {
                                                                                 if (hasCachedAndMatchingSig) {
                                                                                     populateFromCache(key);
                                                                                 } else {
-                                                                                    await handlePriceOfferSingle(flight);
+                                                                                    await handlePriceOfferSingle(flight); // Fix: Await fetch pricing/seatmap trước khi set selected, đảm bảo data đầy đủ cho modal
+                                                                                    populateFromCache(key);
                                                                                 }
                                                                                 setPricingLoadingFor(key, false);
                                                                                 if (tripStep === 'outbound') {
@@ -2482,11 +2484,11 @@ export default function VeMayBay() {
                                                                                         await fetchAmadeusOffers();
                                                                                     }
                                                                                     setTripStep('inbound');
-                                                                                    setExpandedFlight(null); // Fix: Reset expanded để đóng chi tiết outbound khi chuyển sang inbound
+                                                                                    setExpandedFlight(null);
                                                                                 } else if (tripStep === 'inbound') {
                                                                                     setSelectedInbound(flight);
                                                                                     setShowReview(true);
-                                                                                    setExpandedFlight(null); // Fix: Reset expanded để đóng chi tiết inbound nếu cần (dù showReview có thể che)
+                                                                                    setExpandedFlight(null);
                                                                                 }
                                                                             }}
                                                                             disabled={
