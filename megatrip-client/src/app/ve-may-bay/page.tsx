@@ -209,26 +209,46 @@ export default function VeMayBay() {
     const cardRefs = useRef(new Map<string, HTMLDivElement | null>()); // Để handle click outside expanded
 
     // THÊM USEEFFECT CHO CLICK OUTSIDE EXPANDED (từ code trước)
+    // useEffect(() => {
+    //     const handleClickOutside = (event: MouseEvent) => {
+    //         if (expandedFlight && cardRefs.current.size > 0) {
+    //             let clickedOutside = true;
+    //             cardRefs.current.forEach((ref, id) => {
+    //                 if (ref && ref.contains(event.target as Node)) {
+    //                     clickedOutside = false;
+    //                 }
+    //             });
+    //             if (clickedOutside) {
+    //                 setExpandedFlight(null);
+    //             }
+    //         }
+    //     };
+
+    //     document.addEventListener('click', handleClickOutside);
+    //     return () => {
+    //         document.removeEventListener('click', handleClickOutside);
+    //     };
+    // }, [expandedFlight]);
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (expandedFlight && cardRefs.current.size > 0) {
-                let clickedOutside = true;
-                cardRefs.current.forEach((ref, id) => {
-                    if (ref && ref.contains(event.target as Node)) {
-                        clickedOutside = false;
-                    }
-                });
-                if (clickedOutside) {
-                    setExpandedFlight(null);
+            let isOutside = true;
+            cardRefs.current.forEach((ref) => {
+                if (ref && ref.contains(event.target as Node)) {
+                    isOutside = false;
                 }
+            });
+
+            if (isOutside && expandedFlight !== null) {
+                setExpandedFlight(null);
+                setPricingLoadingByFlight({}); // Reset loading để tránh state cũ
             }
         };
 
-        document.addEventListener('click', handleClickOutside);
+        document.addEventListener('mousedown', handleClickOutside); // Sử dụng mousedown để bắt click sớm hơn
         return () => {
-            document.removeEventListener('click', handleClickOutside);
+            document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [expandedFlight]);
+    }, [expandedFlight, setExpandedFlight]);
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -2281,9 +2301,42 @@ export default function VeMayBay() {
                                         <Filter className="h-4 w-4 mr-2" />
                                         Bộ lọc
                                     </Button>
-                                    {/* <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        Tìm thấy {sortedFlights.length} chuyến bay
-                                    </p> */}
+                                    <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                                        {(() => {
+                                            const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+                                            const rawFrom = selectedRoute?.from || q['from'] || q['origin'] || searchForm.from;
+                                            const rawTo = selectedRoute?.to || q['to'] || q['destination'] || searchForm.to;
+                                            const depIso = selectedDate || q['departureDate'] || q['departure'] || q['date'] || '';
+                                            const retIso = q['returnDate'] || q['return'] || '';
+
+                                            // try to show airport codes if form value contains "(CODE)"
+                                            const extractCode = (v?: string) => {
+                                                if (!v) return '';
+                                                const s = String(v);
+                                                const m = s.match(/\(([^)]+)\)/);
+                                                return m ? m[1] : s;
+                                            };
+                                            const from = extractCode(rawFrom);
+                                            const to = extractCode(rawTo);
+
+                                            if (!hasSearched) {
+                                                return `Tìm thấy ${sortedFlights.length} chuyến bay`;
+                                            }
+
+                                            // If roundtrip, show only the current leg's header according to tripStep
+                                            if (roundtripMode && depIso && retIso) {
+                                                if (tripStep === 'outbound') {
+                                                    return `Kết quả tìm kiếm cho chuyến bay ${from} → ${to} • ${formatDateReadable(depIso)}`;
+                                                } else {
+                                                    return `Kết quả tìm kiếm cho chuyến bay ${to} → ${from} • ${formatDateReadable(retIso)}`;
+                                                }
+                                            }
+
+                                            // Oneway / single date
+                                            const dateText = depIso ? ` • ${formatDateReadable(depIso)}` : '';
+                                            return `Kết quả tìm kiếm cho chuyến bay ${from} → ${to}${dateText}`;
+                                        })()}
+                                    </p>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Label htmlFor="sort" className="text-sm">Sắp xếp:</Label>
@@ -2348,7 +2401,10 @@ export default function VeMayBay() {
                                                     }
                                                 })
                                                 .map(flight => (
-                                                    <Card key={flight.id} className={`hover:shadow-md transition-shadow ${((tripStep === 'outbound' && selectedOutbound?.id === flight.id) || (tripStep === 'inbound' && selectedInbound?.id === flight.id)) ? 'ring-2 ring-blue-500' : ''}`}>
+                                                    <Card key={flight.id} className={`hover:shadow-md transition-shadow ${((tripStep === 'outbound' && selectedOutbound?.id === flight.id) || (tripStep === 'inbound' && selectedInbound?.id === flight.id)) ? 'ring-2 ring-blue-500' : ''}`}
+                                                        ref={(el: any) => cardRefs.current.set(flight.id, el)}
+
+                                                    >
                                                         <CardContent className="p-6">
                                                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                                                                 {/* Flight Info */}
