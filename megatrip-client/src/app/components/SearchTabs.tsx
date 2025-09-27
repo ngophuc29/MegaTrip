@@ -61,14 +61,19 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   
   // load airports for flight selects (only)
   useEffect(() => {
-    fetch('http://localhost:7700/airports')
-      .then(res => res.json())
-      .then(data => {
-        const list = data?.airports ? Object.values(data.airports) : [];
-        setAirports(list);
-      })
-      .catch(() => setAirports([]));
+    const fetchData = async () => {
+      try {
+        const res = await fetch("http://localhost:7700/airports");
+        if (!res.ok) throw new Error("Fetch airports failed");
+        setAirports(await res.json());
+      } catch (err) {
+        console.error("Lỗi fetch airports:", err);
+        setAirports([]); // tránh crash khi airports rỗng
+      }
+    };
+    fetchData();
   }, []);
+
   
 
   useEffect(() => {
@@ -137,7 +142,13 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       return foundByIata ? foundByIata.icao : (foundByIcao ? foundByIcao.icao : prev);
     });
   }, [airports]);
-
+  useEffect(() => {
+    if (flightType === "roundtrip" && !flightReturn) {
+      const d = new Date();
+      d.setDate(d.getDate() + 2); // hôm nay +2 ngày
+      setFlightReturn(d);
+    }
+  }, [flightType]);
   // For flight tab: fill fields from query params if present
   useEffect(() => {
     if (!searchParams) return;
@@ -162,7 +173,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     const adultsVal = hasAdultsParam ? parseInt(params['adults'] || '0', 10) : undefined;
     const childrenVal = hasChildrenParam ? parseInt(params['children'] || '0', 10) : undefined;
     const infantsVal = hasInfantsParam ? parseInt(params['infants'] || '0', 10) : undefined;
-
+   
     // Fill from/to for all relevant controls so redirect always pre-fills UI.
     // Resolve incoming code (IATA or ICAO) to ICAO for Select value.
     if (from !== undefined && from !== null && from !== '') {
@@ -343,11 +354,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   };
 
   // Default return date = today + 2 days (formatted YYYY-MM-DD)
-  const defaultReturnDateStr = (() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 2);
-    return d.toISOString().split('T')[0];
-  })();
+  
 
   return (
     <div className="w-full max-w-6xl mx-auto">
@@ -476,10 +483,15 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     <Input
                       type="date"
                       className="block h-12 bg-white shadow-md text-black w-full"
-                      value={flightReturn ? flightReturn.toISOString().split('T')[0] : defaultReturnDateStr}
-                      onChange={e => setFlightReturn(e.target.value ? new Date(e.target.value) : undefined)}
-                      min={new Date().toISOString().split('T')[0]}
+                      value={flightReturn ? flightReturn.toISOString().split("T")[0] : ""}
+                      onChange={(e) => setFlightReturn(e.target.value ? new Date(e.target.value) : undefined)}
+                      min={
+                        flightDeparture
+                          ? flightDeparture.toISOString().split("T")[0]
+                          : new Date().toISOString().split("T")[0]
+                      }
                     />
+
                   </div>
                 )}
               </div>
@@ -636,10 +648,12 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                   <Input
                     type="date"
                     className="block h-12 bg-white shadow-md text-black w-full"
-                    value={busDeparture ? busDeparture.toISOString().split('T')[0] : ''}
-                    onChange={e => setBusDeparture(e.target.value ? new Date(e.target.value) : undefined)}
-                    min={new Date().toISOString().split('T')[0]}
+                    value={busDeparture ? busDeparture.toISOString().split("T")[0] : ""}
+                    onChange={(e) =>
+                      setBusDeparture(e.target.value ? new Date(e.target.value) : undefined)
+                    }
                   />
+
                 </div>
                 <div className="flex items-end">
                   <Button className="w-full h-10" onClick={() => handleSearch('bus')}>
