@@ -411,20 +411,39 @@ export default function FlightResults({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      if (!(event.target instanceof Node)) return;
+
+      // Use composedPath so clicks originating from portals/shadow DOM (Tabs, popovers, svgs, etc.)
+      // are detected as inside the card when appropriate.
+      const path: any[] = (event as any).composedPath ? (event as any).composedPath() : (event as any).path || [event.target];
+
+      // If any node in the event path is inside a flight card (has data-flight-card-id), don't close.
+      for (const node of path) {
+        if (!(node instanceof Element)) continue;
+        if (node.closest && node.closest('[data-flight-card-id]')) {
+          return;
+        }
+      }
+
+      // Fallback: check refs map (handles cases where composedPath doesn't include the exact element)
       let isOutside = true;
       cardRefs.current.forEach((ref) => {
         if (ref && ref.contains(event.target as Node)) {
+          isOutside = false;
+        }
+        // Also if composedPath includes the ref element
+        if (ref && path.includes(ref)) {
           isOutside = false;
         }
       });
 
       if (isOutside && expandedFlight !== null) {
         setExpandedFlight(null);
-        setPricingLoadingByFlight({}); // Reset loading để tránh state cũ
+        setPricingLoadingByFlight({}); // keep previous behavior
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside); // Sử dụng mousedown để bắt click sớm hơn
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
@@ -455,7 +474,9 @@ export default function FlightResults({
               const isPricingLoading = Boolean(pricingLoadingByFlight[key]);
 
               return (
-                <Card key={flight.id} className="hover:shadow-md transition-shadow"
+                <Card key={flight.id}
+                  data-flight-card-id={String(flight.id)}
+                  className="hover:shadow-md transition-shadow"
                   ref={(el:any) => cardRefs.current.set(flight.id, el)}
                 >
                   <CardContent className="p-6">
@@ -652,7 +673,9 @@ export default function FlightResults({
                             <CardSkeleton />
                           </div>
                         ) : (
-                          <>
+                            <>
+                              <div onMouseDownCapture={(e) => e.stopPropagation()} onTouchStartCapture={(e) => e.stopPropagation()}>
+
                             <Tabs defaultValue="details" className="w-full">
                               <TabsList className="grid w-full grid-cols-5">
                                 <TabsTrigger value="details">Chi tiết</TabsTrigger>
@@ -1265,6 +1288,7 @@ export default function FlightResults({
 
                               </div>
                             </Tabs>
+                              </div>
                           </>
                         )}
                       </>
