@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from '../components/ui/card';
@@ -835,7 +834,10 @@ export default function FlightResults({
                                           <div>
                                             <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
                                             <div className="space-y-2 text-sm">
-                                              <div><span className="font-medium">Máy bay:</span> {seatmap?.aircraft?.code ?? segment?.aircraft?.code ?? flight.aircraft}</div>
+                                              <div><span className="font-medium">Máy bay:</span>
+                                                {/* {seatmap?.aircraft?.code ?? segment?.aircraft?.code ?? flight.aircraft} */}
+                                                {flight.flightNumber} • {flight.aircraft}
+                                              </div>
                                               <div><span className="font-medium">Hạng vé:</span> {(traveler?.fareOption) ?? flight.class}</div>
                                               <div><span className="font-medium">Còn lại:</span> {offerFromPricing?.numberOfBookableSeats ?? pricing?.data?.flightOffers?.[0]?.numberOfBookableSeats ?? flight.availableSeats ?? (seatmap?.availableSeatsCounters?.[0]?.value) ?? '-'} ghế</div>
                                               {/* <div><span className="font-medium">Stops:</span> {segment?.numberOfStops ?? '-'}</div> */}
