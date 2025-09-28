@@ -172,6 +172,8 @@ export default function VeMayBay() {
     const router = useRouter();
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 3000000]);
+    const [minPriceBound, setMinPriceBound] = useState<number>(1000000);
+    const [maxPriceBound, setMaxPriceBound] = useState<number>(3000000);
     const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
     const [sortBy, setSortBy] = useState('price-asc');
     const [expandedFlight, setExpandedFlight] = useState<number | null>(null);
@@ -1020,7 +1022,8 @@ export default function VeMayBay() {
     const allFlights = legFlights;
 
     const filteredFlights = allFlights.filter(flight => {
-        const matchesPrice = flight.price >= priceRange[0] && flight.price <= priceRange[1];
+        const price = Number(flight?.price) || 0;
+        const matchesPrice = price >= priceRange[0] && price <= priceRange[1];
         const matchesAirline = selectedAirlines.length === 0 || selectedAirlines.includes(flight.airline);
 
         // If route is selected, prioritize matching routes
@@ -1053,6 +1056,31 @@ export default function VeMayBay() {
             default: return 0;
         }
     });
+    useEffect(() => {
+        try {
+            const prices = allFlights
+                .map(f => Number((f && f.price) ?? 0))
+                .filter(p => Number.isFinite(p) && p > 0);
+            if (prices.length === 0) return;
+            const minP = Math.min(...prices);
+            const maxP = Math.max(...prices);
+            const roundedMin = Math.max(0, Math.floor(minP / 100000) * 100000);
+            const roundedMax = Math.ceil(maxP / 100000) * 100000;
+
+            setMinPriceBound(roundedMin);
+            setMaxPriceBound(roundedMax);
+
+            setPriceRange(prev => {
+                const low = Math.max(roundedMin, Math.min(prev[0], roundedMax));
+                const high = Math.max(roundedMin, Math.min(prev[1], roundedMax));
+                // if clamped range has no flights inside, expand to full bounds
+                const any = prices.some(p => p >= low && p <= high);
+                return any ? [low, high] : [roundedMin, roundedMax];
+            });
+        } catch {
+            // ignore
+        }
+    }, [allFlights]);
 
     const handleSearch = () => {
         setHasSearched(true);
@@ -1893,9 +1921,20 @@ export default function VeMayBay() {
     };
     // Thêm trạng thái mới
     const [pendingExpandFlight, setPendingExpandFlight] = useState<string | null>(null);
-      
+
     return (
         <>
+            {isLoading && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60">
+                    <div className="bg-white/95 rounded-lg p-6 flex flex-col items-center gap-4 shadow-lg max-w-xs mx-4">
+                        <img src="/flight_loading_vikas-singh.gif" alt="Đang tìm chuyến bay" className="w-36 h-36 object-contain" />
+                        <div className="text-center">
+                            <div className="font-semibold text-lg">Đang tìm chuyến bay ...</div>
+                            <div className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Vui lòng đợi trong giây lát…</div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {/* Search Section */}
             <div className="relative min-h-[480px]" style={{ backgroundImage: 'url(./banner-may-bay.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
 
@@ -2198,9 +2237,9 @@ export default function VeMayBay() {
                                                 <Slider
                                                     value={priceRange}
                                                     onValueChange={setPriceRange}
-                                                    max={3000000}
-                                                    min={1000000}
-                                                    step={100000}
+                                                    max={maxPriceBound}
+                                                    min={minPriceBound}
+                                                    step={20000}
                                                     className="mb-3"
                                                 />
                                                 <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
@@ -2320,7 +2359,7 @@ export default function VeMayBay() {
                                             const to = extractCode(rawTo);
 
                                             if (!hasSearched) {
-                                                return `Tìm thấy ${sortedFlights.length} chuyến bay`;
+                                                return `Đang tải thông tin chuyến bay...`;
                                             }
 
                                             // If roundtrip, show only the current leg's header according to tripStep
@@ -4674,7 +4713,7 @@ export default function VeMayBay() {
                     </div>
                 </div>
             )}
-            
+
 
 
         </>

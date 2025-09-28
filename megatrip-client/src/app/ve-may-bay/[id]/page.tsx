@@ -1512,8 +1512,8 @@ export default function ChiTietVeMayBay() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Thông tin hành khách</CardTitle>
-                                <p className="text-[hsl(var(--muted-foreground))]">
-                                    Vui lòng điền chính xác thông tin theo giấy tờ tùy thân
+                                <p className="text-red-600">
+                                    Vui lòng điền chính xác thông tin theo giấy tờ tùy thân và thông tin liên hệ
                                 </p>
                             </CardHeader>
                             <CardContent>

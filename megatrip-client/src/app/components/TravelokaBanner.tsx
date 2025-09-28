@@ -123,10 +123,11 @@ export default function TravelokaBanner() {
   const [passengers, setPassengers] = useState(1);
   const [tripType, setTripType] = useState('oneway');
   const [headerSolid, setHeaderSolid] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [passengerCounts, setPassengerCounts] = useState({ adults: 1, children: 0, infants: 0 });
   const totalPassengers = passengerCounts.adults + passengerCounts.children + passengerCounts.infants;
-  const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
+  const [provinces, setProvinces] = useState<{ code: string, name: string }[]>([]);
   const [airports, setAirports] = useState<any[]>([]);
   // travel class for flights
   const [travelClass, setTravelClass] = useState<'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'>('ECONOMY');
@@ -182,13 +183,13 @@ export default function TravelokaBanner() {
       let children = prev.children;
       let infants = prev.infants;
 
-//       adults >= 1: luôn cần ít nhất một hành khách lớn.
-//         infants ≤ adults: em bé phải đi kèm với người lớn(không thể nhiều hơn số người lớn).
-//           seated = adults + children ≤ 9: nhiều API vé(ví dụ Amadeus) giới hạn số hành khách có ghế là 9; infants thường không tính ghế.
-// Khi tăng / decrease:
-// Tăng adults có thể cho phép tăng infants sau đó; nếu adults tăng làm vượt giới hạn ghế thì giảm children để giữ seated ≤ 9.
-// Giảm adults sẽ tự động giảm infants nếu cần để giữ infants ≤ adults và giữ adults ≥ 1.
-// Tăng children chỉ cho phép khi seated < 9 để không vượt giới hạn.
+      //       adults >= 1: luôn cần ít nhất một hành khách lớn.
+      //         infants ≤ adults: em bé phải đi kèm với người lớn(không thể nhiều hơn số người lớn).
+      //           seated = adults + children ≤ 9: nhiều API vé(ví dụ Amadeus) giới hạn số hành khách có ghế là 9; infants thường không tính ghế.
+      // Khi tăng / decrease:
+      // Tăng adults có thể cho phép tăng infants sau đó; nếu adults tăng làm vượt giới hạn ghế thì giảm children để giữ seated ≤ 9.
+      // Giảm adults sẽ tự động giảm infants nếu cần để giữ infants ≤ adults và giữ adults ≥ 1.
+      // Tăng children chỉ cho phép khi seated < 9 để không vượt giới hạn.
       if (type === 'adults') {
         adults = Math.max(1, adults + (increment ? 1 : -1));
         // ensure infants <= adults
@@ -282,6 +283,7 @@ export default function TravelokaBanner() {
       if (originCode) qs.set('from', originCode);
       if (destCode) qs.set('to', destCode);
       qs.set('total', String(totalPassengers));
+      setIsSearching(true);
       router.push(`/ve-may-bay?${qs.toString()}`);
     } else if (activeTab === 'buses') {
       const payload = {
@@ -291,6 +293,7 @@ export default function TravelokaBanner() {
         departure: fromDate ? fromDate.toISOString().split('T')[0] : ''
       };
       console.log('Search clicked:', payload);
+      setIsSearching(true);
       router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (activeTab === 'tours') {
       const departure = fromDate ? fromDate.toISOString().split('T')[0] : '';
@@ -306,6 +309,7 @@ export default function TravelokaBanner() {
         travelClass: travelClass // optional for tours, kept for consistency
       });
       console.log('Tour search params:', Object.fromEntries(qs.entries()));
+      setIsSearching(true);
       router.push(`/tour?${qs.toString()}`);
     }
   };
@@ -426,8 +430,8 @@ export default function TravelokaBanner() {
                       />
                       <span className="text-sm font-medium text-white">Khứ hồi</span>
                     </label>
-                    
-                 
+
+
                   </div>
 
                   {/* Search Fields */}
@@ -607,8 +611,8 @@ export default function TravelokaBanner() {
                     </div>
 
                     <Button size="lg" className="h-12 px-8 bg-orange-500 hover:bg-orange-600 text-white shadow-md" onClick={handleSearch}>
-                      <Search className="mr-2 h-5 w-5" />
-                      Tìm chuyến bay
+                      <Search className={`mr-2 h-5 w-5 ${isSearching ? 'animate-spin' : ''}`} />
+                      {isSearching ? 'Đang chuyển trang...' : 'Tìm chuyến bay'}
                     </Button>
                   </div>
 
@@ -688,8 +692,8 @@ export default function TravelokaBanner() {
                     </div>
 
                     <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSearch}>
-                      <Search className="mr-2 h-5 w-5" />
-                      Tìm xe
+                      <Search className={`mr-2 h-5 w-5 ${isSearching ? 'animate-spin' : ''}`} />
+                      {isSearching ? 'Đang chuyển trang...' : 'Tìm xe'}
                     </Button>
                   </div>
                 </div>
@@ -739,8 +743,8 @@ export default function TravelokaBanner() {
                     </div>
 
                     <Button size="lg" className="h-12 mt-6 bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSearch}>
-                      <Search className="mr-2 h-5 w-5" />
-                      Tìm tour
+                      <Search className={`mr-2 h-5 w-5 ${isSearching ? 'animate-spin' : ''}`} />
+                      {isSearching ? 'Đang chuyển trang...' : 'Tìm tour'}
                     </Button>
                   </div>
                 </div>
