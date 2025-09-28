@@ -611,6 +611,9 @@ export default function FlightResults({
                           <Button
                             variant="ghost"
                             size="sm"
+                            // prevent document mousedown handler from running for this button click
+                            onMouseDownCapture={(e) => e.stopPropagation()}
+                            onTouchStartCapture={(e) => e.stopPropagation()}
                             onClick={async () => {
                               const opening = expandedFlight !== flight.id;
                               if (opening) {
