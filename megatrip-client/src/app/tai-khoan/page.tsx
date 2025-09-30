@@ -1,6 +1,5 @@
 "use client"
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -34,6 +33,8 @@ import {
     AlertCircle,
     Users,
 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@radix-ui/react-dialog';
+import { DialogFooter, DialogHeader } from '../components/ui/dialog';
 
 // Sample user data
 const userData = {
@@ -43,7 +44,7 @@ const userData = {
         phone: '0912345678',
         dateOfBirth: '1990-05-15',
         gender: 'male',
-        address: '123 Nguyễn Huệ, Quận 1, TP.HCM',
+        address: '123 Nguyễn Huệ, Qu���n 1, TP.HCM',
         avatar: '/placeholder.svg',
         memberSince: '2023-01-15',
         verified: true,
@@ -53,12 +54,12 @@ const userData = {
             id: 'TRV123456789',
             type: 'flight',
             status: 'confirmed',
-            bookingDate: '2024-12-28',
-            serviceDate: '2025-01-15',
+            bookingDate: (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); })(),
+            serviceDate: (() => { const d = new Date(); d.setDate(d.getDate() + 15); return d.toISOString().slice(0, 10); })(),
             title: 'Chuyến bay TP.HCM - Hà Nội',
             details: 'VN1546 • 06:15 - 08:30',
-            passengers: 1,
-            total: 2230000,
+            passengers: 2,
+            total: 4460000,
             canCancel: true,
             canChange: true,
         },
@@ -142,8 +143,209 @@ const userData = {
     ]
 };
 
+type RequestItem = {
+    id: string;
+    type: 'refund' | 'change';
+    bookingId: string;
+    title: string;
+    status: 'submitted' | 'processing' | 'approved' | 'rejected';
+    createdAt: string;
+    amountRefund?: number;
+    extraPay?: number;
+    method?: string;
+    details?: any;
+};
+
+function getRequests(): RequestItem[] {
+    try {
+        const raw = localStorage.getItem('userRequests');
+        const arr = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(arr)) return arr.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        return [];
+    } catch {
+        return [];
+    }
+}
+
+function RequestsTab({ formatPrice }: { formatPrice: (n: number) => string }) {
+    const [items, setItems] = useState<RequestItem[]>(getRequests());
+    const [detailOpen, setDetailOpen] = useState(false);
+    const [selected, setSelected] = useState<RequestItem | null>(null);
+
+    const openDetail = (r: RequestItem) => { setSelected(r); setDetailOpen(true); };
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold">Yêu cầu hủy đơn (hoàn tiền) & đổi lịch</h1>
+                <Button variant="outline" onClick={() => setItems(getRequests())}>Làm mới</Button>
+            </div>
+            {items.length === 0 ? (
+                <Card>
+                    <CardContent className="p-6 text-sm text-muted-foreground">Chưa có yêu cầu nào.</CardContent>
+                </Card>
+            ) : (
+                <div className="space-y-4">
+                    {items.map((r) => (
+                        <Card key={r.id} className="hover:shadow-sm cursor-pointer" onClick={() => openDetail(r)}>
+                            <CardContent className="p-4 flex items-start justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 rounded bg-primary/10">
+                                        {r.type === 'refund' ? <XCircle className="h-4 w-4" /> : <Edit className="h-4 w-4" />}
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="font-medium">{r.title}</div>
+                                            <Badge variant="secondary">{r.bookingId}</Badge>
+                                        </div>
+                                        <div className="text-xs text-muted-foreground mt-0.5">Mã yêu cầu: {r.id} • Ngày {new Date(r.createdAt).toLocaleString('vi-VN')}</div>
+                                        <div className="text-sm mt-1">
+                                            {r.type === 'refund' && (
+                                                <span>Hoàn dự kiến: <span className="font-medium text-green-600">{formatPrice(r.amountRefund || 0)}</span></span>
+                                            )}
+                                            {r.type === 'change' && (
+                                                <span>
+                                                    {typeof r.extraPay === 'number' && r.extraPay > 0 ? (
+                                                        <>Thanh toán thêm: <span className="font-medium text-primary">{formatPrice(r.extraPay)}</span></>
+                                                    ) : (
+                                                        <>Hoàn lại: <span className="font-medium text-green-600">{formatPrice(Math.abs(r.extraPay || 0))}</span></>
+                                                    )}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="text-right space-y-1">
+                                    <Badge className={
+                                        r.status === 'approved' ? 'text-green-700 bg-green-50 border-green-200' :
+                                            r.status === 'processing' ? 'text-amber-700 bg-amber-50 border-amber-200' :
+                                                r.status === 'rejected' ? 'text-red-700 bg-red-50 border-red-200' : 'text-blue-700 bg-blue-50 border-blue-200'
+                                    }>
+                                        {r.status === 'submitted' && 'Đã gửi'}
+                                        {r.status === 'processing' && 'Đang duyệt'}
+                                        {r.status === 'approved' && 'Phê duyệt'}
+                                        {r.status === 'rejected' && 'Từ chối'}
+                                    </Badge>
+                                    {r.method && <div className="text-xs text-muted-foreground">Phương thức: {r.method}</div>}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            )}
+
+            <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Chi tiết yêu cầu</DialogTitle>
+                        <DialogDescription>
+                            {selected ? (
+                                <span>
+                                    {selected.type === 'refund' ? 'Yêu cầu hủy đơn (hoàn tiền)' : 'Yêu cầu đổi lịch'} • Mã: {selected.id}
+                                </span>
+                            ) : '—'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {selected && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <div className="font-medium">{selected.title}</div>
+                                <Badge variant="secondary">{selected.bookingId}</Badge>
+                            </div>
+                            <div className="text-xs text-muted-foreground">Tạo lúc: {new Date(selected.createdAt).toLocaleString('vi-VN')}</div>
+
+                            <Separator />
+
+                            {selected.type === 'refund' && (
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex items-center justify-between">
+                                        <span>Hoàn dự kiến</span>
+                                        <span className="font-semibold text-green-600">{formatPrice(selected.amountRefund || 0)}</span>
+                                    </div>
+                                    {selected.method && (
+                                        <div className="flex items-center justify-between">
+                                            <span>Phương thức nhận</span>
+                                            <span className="font-medium">{selected.method}</span>
+                                        </div>
+                                    )}
+                                    {selected.details && (
+                                        <div className="mt-2">
+                                            <div className="text-xs font-medium">Chi tiết tính</div>
+                                            <ul className="list-disc ml-4 mt-1 space-y-1 text-xs">
+                                                <li>Nhà vận chuyển: {selected.details.airline || '—'}</li>
+                                                {'tierRate' in selected.details && <li>Tỷ lệ phạt: {Math.round((selected.details.tierRate || 0) * 100)}%</li>}
+                                                {'airlinePenalty' in selected.details && <li>Phí phạt hãng: {formatPrice(selected.details.airlinePenalty || 0)}</li>}
+                                                {'taxes' in selected.details && <li>Thuế/Phí không hoàn: {formatPrice(selected.details.taxes || 0)}</li>}
+                                                {'platformFee' in selected.details && <li>Phí nền tảng: {formatPrice(selected.details.platformFee || 0)}</li>}
+                                                {selected.details.reason && <li>Lý do: {selected.details.reason}</li>}
+                                                {selected.details.note && <li>Ghi chú: {selected.details.note}</li>}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {selected.type === 'change' && (
+                                <div className="space-y-2 text-sm">
+                                    {selected.details && (
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <span>Ngày mới</span>
+                                                <span className="font-medium">{selected.details.newDate}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span>Giờ</span>
+                                                <span className="font-medium">{selected.details.time}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span>Số khách</span>
+                                                <span className="font-medium">{selected.details.passengers}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span>Chênh lệch giá</span>
+                                                <span className={(selected.details.fareDiff || 0) >= 0 ? 'font-medium text-orange-600' : 'font-medium text-green-600'}>
+                                                    {(selected.details.fareDiff || 0) >= 0 ? '+' : '-'}{formatPrice(Math.abs(selected.details.fareDiff || 0))}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span>Phí đổi lịch/khách</span>
+                                                <span className="font-medium">{formatPrice(selected.details.changeFeePerPax || 0)}</span>
+                                            </div>
+                                            <Separator />
+                                            <div className="flex items-center justify-between">
+                                                <span>{(selected.extraPay || 0) > 0 ? 'Thanh toán thêm' : 'Hoàn lại'}</span>
+                                                <span className={(selected.extraPay || 0) > 0 ? 'text-primary font-semibold' : 'text-green-600 font-semibold'}>
+                                                    {formatPrice(Math.abs(selected.extraPay || 0))}
+                                                </span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDetailOpen(false)}>Đóng</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
+
 export default function TaiKhoan() {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState<string>('overview');
+    useEffect(() => {
+        // Try to read a possible navigation state (if any) without relying on react-router
+        try {
+            const state = (typeof window !== 'undefined' && window.history && window.history.state) ? window.history.state : undefined;
+            const tab = state && (state as any).activeTab;
+            if (tab) setActiveTab(tab);
+        } catch {
+            // ignore if anything fails
+        }
+    }, []);
+
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState(userData.profile);
 
@@ -242,6 +444,14 @@ export default function TaiKhoan() {
                                         Hành khách thường đi
                                     </Button>
                                     <Button
+                                        variant={activeTab === 'requests' ? 'default' : 'ghost'}
+                                        className="w-full justify-start"
+                                        onClick={() => setActiveTab('requests')}
+                                    >
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        Yêu cầu hủy/đổi lịch
+                                    </Button>
+                                    <Button
                                         variant={activeTab === 'notifications' ? 'default' : 'ghost'}
                                         className="w-full justify-start"
                                         onClick={() => setActiveTab('notifications')}
@@ -336,7 +546,6 @@ export default function TaiKhoan() {
                                                     <div>
                                                         <Label htmlFor="dateOfBirth">Ngày sinh</Label>
                                                         <Input
-                                                            className="block h-12 bg-white shadow-md text-black w-full"
                                                             id="dateOfBirth"
                                                             type="date"
                                                             value={editForm.dateOfBirth}
@@ -488,18 +697,22 @@ export default function TaiKhoan() {
                                                                 <Eye className="h-3 w-3 mr-1" />
                                                                 Xem chi tiết
                                                             </Button>
-                                                            {booking.canCancel && (
-                                                                <Button size="sm" variant="outline">
-                                                                    <XCircle className="h-3 w-3 mr-1" />
-                                                                    Hủy đơn
-                                                                </Button>
-                                                            )}
-                                                            {booking.canChange && (
-                                                                <Button size="sm" variant="outline">
-                                                                    <Edit className="h-3 w-3 mr-1" />
-                                                                    Đổi lịch
-                                                                </Button>
-                                                            )}
+                                                         {booking.canCancel && (
+                                                             <Button size="sm" variant="outline" asChild>
+                                                                 <a href={`/tai-khoan/huy-don/${booking.id}`}>
+                                                                     <XCircle className="h-3 w-3 mr-1" />
+                                                                     Hủy đơn
+                                                                 </a>
+                                                             </Button>
+                                                         )}
+                                                         {booking.canChange && (
+                                                             <Button size="sm" variant="outline" asChild>
+                                                                 <a href={`/tai-khoan/doi-lich/${booking.id}`}>
+                                                                     <Edit className="h-3 w-3 mr-1" />
+                                                                     Đổi lịch
+                                                                 </a>
+                                                             </Button>
+                                                         )}
                                                             {booking.canReview && (
                                                                 <Button size="sm" variant="outline">
                                                                     <Star className="h-3 w-3 mr-1" />
@@ -520,6 +733,11 @@ export default function TaiKhoan() {
                                     ))}
                                 </div>
                             </div>
+                        )}
+
+                        {/* Requests Tab */}
+                        {activeTab === 'requests' && (
+                            <RequestsTab formatPrice={formatPrice} />
                         )}
 
                         {/* Travelers Tab */}
