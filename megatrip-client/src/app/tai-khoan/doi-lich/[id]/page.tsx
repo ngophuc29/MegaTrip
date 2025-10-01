@@ -12,7 +12,7 @@ import { Separator } from '../../../components/ui/separator';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { toast } from '../../../components/ui/use-toast';
-import { ArrowLeft, CalendarDays, Clock, Plane, Ticket, TrendingUp, ChevronRight } from 'lucide-react';
+import { ArrowLeft, CalendarDays, Clock, Plane, Ticket, TrendingUp, ChevronRight, Bus, MapPin } from 'lucide-react';
 
 interface Booking {
     id: string;
@@ -41,14 +41,32 @@ const SAMPLE_BOOKINGS: Booking[] = [
     {
         id: 'TRV123456788',
         type: 'tour',
-        status: 'completed',
+        status: 'confirmed',
         bookingDate: '2024-11-20',
-        serviceDate: '2024-12-05',
+        serviceDate: '2025-12-05',
         title: 'Tour Đà Nẵng - Hội An 3N2Đ',
         details: 'Khách sạn 4* • 4 khách',
         passengers: 4,
         total: 15960000,
     },
+    {
+        id: 'TRV123456787',
+        type: 'bus',
+        status: 'confirmed',
+        bookingDate: '2024-10-15',
+        serviceDate: '2025-12-20',
+        title: 'Xe TP.HCM - Đà Lạt',
+        details: 'Giường nằm VIP • 22:30',
+        passengers: 2,
+        total: 700000,
+    },
+    { id: 'TRV123456790', type: 'flight', status: 'confirmed', bookingDate: '2025-01-10', serviceDate: '2025-06-10', title: 'TP.HCM - Nha Trang', details: 'VJ221 • 08:00 - 09:10', passengers: 1, total: 900000 },
+    { id: 'TRV123456791', type: 'flight', status: 'pending', bookingDate: '2025-02-01', serviceDate: '2025-07-01', title: 'HN - Đà Lạt', details: 'VN330 • 12:00 - 13:30', passengers: 2, total: 1800000 },
+    { id: 'TRV123456792', type: 'bus', status: 'confirmed', bookingDate: '2025-03-05', serviceDate: '2025-08-15', title: 'Xe Sài Gòn - Vũng Tàu', details: 'Ghế ngồi thường • 07:00', passengers: 3, total: 450000 },
+    { id: 'TRV123456793', type: 'tour', status: 'cancelled', bookingDate: '2024-09-12', serviceDate: '2024-10-01', title: 'Tour Sapa 2N1Đ', details: 'Khách sạn 3* • 2 khách', passengers: 2, total: 3200000 },
+    { id: 'TRV123456794', type: 'bus', status: 'completed', bookingDate: '2024-08-01', serviceDate: '2024-09-01', title: 'Xe Đà Nẵng - Hội An', details: 'Ghế ngồi • 10:00', passengers: 2, total: 200000 },
+    { id: 'TRV123456795', type: 'flight', status: 'cancelled', bookingDate: '2024-07-15', serviceDate: '2024-08-20', title: 'HN - TP.HCM', details: 'VJ110 • 20:00 - 21:30', passengers: 1, total: 1200000 },
+    { id: 'TRV123456796', type: 'tour', status: 'confirmed', bookingDate: '2025-04-01', serviceDate: '2025-09-10', title: 'Tour Miền Tây 3N2Đ', details: 'Khách sạn 3* • 4 khách', passengers: 4, total: 8400000 },
 ];
 
 function formatPrice(v: number) {
@@ -77,6 +95,13 @@ function useBookingFromRoute(): Booking | null {
     const params = useParams() as any;
     const id = params?.id as string | undefined;
     return SAMPLE_BOOKINGS.find((b) => b.id === id) ?? null;
+}
+
+function ServiceIcon({ type }: { type: string }) {
+	if (type === 'flight') return <Plane className="h-4 w-4" />;
+	if (type === 'bus') return <Bus className="h-4 w-4" />;
+	if (type === 'tour') return <MapPin className="h-4 w-4" />;
+	return <Plane className="h-4 w-4" />;
 }
 
 export default function DoiLichPage() {
@@ -160,11 +185,12 @@ export default function DoiLichPage() {
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div className="flex items-start gap-3">
-                                    <div className="p-2 rounded bg-primary/10"><Plane className="h-4 w-4" /></div>
+                                    <div className="p-2 rounded bg-primary/10"><ServiceIcon type={booking.type} /></div>
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2">
                                             <h3 className="font-semibold">{booking.title}</h3>
                                             <Badge variant="secondary">{booking.id}</Badge>
+                                            <span className="ml-2 text-xs text-muted-foreground rounded px-2 py-0.5 border">{booking.type === 'flight' ? 'Máy bay' : booking.type === 'bus' ? 'Xe' : 'Tour'}</span>
                                         </div>
                                         <div className="text-sm text-muted-foreground">{booking.details}</div>
                                         <div className="text-sm text-muted-foreground">Ngày hiện tại: {booking.serviceDate}</div>
