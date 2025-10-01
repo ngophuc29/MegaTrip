@@ -681,7 +681,7 @@ export default function TaiKhoan() {
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
+                                <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                                     {userData.bookings.map((booking) => (
                                         <Card key={booking.id}>
                                             <CardContent className="p-6">

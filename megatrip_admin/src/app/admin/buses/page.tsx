@@ -15,6 +15,9 @@ import { ModalForm } from "../../components/ModalForm";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { useToast } from "../../components/ui/use-toast";
 
+// --- Add API base (points to port 7700 by default) ---
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+
 interface BusRoute {
     id: string;
     busCode: string;
@@ -87,194 +90,206 @@ const mockStations = [
 ];
 
 const busTypeOptions = [
-    { value: "Ghế ngồi", label: "Ghế ngồi" },
-    { value: "Giường nằm", label: "Giường nằm" },
-    { value: "Limousine", label: "Limousine" },
-    { value: "VIP", label: "VIP" }
+	{ value: "Ghế ngồi", label: "Ghế ngồi" },
+	{ value: "Giường nằm", label: "Giường nằm" },
+	{ value: "Limousine", label: "Limousine" },
+	{ value: "VIP", label: "VIP" }
 ];
 
-const mockBuses: BusRoute[] = [
-    {
-        id: "bus_001",
-        busCode: "PT001",
-        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
-        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
-        routeTo: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
-        departureAt: "2025-09-15T08:00:00.000Z",
-        arrivalAt: "2025-09-16T02:00:00.000Z",
-        duration: "18h 0m",
-        busType: ["Ghế ngồi", "Limousine"],
-        price: 650000,
-        seatsTotal: 45,
-        seatsAvailable: 30,
-        status: "scheduled",
-        amenities: "Wifi, Điều hòa, Nước uống miễn phí",
-        createdAt: "2025-09-01T10:00:00.000Z",
-        updatedAt: "2025-09-01T10:00:00.000Z",
-    },
-    {
-        id: "bus_002",
-        busCode: "HL002",
-        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
-        routeFrom: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
-        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
-        departureAt: "2025-09-16T18:00:00.000Z",
-        arrivalAt: "2025-09-17T06:00:00.000Z",
-        duration: "12h 0m",
-        busType: ["Giường nằm", "VIP"],
-        price: 500000,
-        seatsTotal: 40,
-        seatsAvailable: 10,
-        status: "scheduled",
-        amenities: "Wifi, Chăn gối, Nước uống",
-        createdAt: "2025-09-02T12:00:00.000Z",
-        updatedAt: "2025-09-02T12:00:00.000Z",
-    },
-    {
-        id: "bus_003",
-        busCode: "ML003",
-        operator: { id: "op_003", name: "Mai Linh", logo: "/placeholder.svg", code: "ML" },
-        routeFrom: { code: "SGN_MT", name: "Bến xe Miền Tây", city: "TP.HCM" },
-        routeTo: { code: "HAN_GL", name: "Bến xe Gia Lâm", city: "Hà Nội" },
-        departureAt: "2025-09-17T07:30:00.000Z",
-        arrivalAt: "2025-09-18T15:30:00.000Z",
-        duration: "32h 0m",
-        busType: ["Ghế ngồi"],
-        price: 1200000,
-        seatsTotal: 50,
-        seatsAvailable: 5,
-        status: "delayed",
-        amenities: "Điều hòa, Ghế ngả",
-        createdAt: "2025-09-03T09:00:00.000Z",
-        updatedAt: "2025-09-10T14:00:00.000Z",
-    },
-    {
-        id: "bus_004",
-        busCode: "TB004",
-        operator: { id: "op_004", name: "Thanh Bưởi", logo: "/placeholder.svg", code: "TB" },
-        routeFrom: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
-        routeTo: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
-        departureAt: "2025-09-18T20:00:00.000Z",
-        arrivalAt: "2025-09-19T14:00:00.000Z",
-        duration: "18h 0m",
-        busType: ["Limousine", "VIP"],
-        price: 800000,
-        seatsTotal: 30,
-        seatsAvailable: 15,
-        status: "scheduled",
-        amenities: "Wifi, TV, Nước uống",
-        createdAt: "2025-09-04T11:00:00.000Z",
-        updatedAt: "2025-09-04T11:00:00.000Z",
-    },
-    {
-        id: "bus_005",
-        busCode: "PT005",
-        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
-        routeFrom: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
-        routeTo: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
-        departureAt: "2025-09-19T09:00:00.000Z",
-        arrivalAt: "2025-09-19T21:00:00.000Z",
-        duration: "12h 0m",
-        busType: ["Giường nằm"],
-        price: 550000,
-        seatsTotal: 40,
-        seatsAvailable: 20,
-        status: "scheduled",
-        amenities: "Wifi, Điều hòa",
-        createdAt: "2025-09-05T08:00:00.000Z",
-        updatedAt: "2025-09-05T08:00:00.000Z",
-    },
-    {
-        id: "bus_006",
-        busCode: "HL006",
-        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
-        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
-        routeTo: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
-        departureAt: "2025-09-20T06:00:00.000Z",
-        arrivalAt: "2025-09-21T14:00:00.000Z",
-        duration: "32h 0m",
-        busType: ["VIP"],
-        price: 1300000,
-        seatsTotal: 35,
-        seatsAvailable: 0,
-        status: "cancelled",
-        amenities: "Wifi, Ghế massage, Nước uống",
-        createdAt: "2025-09-06T10:00:00.000Z",
-        updatedAt: "2025-09-10T15:00:00.000Z",
-    },
-    {
-        id: "bus_007",
-        busCode: "ML007",
-        operator: { id: "op_003", name: "Mai Linh", logo: "/placeholder.svg", code: "ML" },
-        routeFrom: { code: "HAN_GL", name: "Bến xe Gia Lâm", city: "Hà Nội" },
-        routeTo: { code: "SGN_MT", name: "Bến xe Miền Tây", city: "TP.HCM" },
-        departureAt: "2025-09-21T07:00:00.000Z",
-        arrivalAt: "2025-09-22T15:00:00.000Z",
-        duration: "32h 0m",
-        busType: ["Ghế ngồi", "Limousine"],
-        price: 1100000,
-        seatsTotal: 45,
-        seatsAvailable: 10,
-        status: "scheduled",
-        amenities: "Điều hòa, Nước uống",
-        createdAt: "2025-09-07T09:00:00.000Z",
-        updatedAt: "2025-09-07T09:00:00.000Z",
-    },
-    {
-        id: "bus_008",
-        busCode: "TB008",
-        operator: { id: "op_004", name: "Thanh Bưởi", logo: "/placeholder.svg", code: "TB" },
-        routeFrom: { code: "DAD_BX", name: "Bến xe Đà Nẵng", city: "Đà Nẵng" },
-        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
-        departureAt: "2025-09-22T10:00:00.000Z",
-        arrivalAt: "2025-09-22T12:30:00.000Z",
-        duration: "2h 30m",
-        busType: ["Ghế ngồi"],
-        price: 150000,
-        seatsTotal: 30,
-        seatsAvailable: 25,
-        status: "completed",
-        amenities: "Điều hòa",
-        createdAt: "2025-09-08T11:00:00.000Z",
-        updatedAt: "2025-09-08T11:00:00.000Z",
-    },
-    {
-        id: "bus_009",
-        busCode: "PT009",
-        operator: { id: "op_001", name: "Phương Trang", logo: "/placeholder.svg", code: "PT" },
-        routeFrom: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
-        routeTo: { code: "HUE_BX", name: "Bến xe Huế", city: "Huế" },
-        departureAt: "2025-09-23T08:30:00.000Z",
-        arrivalAt: "2025-09-24T02:30:00.000Z",
-        duration: "18h 0m",
-        busType: ["Giường nằm", "VIP"],
-        price: 700000,
-        seatsTotal: 40,
-        seatsAvailable: 12,
-        status: "scheduled",
-        amenities: "Wifi, Nước uống, Chăn gối",
-        createdAt: "2025-09-09T10:00:00.000Z",
-        updatedAt: "2025-09-09T10:00:00.000Z",
-    },
-    {
-        id: "bus_010",
-        busCode: "HL010",
-        operator: { id: "op_002", name: "Hoàng Long", logo: "/placeholder.svg", code: "HL" },
-        routeFrom: { code: "HAN_MB", name: "Bến xe Mỹ Đình", city: "Hà Nội" },
-        routeTo: { code: "SGN_MB", name: "Bến xe Miền Đông", city: "TP.HCM" },
-        departureAt: "2025-09-24T06:00:00.000Z",
-        arrivalAt: "2025-09-25T14:00:00.000Z",
-        duration: "32h 0m",
-        busType: ["Limousine"],
-        price: 1250000,
-        seatsTotal: 35,
-        seatsAvailable: 8,
-        status: "scheduled",
-        amenities: "Wifi, Ghế massage, Nước uống",
-        createdAt: "2025-09-10T09:00:00.000Z",
-        updatedAt: "2025-09-10T09:00:00.000Z",
-    },
+// --- New: amenities options ---
+const amenitiesOptions = [
+	"Wifi miễn phí",
+	"Điều hòa",
+	"Nước uống",
+	"Ăn nhẹ",
+	"Bữa ăn dọc đường"
 ];
+
+// --- New helper: safe collect all subtypes without flatMap ---
+const getAllSubtypes = (data: any) => {
+	// returns [] if data is not an array
+	if (!Array.isArray(data)) return [];
+	const result: any[] = [];
+	for (const cat of data) {
+		if (cat && Array.isArray(cat.subtypes)) {
+			for (const s of cat.subtypes) result.push(s);
+		}
+	}
+	return result;
+};
+
+// --- New helper: parse route select value into object { code, name, city } ---
+const parseRouteValue = (value: string) => {
+	// value may be "PROV_CODE||Station Name" (when loaded from provincesData)
+	if (!value) return null;
+	if (typeof value !== 'string') return null;
+
+	// try prov||station format
+	const parts = value.split('||');
+	if (parts.length === 2) {
+		const provCode = parts[0];
+		const stationName = parts[1];
+		// Guard access to provincesData (may be undefined at module scope)
+		if (typeof provincesData !== 'undefined' && Array.isArray(provincesData)) {
+			const prov = provincesData.find((p: any) => String(p.code) === String(provCode) || p.name === provCode);
+			if (prov && Array.isArray(prov.bus_stations)) {
+				const st = prov.bus_stations.find((s: any) => s.name === stationName);
+				if (st) {
+					return {
+						code: provCode,
+						name: st.name,
+						city: prov.name || prov.city || ''
+					};
+				}
+			}
+		}
+		// fallback: try to find station in mockStations by name
+		const m = mockStations.find(s => s.name === stationName || s.code === stationName);
+		if (m) return { code: m.code, name: m.name, city: m.city };
+		// fallback generic
+		return { code: provCode, name: stationName, city: '' };
+	}
+
+	// otherwise value might be a simple code like "SGN_MB"
+	const ms = mockStations.find(s => s.code === value);
+	if (ms) return { code: ms.code, name: ms.name, city: ms.city };
+	// if provincesData contains stations with matching code/name, try to search
+	// Guard access to provincesData (may be undefined at module scope)
+	if (typeof provincesData !== 'undefined' && Array.isArray(provincesData)) {
+		for (const prov of provincesData) {
+			if (Array.isArray(prov.bus_stations)) {
+				const st = prov.bus_stations.find((s: any) => s.name === value || s.code === value);
+				if (st) {
+					return { code: prov.code || value, name: st.name, city: prov.name || prov.city || '' };
+				}
+			}
+		}
+	}
+	return { code: value, name: value, city: '' };
+};
+
+// --- New helper: format a route object into the Select value used by the UI ---
+const formatRouteSelectValue = (routeObj: any) => {
+	// routeObj may be { code, name, city } or a simple code string
+	if (!routeObj) return "";
+	if (typeof routeObj === "string") return routeObj;
+
+	const code = routeObj.code || "";
+	const name = routeObj.name || "";
+
+	// prefer provincesData provCode||stationName when possible
+	if (typeof provincesData !== 'undefined' && Array.isArray(provincesData)) {
+		for (const prov of provincesData) {
+			if (!Array.isArray(prov.bus_stations)) continue;
+			const found = prov.bus_stations.find((s: any) => {
+				// match by station name or code or routeObj.name/code
+				return s.name === name || s.name === code || s.code === name || s.code === code;
+			});
+			if (found) {
+				return `${prov.code}||${found.name}`;
+			}
+		}
+	}
+
+	// fallback to mockStations by code or name
+	const ms = mockStations.find(s => s.code === code || s.name === name || s.code === name || s.name === code);
+	if (ms) return ms.code;
+
+	// fallback to use code if present, otherwise name
+	return code || name || "";
+};
+
+// --- Stronger validation ---
+const validateForm = (data: BusFormData): Record<string, string> => {
+	const errors: Record<string, string> = {};
+
+	// busCode: required, uppercase alnum/_- 3-12 chars
+	if (!data.busCode || !data.busCode.trim()) {
+		errors.busCode = "Bạn phải nhập mã tuyến xe";
+	} else {
+		const code = data.busCode.trim().toUpperCase();
+		const re = /^[A-Z0-9_-]{3,12}$/;
+		if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+	}
+
+	// operator: must exist in loaded operators (if available)
+	if (!data.operatorId) {
+		errors.operatorId = "Bạn phải chọn nhà xe";
+	} else if (operatorsData && Array.isArray(operatorsData)) {
+		const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+		if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+	}
+
+	// routeFrom / routeTo: required and must map to a station
+	if (!data.routeFrom) {
+		errors.routeFrom = "Bạn phải chọn điểm đi";
+	} else {
+		const parsedFrom = parseRouteValue(data.routeFrom);
+		if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+	}
+	if (!data.routeTo) {
+		errors.routeTo = "Bạn phải chọn điểm đến";
+	} else {
+		const parsedTo = parseRouteValue(data.routeTo);
+		if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+	}
+	// Ensure they are different
+	if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+		errors.routeTo = "Điểm đến phải khác điểm đi";
+	}
+
+	// departure/arrival
+	if (!data.departureAt) {
+		errors.departureAt = "Bạn phải chọn giờ xuất phát";
+	} else if (isNaN(new Date(data.departureAt).getTime())) {
+		errors.departureAt = "Giờ xuất phát không hợp lệ";
+	} else {
+        // disallow past departure times
+        const now = new Date();
+        if (new Date(data.departureAt) < now) {
+            errors.departureAt = "Giờ xuất phát không được ở quá khứ";
+        }
+    }
+	if (!data.arrivalAt) {
+		errors.arrivalAt = "Bạn phải chọn giờ đến";
+	} else if (isNaN(new Date(data.arrivalAt).getTime())) {
+		errors.arrivalAt = "Giờ đến không hợp lệ";
+	} else {
+        // disallow past arrival times
+        const now2 = new Date();
+        if (new Date(data.arrivalAt) < now2) {
+            errors.arrivalAt = "Giờ đến không được ở quá khứ";
+        }
+    }
+	if (data.departureAt && data.arrivalAt && !errors.departureAt && !errors.arrivalAt) {
+		if (new Date(data.arrivalAt) <= new Date(data.departureAt)) {
+			errors.arrivalAt = "Giờ đến phải sau giờ xuất phát";
+		}
+		// optional: require departure not too far in past (e.g. > now - 1 day) — skip strictness for edit
+	}
+
+	// numeric checks
+	if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
+		errors.price = "Giá vé phải là số lớn hơn 0";
+	}
+	if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+		errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+	}
+	if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+		errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+	} else if (data.seatsAvailable > data.seatsTotal) {
+		errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+	}
+
+	// busType must have at least one entry
+	if (!Array.isArray(data.busType) || data.busType.length === 0) {
+		errors.busType = "Bạn phải chọn ít nhất một loại xe";
+	}
+
+	// No strict requirement for amenities (checkboxes) — optional
+
+	return errors;
+};
 
 export default function Buses() {
     const [selectedBuses, setSelectedBuses] = useState<string[]>([]);
@@ -306,6 +321,13 @@ export default function Buses() {
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);
+    const [selectedSubtypeId, setSelectedSubtypeId] = useState<string>("");
+    // New: store selected subtype layout and constructed seatMap
+    const [selectedLayout, setSelectedLayout] = useState<any | null>(null);
+    const [seatMap, setSeatMap] = useState<any[] | null>(null);
+
+    // --- New state: selected amenities (checkboxes) ---
+	const [amenitiesSelected, setAmenitiesSelected] = useState<string[]>([]);
 
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -315,239 +337,324 @@ export default function Buses() {
         pageSize: 10,
     });
 
-    // Fetch buses with mock data
+    // Fetch buses from server API
     const { data: busesData, isLoading, error, refetch } = useQuery({
         queryKey: ['buses', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const filteredBuses = mockBuses.filter((bus) => {
-                const matchesSearch = bus.busCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    bus.operator.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    bus.routeFrom.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    bus.routeTo.city.toLowerCase().includes(searchQuery.toLowerCase());
-                const matchesOperator = filters.operator === 'all' || bus.operator.id === filters.operator;
-                const matchesStatus = filters.status === 'all' || bus.status === filters.status;
-                const matchesRoute = filters.route === 'all' ||
-                    `${bus.routeFrom.code}-${bus.routeTo.code}`.includes(filters.route);
-                return matchesSearch && matchesOperator && matchesStatus && matchesRoute;
-            });
+            const params = new URLSearchParams();
+            params.set('page', String(pagination.current));
+            params.set('pageSize', String(pagination.pageSize));
+            if (searchQuery) params.set('search', searchQuery);
+            if (filters.operator) params.set('operator', filters.operator);
+            if (filters.status) params.set('status', filters.status);
+            if (filters.route) params.set('route', filters.route);
 
-            const start = (pagination.current - 1) * pagination.pageSize;
-            const end = start + pagination.pageSize;
-            const paginatedBuses = filteredBuses.slice(start, end);
-
-            return {
-                data: paginatedBuses,
-                pagination: {
-                    total: filteredBuses.length,
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                },
-            };
+            const res = await fetch(`${API_BASE}/api/buses?${params.toString()}`);
+            if (!res.ok) throw new Error('Failed to fetch buses');
+            return res.json();
         },
     });
 
-    // Create bus mutation (mock implementation)
+    // --- Add data fetch for operators and stations (provinces) ---
+    const { data: operatorsData, isLoading: operatorsLoading } = useQuery({
+        queryKey: ['operators'],
+        queryFn: async () => {
+            // load local JSON from public folder
+            const res = await fetch('/nhaxekhach.json');
+            if (!res.ok) throw new Error('Failed to load operators (local json)');
+            return res.json();
+        },
+    });
+
+    const { data: provincesData, isLoading: provincesLoading } = useQuery({
+        queryKey: ['provinces_with_stations'],
+        queryFn: async () => {
+            // load local JSON from public folder
+            const res = await fetch('/cac_ben_xe_bus_chua_sat_nhap.json');
+            if (!res.ok) throw new Error('Failed to load stations (local json)');
+            return res.json();
+        },
+    });
+
+    // --- New: fetch vehicle categories (loaixe) ---
+    const { data: loaixeData, isLoading: loaixeLoading } = useQuery({
+        queryKey: ['loaixe'],
+        queryFn: async () => {
+            // load local JSON from public folder
+            const res = await fetch('/dsloaixevexere.json');
+            if (!res.ok) throw new Error('Failed to load vehicle types (local json)');
+            return res.json();
+        },
+    });
+
+    // Create bus mutation -> POST /api/buses
     const createBusMutation = useMutation({
         mutationFn: async (data: BusFormData) => {
-            const newBus: BusRoute = {
-                ...data,
-                id: `bus_${Date.now()}`,
-                operator: mockOperators.find(op => op.id === data.operatorId)!,
-                routeFrom: mockStations.find(st => st.code === data.routeFrom)!,
-                routeTo: mockStations.find(st => st.code === data.routeTo)!,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            };
-            mockBuses.push(newBus); // Add to mock data
-            return newBus;
+            const payload: any = { ...data };
+            // operatorId -> create operator object with minimal info (frontend keeps mockOperators)
+            const op = (operatorsData || mockOperators).find((o: any) => o.id === data.operatorId);
+            if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
+            const parsedFrom = parseRouteValue(data.routeFrom);
+            if (parsedFrom) payload.routeFrom = parsedFrom;
+            else payload.routeFrom = mockStations.find(s => s.code === data.routeFrom) || { code: data.routeFrom };
+
+            const parsedTo = parseRouteValue(data.routeTo);
+            if (parsedTo) payload.routeTo = parsedTo;
+            else payload.routeTo = mockStations.find(s => s.code === data.routeTo) || { code: data.routeTo };
+
+            payload.departureAt = new Date(data.departureAt).toISOString();
+            payload.arrivalAt = new Date(data.arrivalAt).toISOString();
+            // ensure duration is computed from departure -> arrival (arrival - departure)
+            payload.duration = calculateDuration(data.departureAt, data.arrivalAt);
+            const subtype = getAllSubtypes(loaixeData).find((s: any) => s.id === selectedSubtypeId);
+            if (subtype) {
+                payload.busType = [subtype.name];
+                // set total seats from seat_capacity (user wanted seat_capacity => Tổng số ghế)
+                if (typeof subtype.seat_capacity === 'number') payload.seatsTotal = subtype.seat_capacity;
+            }
+            // set amenities string from selected checkboxes
+            payload.amenities = amenitiesSelected.length ? amenitiesSelected.join(', ') : (payload.amenities || '');
+            payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+            // DEBUG: log payload so we can inspect what will be sent when creating a bus
+            console.log('[Buses] createBus payload:', payload);
+
+            const res = await fetch(`${API_BASE}/api/buses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to create');
+            }
+            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
             resetForm();
-            toast({
-                title: "Thêm tuyến xe thành công",
-                description: "Tuyến xe mới đã được thêm vào hệ thống",
-            });
+            toast({ title: "Thêm tuyến xe thành công", description: "Tuyến xe mới đã được thêm vào hệ thống" });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi thêm tuyến xe",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+            toast({ title: "Lỗi khi thêm tuyến xe", description: error.message, variant: "destructive" });
+        }
     });
 
-    // Update bus mutation (mock implementation)
+    // Update bus mutation -> PUT /api/buses/:id
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-            const index = mockBuses.findIndex(bus => bus.id === id);
-            if (index === -1) throw new Error('Bus not found');
-            mockBuses[index] = {
-                ...mockBuses[index],
-                ...data,
-                operator: mockOperators.find(op => op.id === (data.operatorId || mockBuses[index].operator.id))!,
-                routeFrom: mockStations.find(st => st.code === (data.routeFrom || mockBuses[index].routeFrom.code))!,
-                routeTo: mockStations.find(st => st.code === (data.routeTo || mockBuses[index].routeTo.code))!,
-                updatedAt: new Date().toISOString(),
-            };
-            return mockBuses[index];
+            const payload: any = { ...data };
+            if ((data as any).operatorId) {
+                const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
+                if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
+            }
+            if ((data as any).routeFrom) {
+				const parsedFromUp = parseRouteValue((data as any).routeFrom);
+				payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
+			}
+            if ((data as any).routeTo) {
+				const parsedToUp = parseRouteValue((data as any).routeTo);
+				payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
+			}
+            if ((data as any).departureAt) payload.departureAt = new Date((data as any).departureAt).toISOString();
+            if ((data as any).arrivalAt) payload.arrivalAt = new Date((data as any).arrivalAt).toISOString();
+            // compute duration when both departure and arrival are available in the payload
+            if (payload.departureAt && payload.arrivalAt) {
+                // payload.* are ISO strings — calculateDuration accepts date strings
+                payload.duration = calculateDuration(payload.departureAt, payload.arrivalAt);
+            }
+            const allSubtypes = getAllSubtypes(loaixeData);
+            let subtypeUpd;
+            if (selectedSubtypeId) {
+                subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
+            } else {
+                const firstTypeName = payload && payload.busType && payload.busType[0];
+                subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
+            }
+            if (subtypeUpd) {
+                payload.busType = [subtypeUpd.name];
+                if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
+            }
+            // set amenities string from selected checkboxes (if user changed via UI)
+            if (amenitiesSelected && amenitiesSelected.length) {
+				payload.amenities = amenitiesSelected.join(', ');
+			}
+            payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+            const res = await fetch(`${API_BASE}/api/buses/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to update');
+            }
+            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
             resetForm();
-            toast({
-                title: "Cập nhật tuyến xe thành công",
-                description: "Thông tin tuyến xe đã được cập nhật",
-            });
+            toast({ title: "Cập nhật tuyến xe thành công", description: "Thông tin tuyến xe đã được cập nhật" });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi cập nhật tuyến xe",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+            toast({ title: "Lỗi khi cập nhật tuyến xe", description: error.message, variant: "destructive" });
+        }
     });
 
-    // Delete bus mutation (mock implementation)
+    // Delete bus mutation -> DELETE /api/buses/:id
     const deleteBusMutation = useMutation({
         mutationFn: async (id: string) => {
-            const index = mockBuses.findIndex(bus => bus.id === id);
-            if (index === -1) throw new Error('Bus not found');
-            const deletedBus = mockBuses.splice(index, 1)[0];
-            return deletedBus;
+            const res = await fetch(`${API_BASE}/api/buses/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to delete');
+            }
+            return res.json();
         },
         onSuccess: (_, busId) => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setDeleteModalOpen(false);
             setBusToDelete(null);
-            const bus = busesData?.data?.find((b: BusRoute) => b.id === busId);
             toast({
                 title: "Đã xóa tuyến xe",
-                description: `Tuyến xe ${bus?.busCode} đã được xóa thành công`,
-                action: (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            toast({
-                                title: "Khôi phục thành công",
-                                description: "Tuyến xe đã được khôi phục",
-                            });
-                        }}
-                    >
-                        Hoàn tác
-                    </Button>
-                ),
+                description: `Tuyến xe đã được xóa thành công`,
             });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi xóa tuyến xe",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+            toast({ title: "Lỗi khi xóa tuyến xe", description: error.message, variant: "destructive" });
+        }
     });
 
-    // Bulk operations mutation (mock implementation)
+    // Bulk operations -> POST /api/buses/bulk
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            ids.forEach(id => {
-                const index = mockBuses.findIndex(bus => bus.id === id);
-                if (index !== -1) {
-                    if (action === 'delete') {
-                        mockBuses.splice(index, 1);
-                    } else if (action === 'activate') {
-                        mockBuses[index].status = 'scheduled';
-                        mockBuses[index].updatedAt = new Date().toISOString();
-                    } else if (action === 'cancel') {
-                        mockBuses[index].status = 'cancelled';
-                        mockBuses[index].updatedAt = new Date().toISOString();
-                    }
-                }
+            const res = await fetch(`${API_BASE}/api/buses/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, ids }),
             });
-            return { success: true };
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Bulk action failed');
+            }
+            return res.json();
         },
         onSuccess: (_, { action, ids }) => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setSelectedBuses([]);
             const actionText = action === 'activate' ? 'kích hoạt' : action === 'cancel' ? 'hủy' : 'xóa';
-            toast({
-                title: `Thực hiện thành công`,
-                description: `Đã ${actionText} ${ids.length} tuyến xe`,
-            });
+            toast({ title: `Thực hiện thành công`, description: `Đã ${actionText} ${ids.length} tuyến xe` });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi thực hiện thao tác",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+            toast({ title: "Lỗi khi thực hiện thao tác", description: error.message, variant: "destructive" });
+        }
     });
 
-    const buses = busesData?.data || [];
+    // Normalize incoming bus documents: ensure `id` exists (use `_id` when returned by Mongo)
+    const rawBuses = busesData?.data || [];
+    const buses = Array.isArray(rawBuses) ? rawBuses.map((b: any) => {
+        const id = b.id || b._id || (b._id ? String(b._id) : undefined);
+        return {
+            ...b,
+            id,
+            // ensure routeFrom/routeTo always exist to avoid undefined errors in UI/delete flow
+            routeFrom: b.routeFrom || (b.route && b.route.from) || { code: b.routeFrom?.code || '', name: b.routeFrom?.name || '', city: b.routeFrom?.city || '' },
+            routeTo: b.routeTo || (b.route && b.route.to) || { code: b.routeTo?.code || '', name: b.routeTo?.name || '', city: b.routeTo?.city || '' },
+        };
+    }) : [];
     const total = busesData?.pagination?.total || 0;
 
     // Form validation
     const validateForm = (data: BusFormData): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        if (!data.busCode.trim()) {
+        // busCode: required, uppercase alnum/_- 3-12 chars
+        if (!data.busCode || !data.busCode.trim()) {
             errors.busCode = "Bạn phải nhập mã tuyến xe";
+        } else {
+            const code = data.busCode.trim().toUpperCase();
+            const re = /^[A-Z0-9_-]{3,12}$/;
+            if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
         }
 
+        // operator: must exist in loaded operators (if available)
         if (!data.operatorId) {
             errors.operatorId = "Bạn phải chọn nhà xe";
+        } else if (operatorsData && Array.isArray(operatorsData)) {
+            const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+            if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
         }
 
+        // routeFrom / routeTo: required and must map to a station
         if (!data.routeFrom) {
             errors.routeFrom = "Bạn phải chọn điểm đi";
+        } else {
+            const parsedFrom = parseRouteValue(data.routeFrom);
+            if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
         }
-
         if (!data.routeTo) {
             errors.routeTo = "Bạn phải chọn điểm đến";
+        } else {
+            const parsedTo = parseRouteValue(data.routeTo);
+            if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
         }
-
-        if (data.routeFrom === data.routeTo) {
+        // Ensure they are different
+        if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
             errors.routeTo = "Điểm đến phải khác điểm đi";
         }
 
+        // departure/arrival
         if (!data.departureAt) {
             errors.departureAt = "Bạn phải chọn giờ xuất phát";
+        } else if (isNaN(new Date(data.departureAt).getTime())) {
+            errors.departureAt = "Giờ xuất phát không hợp lệ";
+        } else {
+            // disallow past departure times
+            const now = new Date();
+            if (new Date(data.departureAt) < now) {
+                errors.departureAt = "Giờ xuất phát không được ở quá khứ";
+            }
         }
-
         if (!data.arrivalAt) {
             errors.arrivalAt = "Bạn phải chọn giờ đến";
+        } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+            errors.arrivalAt = "Giờ đến không hợp lệ";
+        } else {
+            // disallow past arrival times
+            const now2 = new Date();
+            if (new Date(data.arrivalAt) < now2) {
+                errors.arrivalAt = "Giờ đến không được ở quá khứ";
+            }
+        }
+        if (data.departureAt && data.arrivalAt && !errors.departureAt && !errors.arrivalAt) {
+            if (new Date(data.arrivalAt) <= new Date(data.departureAt)) {
+                errors.arrivalAt = "Giờ đến phải sau giờ xuất phát";
+            }
+            // optional: require departure not too far in past (e.g. > now - 1 day) — skip strictness for edit
         }
 
-        if (data.departureAt && data.arrivalAt && new Date(data.arrivalAt) <= new Date(data.departureAt)) {
-            errors.arrivalAt = "Giờ đến phải sau giờ xuất phát";
+        // numeric checks
+        if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
+            errors.price = "Giá vé phải là số lớn hơn 0";
         }
-
-        if (data.price <= 0) {
-            errors.price = "Giá vé phải lớn hơn 0";
+        if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+            errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
         }
-
-        if (data.seatsTotal <= 0) {
-            errors.seatsTotal = "Số ghế phải lớn hơn 0";
-        }
-
-        if (data.seatsAvailable < 0) {
-            errors.seatsAvailable = "Số ghế có sẵn không được âm";
-        }
-
-        if (data.seatsAvailable > data.seatsTotal) {
+        if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+            errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+        } else if (data.seatsAvailable > data.seatsTotal) {
             errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
         }
 
-        if (data.busType.length === 0) {
+        // busType must have at least one entry
+        if (!Array.isArray(data.busType) || data.busType.length === 0) {
             errors.busType = "Bạn phải chọn ít nhất một loại xe";
         }
+
+        // No strict requirement for amenities (checkboxes) — optional
 
         return errors;
     };
@@ -570,6 +677,9 @@ export default function Buses() {
         });
         setFormErrors({});
         setIsFormDirty(false);
+        setSelectedSubtypeId("");
+        // clear amenities selection
+		setAmenitiesSelected([]);
     };
 
     const handleFormChange = (field: keyof BusFormData, value: any) => {
@@ -596,6 +706,50 @@ export default function Buses() {
         return `${hours}h ${minutes}m`;
     };
 
+    // helper: current local datetime suitable for <input type="datetime-local" />
+    const isoLocalNow = () => {
+        const d = new Date();
+        // convert to local ISO without seconds: YYYY-MM-DDTHH:mm
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0,16);
+    };
+    
+    // Helper: build seat map from a subtype.layout
+    const buildSeatMapFromLayout = (layout: any) => {
+        if (!layout || !Array.isArray(layout.rows)) return [];
+        const seats: any[] = [];
+        for (const row of layout.rows) {
+            if (!Array.isArray(row.seats)) continue;
+            for (const s of row.seats) {
+                seats.push({
+                    seatId: s.seat_id || s.id || `${row.row_index}-${(s.label || s.seat_id)}`,
+                    label: s.label || s.seat_id || '',
+                    type: s.type || 'seat',
+                    pos: s.pos || null,
+                    status: 'available' // initial
+                });
+            }
+        }
+        return seats;
+    };
+
+    // New: generate seatMap and mark N random seats as booked (bookedCount)
+    const generateSeatMapWithBooked = (layout: any, bookedCount: number) => {
+        const map = buildSeatMapFromLayout(layout);
+        if (!map.length) return map;
+        const availableIndices = map.map((_, i) => i);
+        // shuffle indices
+        for (let i = availableIndices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
+        }
+        let toBook = Math.min(bookedCount, map.length);
+        for (let k = 0; k < toBook; k++) {
+            map[availableIndices[k]].status = 'booked';
+        }
+        return map;
+    };
+
     const columns: Column[] = [
         {
             key: "busCode",
@@ -613,11 +767,7 @@ export default function Buses() {
             title: "Nhà xe",
             render: (value, record: BusRoute) => (
                 <div className="flex items-center space-x-2">
-                    <img
-                        src={value.logo}
-                        alt={value.name}
-                        className="w-8 h-8 rounded object-cover"
-                    />
+                     
                     <div>
                         <div className="font-medium">{value.name}</div>
                         <div className="text-sm text-gray-500">{value.code}</div>
@@ -748,8 +898,9 @@ export default function Buses() {
         setFormData({
             busCode: bus.busCode,
             operatorId: bus.operator.id,
-            routeFrom: bus.routeFrom.code,
-            routeTo: bus.routeTo.code,
+            // format select values so the Select component can find the matching option
+            routeFrom: formatRouteSelectValue(bus.routeFrom),
+            routeTo: formatRouteSelectValue(bus.routeTo),
             departureAt: bus.departureAt.slice(0, 16),
             arrivalAt: bus.arrivalAt.slice(0, 16),
             duration: bus.duration,
@@ -757,12 +908,19 @@ export default function Buses() {
             price: bus.price,
             seatsTotal: bus.seatsTotal,
             seatsAvailable: bus.seatsAvailable,
-            amenities: bus.amenities,
+            amenities: bus.amenities || "",
             status: bus.status
         });
         setModalMode("edit");
         setModalOpen(true);
         setIsFormDirty(false);
+        const existingTypeName = bus.busType && bus.busType[0];
+        if (existingTypeName && Array.isArray(loaixeData)) {
+            const found = getAllSubtypes(loaixeData).find((s: any) => s.name === existingTypeName);
+            if (found) setSelectedSubtypeId(found.id);
+        }
+        // populate amenitiesSelected from comma-separated amenities string
+		setAmenitiesSelected((bus.amenities || "").split(',').map((s) => s.trim()).filter(Boolean));
     };
 
     const handleDelete = (bus: BusRoute) => {
@@ -771,6 +929,8 @@ export default function Buses() {
     };
 
     const handleAdd = () => {
+        // DEBUG: user clicked "Thêm tuyến xe" -> open create modal
+        console.log('[Buses] handleAdd: opening create modal, resetting form');
         setSelectedBus(null);
         resetForm();
         setModalMode("create");
@@ -790,6 +950,15 @@ export default function Buses() {
             return;
         }
 
+        // LOG: show the current data/state that will be submitted
+        console.log('[Buses] submit - mode:', modalMode, {
+            formData,
+            selectedSubtypeId,
+            selectedLayout,
+            seatMap,
+            amenitiesSelected
+        });
+
         if (modalMode === "create") {
             createBusMutation.mutate(formData);
         } else if (modalMode === "edit" && selectedBus) {
@@ -798,20 +967,25 @@ export default function Buses() {
     };
 
     const confirmDelete = () => {
-        if (busToDelete) {
-            const bookedSeats = busToDelete.seatsTotal - busToDelete.seatsAvailable;
-            if (bookedSeats > 0) {
-                toast({
-                    title: "Không thể xóa tuyến xe",
-                    description: "Tuyến xe này có đặt chỗ. Vui lòng hủy tuyến xe thay vì xóa.",
-                    variant: "destructive",
-                });
-                return;
+        if (!busToDelete) return;
+        // ConfirmModal already forces typing "DELETE" or "FORCE_DELETE" when there are bookings.
+        // Proceed with deletion when user confirms.
+        deleteBusMutation.mutate(busToDelete.id);
+    };
+    // Immediately call DELETE /api/buses/:id (no confirm) and refresh list
+    const handleForceDeleteApi = async (id: string) => {
+        try {
+            const res = await fetch(`${API_BASE}/api/buses/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to delete');
             }
-            deleteBusMutation.mutate(busToDelete.id);
+            toast({ title: "Đã xóa tuyến xe", description: `ID: ${id}` });
+            queryClient.invalidateQueries({ queryKey: ['buses'] });
+        } catch (err: any) {
+            toast({ title: "Lỗi khi xóa tuyến xe", description: err.message || String(err), variant: "destructive" });
         }
     };
-
     const bulkActions = [
         {
             label: "Kích hoạt",
@@ -852,6 +1026,12 @@ export default function Buses() {
         {
             label: "Xóa",
             action: handleDelete,
+            icon: <Trash2 className="mr-2 h-4 w-4" />,
+            variant: "destructive" as const,
+        },
+        {
+            label: "Xóa ngay",
+            action: (bus: BusRoute) => handleForceDeleteApi(bus.id),
             icon: <Trash2 className="mr-2 h-4 w-4" />,
             variant: "destructive" as const,
         },
@@ -979,11 +1159,11 @@ export default function Buses() {
                                 <SelectValue placeholder="Chọn nhà xe" />
                             </SelectTrigger>
                             <SelectContent>
-                                {mockOperators.map((operator) => (
+                                {(operatorsData && Array.isArray(operatorsData) ? operatorsData : mockOperators).map((operator: any) => (
                                     <SelectItem key={operator.id} value={operator.id}>
                                         <div className="flex items-center space-x-2">
-                                            <img src={operator.logo} alt={operator.name} className="w-6 h-6 rounded" />
-                                            <span>{operator.name} ({operator.code})</span>
+                                            <img src={operator.logo || '/placeholder.svg'} alt={operator.name} className="w-6 h-6 rounded" />
+                                            <span>{operator.name} {operator.code ? `(${operator.code})` : ''}</span>
                                         </div>
                                     </SelectItem>
                                 ))}
@@ -1006,11 +1186,24 @@ export default function Buses() {
                                 <SelectValue placeholder="Chọn điểm đi" />
                             </SelectTrigger>
                             <SelectContent>
-                                {mockStations.map((station) => (
-                                    <SelectItem key={station.code} value={station.code}>
-                                        {station.code} - {station.name} ({station.city})
-                                    </SelectItem>
-                                ))}
+                                {Array.isArray(provincesData) ? (
+                                    provincesData.map((prov: any) => (
+                                        <div key={prov.code}>
+                                            <div className="px-3 py-1 text-sm font-semibold text-gray-700">{prov.name}</div>
+                                            {Array.isArray(prov.bus_stations) && prov.bus_stations.map((st: any, idx: number) => (
+                                                <SelectItem key={prov.code + '|' + idx} value={`${prov.code}||${st.name}`}>
+                                                    {st.name} {st.address ? `- ${st.address}` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </div>
+                                    ))
+                                ) : (
+                                    mockStations.map((station) => (
+                                        <SelectItem key={station.code} value={station.code}>
+                                            {station.code} - {station.name} ({station.city})
+                                        </SelectItem>
+                                    ))
+                                )}
                             </SelectContent>
                         </Select>
                         {formErrors.routeFrom && (
@@ -1027,11 +1220,24 @@ export default function Buses() {
                                 <SelectValue placeholder="Chọn điểm đến" />
                             </SelectTrigger>
                             <SelectContent>
-                                {mockStations.map((station) => (
-                                    <SelectItem key={station.code} value={station.code}>
-                                        {station.code} - {station.name} ({station.city})
-                                    </SelectItem>
-                                ))}
+                                {Array.isArray(provincesData) ? (
+                                    provincesData.map((prov: any) => (
+                                        <div key={prov.code}>
+                                            <div className="px-3 py-1 text-sm font-semibold text-gray-700">{prov.name}</div>
+                                            {Array.isArray(prov.bus_stations) && prov.bus_stations.map((st: any, idx: number) => (
+                                                <SelectItem key={prov.code + '|' + idx} value={`${prov.code}||${st.name}`}>
+                                                    {st.name} {st.address ? `- ${st.address}` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </div>
+                                    ))
+                                ) : (
+                                    mockStations.map((station) => (
+                                        <SelectItem key={station.code} value={station.code}>
+                                            {station.code} - {station.name} ({station.city})
+                                        </SelectItem>
+                                    ))
+                                )}
                             </SelectContent>
                         </Select>
                         {formErrors.routeTo && (
@@ -1054,6 +1260,8 @@ export default function Buses() {
                                     if (duration) handleFormChange('duration', duration);
                                 }
                             }}
+                           // prevent picking past datetime
+                            min={isoLocalNow()}
                             className={formErrors.departureAt ? "border-red-500" : ""}
                         />
                         {formErrors.departureAt && (
@@ -1073,6 +1281,8 @@ export default function Buses() {
                                     if (duration) handleFormChange('duration', duration);
                                 }
                             }}
+                          // arrival cannot be earlier than departure (if set), otherwise not in the past
+                            min={formData.departureAt && formData.departureAt.length ? formData.departureAt : isoLocalNow()}
                             className={formErrors.arrivalAt ? "border-red-500" : ""}
                         />
                         {formErrors.arrivalAt && (
@@ -1144,39 +1354,112 @@ export default function Buses() {
 
                 <div>
                     <Label>Loại xe *</Label>
-                    <div className="mt-2 space-y-2">
-                        {busTypeOptions.map((option) => (
-                            <div key={option.value} className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={option.value}
-                                    checked={formData.busType.includes(option.value)}
-                                    onCheckedChange={(checked) => {
-                                        if (checked) {
-                                            handleFormChange('busType', [...formData.busType, option.value]);
-                                        } else {
-                                            handleFormChange('busType', formData.busType.filter(t => t !== option.value));
-                                        }
-                                    }}
-                                />
-                                <Label htmlFor={option.value}>{option.label}</Label>
-                            </div>
-                        ))}
+                    <div className="mt-2">
+                        <Select value={selectedSubtypeId} onValueChange={(val) => {
+                            setSelectedSubtypeId(val);
+                            // find subtype by id to set formData.busType and seatsTotal
+                            const subtypeSel = getAllSubtypes(loaixeData).find((s: any) => s.id === val);
+                            if (subtypeSel) {
+                                setSelectedLayout(subtypeSel.layout || null);
+                                handleFormChange('busType', [subtypeSel.name]);
+                                if (typeof subtypeSel.seat_capacity === 'number') {
+                                    const cap = subtypeSel.seat_capacity;
+                                    handleFormChange('seatsTotal', cap);
+                                    // default: mark ~10% as already booked (so seatsAvailable < seatsTotal)
+                                    const bookedDefault = Math.max(1, Math.floor(cap * 0.1));
+                                    const avail = Math.max(0, cap - bookedDefault);
+                                    handleFormChange('seatsAvailable', avail);
+                                    // build seatMap and set booked seats
+                                    const map = generateSeatMapWithBooked(subtypeSel.layout, bookedDefault);
+                                    setSeatMap(map);
+                                } else {
+                                    handleFormChange('seatsTotal', 0);
+                                    setSeatMap(null);
+                                }
+                            } else {
+                                handleFormChange('busType', []);
+                                setSelectedLayout(null);
+                                setSeatMap(null);
+                                handleFormChange('seatsTotal', 0);
+                            }
+                            setIsFormDirty(true);
+                        }}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Chọn loại xe (chọn 1 loại con)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                   {/*
+                     Prefer categories from loaixeData when it contains subtypes.
+                     Otherwise try a flat list from getAllSubtypes(loaixeData).
+                     Only if both are empty do we fallback to busTypeOptions.
+                   */}
+                   {Array.isArray(loaixeData) && loaixeData.length > 0 && loaixeData.some((c: any) => Array.isArray(c.subtypes) && c.subtypes.length > 0) ? (
+                       loaixeData.map((cat: any) => (
+                           <div key={cat.id || cat.name}>
+                               <div className="px-3 py-1 text-sm font-semibold text-gray-700">{cat.name}</div>
+                               {Array.isArray(cat.subtypes) && cat.subtypes.map((s: any) => (
+                                   <SelectItem key={s.id || s.name} value={s.id || s.name}>
+                                       {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
+                                   </SelectItem>
+                               ))}
+                           </div>
+                       ))
+                   ) : (() => {
+                       const flat = getAllSubtypes(loaixeData);
+                       if (flat && flat.length > 0) {
+                           return flat.map((s: any) => (
+                               <SelectItem key={s.id || s.name} value={s.id || s.name}>
+                                   {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
+                               </SelectItem>
+                           ));
+                       }
+                       // final fallback: small static list
+                       return busTypeOptions.map((option) => (
+                           <SelectItem key={option.value} value={option.value}>
+                               {option.label}
+                           </SelectItem>
+                       ));
+                   })()}
+                            </SelectContent>
+                        </Select>
+                        {formErrors.busType && (
+                            <p className="text-sm text-red-500 mt-1">{formErrors.busType}</p>
+                        )}
+                        <p className="text-sm text-gray-500 mt-2">Chọn 1 loại con; Tổng số ghế sẽ được đặt từ seat_capacity (nếu có). Ghế có sẵn giữ nguyên.</p>
                     </div>
-                    {formErrors.busType && (
-                        <p className="text-sm text-red-500 mt-1">{formErrors.busType}</p>
-                    )}
                 </div>
 
-                <div>
-                    <Label htmlFor="amenities">Tiện ích</Label>
-                    <Textarea
-                        id="amenities"
-                        value={formData.amenities}
-                        onChange={(e) => handleFormChange('amenities', e.target.value)}
-                        placeholder="Wifi miễn phí, điều hòa, nước uống"
-                        rows={3}
-                    />
-                </div>
+                {/* --- Replace Textarea with amenities checkboxes --- */}
+				<div>
+					<Label>Tiện ích</Label>
+					<div className="mt-2 space-y-2">
+						{amenitiesOptions.map((opt) => {
+							const checked = amenitiesSelected.includes(opt);
+							return (
+								<div key={opt} className="flex items-center space-x-2">
+									<Checkbox
+										id={opt}
+										checked={checked}
+										onCheckedChange={(c) => {
+											setIsFormDirty(true);
+											if (c) {
+												setAmenitiesSelected(prev => [...prev, opt]);
+											} else {
+												setAmenitiesSelected(prev => prev.filter(a => a !== opt));
+											}
+											// clear errors if any
+											if (formErrors['amenities']) {
+												setFormErrors(prev => ({ ...prev, amenities: "" }));
+											}
+										}}
+									/>
+									<Label htmlFor={opt}>{opt}</Label>
+								</div>
+							);
+						})}
+					</div>
+					<p className="text-sm text-gray-500 mt-2">Chọn các tiện ích có sẵn trên tuyến.</p>
+				</div>
 
                 <div>
                     <Label htmlFor="status">Trạng thái</Label>
@@ -1363,7 +1646,9 @@ export default function Buses() {
                 message={`Bạn có chắc chắn muốn xóa tuyến xe "${busToDelete?.busCode}"?${busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? ' Tuyến xe này có đặt chỗ.' : ''}`}
                 type="danger"
                 requireTyping={true}
-                typingText={busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? "FORCE_DELETE" : "DELETE"}
+                // typingText={busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? "FORCE_DELETE" : "DELETE"}
+                typingText={busToDelete   ? "FORCE_DELETE" : "DELETE"}
+
                 onConfirm={confirmDelete}
                 confirmText="Xóa tuyến xe"
                 loading={deleteBusMutation.isPending}
