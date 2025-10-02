@@ -1764,7 +1764,9 @@ export default function Tours() {
                                                         }
                                                     }}
                                                     min={isoLocalNow()}
-                                                    className={formErrors[`startDates_${idx}`] ? "border-red-500" : ""}
+                                                    className={`w-full ${formErrors[`startDates_${idx}`] ? "border-red-500" : ""}`}
+
+
                                                 />
                                             </div>
 
@@ -2372,24 +2374,24 @@ export default function Tours() {
                 submitDisabled={isSubmitDisabled()}
                 submitText={modalMode === "create" ? "Tạo & Xuất bản" : "Cập nhật"}
                 cancelText="Hủy"
-                extraActions={
-                    modalMode !== "view"
-                        ? [
-                            {
-                                text: "Lưu nháp",
-                                onClick: handleSaveDraft,
-                                variant: "outline" as const,
-                                icon: <Save className="w-4 h-4 mr-2" />,
-                            },
-                            {
-                                text: "Xem trước",
-                                onClick: handlePreview,
-                                variant: "outline" as const,
-                                icon: <ExternalLink className="w-4 h-4 mr-2" />,
-                            },
-                        ]
-                        : undefined
-                }
+                // extraActions={
+                //     modalMode !== "view"
+                //         ? [
+                //             {
+                //                 text: "Lưu nháp",
+                //                 onClick: handleSaveDraft,
+                //                 variant: "outline" as const,
+                //                 icon: <Save className="w-4 h-4 mr-2" />,
+                //             },
+                //             {
+                //                 text: "Xem trước",
+                //                 onClick: handlePreview,
+                //                 variant: "outline" as const,
+                //                 icon: <ExternalLink className="w-4 h-4 mr-2" />,
+                //             },
+                //         ]
+                //         : undefined
+                // }
             >
                 <div className="max-h-[60vh] overflow-y-auto pr-2">
                     {renderTourForm()}
