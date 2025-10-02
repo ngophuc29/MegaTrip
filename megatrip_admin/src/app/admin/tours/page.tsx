@@ -18,7 +18,9 @@ import { ConfirmModal } from "../../components/ConfirmModal";
 import { ImageUploader } from "../../components/ImageUploader";
 import { RichTextEditor } from "../../components/RichTextEditor";
 import { useToast } from "../../components/ui/use-toast";
-
+import dynamic from "next/dynamic";
+import { Separator } from "@/app/components/ui/separator";
+const JoditEditorWrapper = dynamic(() => import("../../components/JoditEditorWrapper"), { ssr: false });
 interface Tour {
     id: string;
     title: string;
@@ -288,6 +290,35 @@ const mockTours: Tour[] = [
         updatedAt: "2025-09-12T10:00:00Z",
     },
 ];
+const DEFAULT_CANCELLATION_POLICY = `
+        CHÍNH SÁCH ĐẶT TOUR
+
+        1. Thanh toán & đặt cọc
+        - Khách đặt tour cần **đặt cọc tối thiểu 30% giá tour hoặc 1.000.000đ/người** (tùy mức nào cao hơn).
+        - Phần còn lại thanh toán trước ngày khởi hành 5 ngày.
+
+        2. Hủy tour bởi khách hàng
+        - Trước 15 ngày: mất phí 30% tổng giá trị tour.
+        - Trước 7 – 14 ngày: mất phí 50%.
+        - Trước 3 – 6 ngày: mất phí 70%.
+        - Trong 48h trước ngày khởi hành: mất phí 100%.
+
+        3. Chuyển / đổi tour
+        - Trước 7 ngày: miễn phí.
+        - Trong vòng 7 ngày: tính phí như hủy tour.
+
+        4. Hủy tour bởi công ty
+        - Nếu tour **không đủ số lượng khách trước ngày khởi hành 3 ngày** → hoàn tiền 100% cho khách.
+        - Nếu tour bị hủy do công ty (khác lý do thiên tai, bất khả kháng) → khách có quyền chọn chuyển tour khác hoặc hoàn tiền 100%.
+
+        5. Trường hợp bất khả kháng
+        - Thiên tai, dịch bệnh, khủng bố, biểu tình… có thể ảnh hưởng lịch trình.
+        - Công ty sẽ thông báo sớm nhất và đảm bảo quyền lợi tối đa cho khách.
+
+        6. Tranh chấp
+        - Các bên ưu tiên thương lượng, hòa giải.
+        - Nếu không đạt được thỏa thuận, tranh chấp sẽ được giải quyết theo **pháp luật Việt Nam**.
+        `;
 
 export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
@@ -328,7 +359,8 @@ export default function Tours() {
         inclusions: [],
         exclusions: [],
         pickupPoints: [],
-        cancellationPolicy: "",
+        // set default cancellation policy text here
+        cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
         status: "draft",
         highlight: false,
         visibility: "public",
@@ -421,6 +453,54 @@ export default function Tours() {
             }
         }
         return result;
+    };
+
+    // Chuyển chuỗi duration (ví dụ "3 ngày 2 đêm" hoặc "3N2Đ") sang số ngày (3).
+    const parseDurationToDays = (durationStr?: string, startIso?: string, endIso?: string): number => {
+        if (durationStr) {
+            // match "3 ngày", "3 ngày 2 đêm"
+            const vnMatch = durationStr.match(/(\d+)\s*ngày/i);
+            if (vnMatch) return Math.max(1, parseInt(vnMatch[1], 10));
+
+            // match compact "3N2Đ" or "3n2đ"
+            const compactMatch = durationStr.match(/(\d+)\s*[Nn]\s*(\d+)?\s*[ĐĐd]?/);
+            if (compactMatch) return Math.max(1, parseInt(compactMatch[1], 10));
+        }
+
+        if (startIso && endIso) {
+            const s = parseLocalInput(startIso);
+            const e = parseLocalInput(endIso);
+            if (s && e && e.getTime() >= s.getTime()) {
+                // số ngày = chênh lệch ngày (full days) + 1 (inclusive)
+                const diffDays = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
+                return diffDays + 1;
+            }
+        }
+
+        return 0;
+    };
+
+    // Đảm bảo itinerary có đúng số ngày; giữ nội dung hiện có nếu có, tạo rỗng nếu cần
+    const ensureItineraryLength = (days: number, existing: TourFormData["itinerary"]): TourFormData["itinerary"] => {
+        const n = Math.max(0, Math.floor(days));
+        const next: TourFormData["itinerary"] = [];
+        for (let i = 0; i < n; i++) {
+            const existingDay = existing && existing[i];
+            if (existingDay) {
+                next.push({ ...existingDay, dayNumber: i + 1 });
+            } else {
+                next.push({ dayNumber: i + 1, title: "", details: "" });
+            }
+        }
+        return next;
+    };
+
+    // Đổi: thêm helper lấy số ngày mong đợi dựa vào duration hoặc start/end
+    const getExpectedItineraryDays = () => {
+        const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
+        const firstEnd = (formData.endDates && formData.endDates.length) ? formData.endDates[0] : formData.endDate;
+        // parseDurationToDays sẽ trả về 0 nếu không thể xác định
+        return parseDurationToDays(formData.duration || undefined, firstStart, firstEnd);
     };
 
     const applyRecurrence = () => {
@@ -559,6 +639,8 @@ export default function Tours() {
             });
         },
     });
+
+    
 
     // Update tour mutation
     const updateTourMutation = useMutation({
@@ -802,18 +884,21 @@ export default function Tours() {
     const calculateDuration = (start: string, end: string): string => {
         if (!start || !end) return "";
 
-        const startTime = new Date(start);
-        const endTime = new Date(end);
+        const startTime = parseLocalInput(start) || new Date(start);
+        const endTime = parseLocalInput(end) || new Date(end);
         const diffMs = endTime.getTime() - startTime.getTime();
 
         if (diffMs <= 0) return "";
 
-        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        // diff full days, inclusive days = diffDays + 1, nights = diffDays
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const days = diffDays + 1;
+        const nights = Math.max(0, diffDays);
 
-        return `${days > 0 ? days + ' ngày ' : ''}${hours > 0 ? hours + 'h ' : ''}${minutes > 0 ? minutes + 'm' : ''}`.trim();
+        // trả về dạng thân thiện: "3 ngày 2 đêm"
+        return `${days} ngày ${nights} đêm`;
     };
+
 
     const isoLocalNow = () => {
         const d = new Date();
@@ -848,7 +933,8 @@ export default function Tours() {
             inclusions: [],
             exclusions: [],
             pickupPoints: [],
-            cancellationPolicy: "",
+            // restore default cancellation policy on reset
+            cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
             status: "draft",
             highlight: false,
             visibility: "public",
@@ -863,26 +949,58 @@ export default function Tours() {
     };
 
     const handleFormChange = (field: keyof TourFormData, value: any) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
-        // Auto-generate slug from title
-        if (field === "title" && value) {
-            const slug = value
-                .toLowerCase()
-                .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, "a")
-                .replace(/[èéẹẻẽêềếệểễ]/g, "e")
-                .replace(/[ìíịỉĩ]/g, "i")
-                .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, "o")
-                .replace(/[ùúụủũưừứựửữ]/g, "u")
-                .replace(/[ỳýỵỷỹ]/g, "y")
-                .replace(/đ/g, "d")
-                .replace(/[^a-z0-9\s-]/g, "")
-                .replace(/\s+/g, "-")
-                .replace(/-+/g, "-")
-                .trim("-");
-            setFormData((prev) => ({ ...prev, slug }));
-        }
+        // compute next state synchronously so we can derive duration/itinerary reliably
+        setFormData((prev) => {
+            const next: any = { ...prev, [field]: value };
+
+            // Auto-generate slug from title if user types title
+            if (field === "title" && value) {
+                const slug = value
+                    .toLowerCase()
+                    .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, "a")
+                    .replace(/[èéẹẻẽêềếệểễ]/g, "e")
+                    .replace(/[ìíịỉĩ]/g, "i")
+                    .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, "o")
+                    .replace(/[ùúụủũưừứựửữ]/g, "u")
+                    .replace(/[ỳýỵỷỹ]/g, "y")
+                    .replace(/đ/g, "d")
+                    .replace(/[^a-z0-9\s-]/g, "")
+                    .replace(/\s+/g, "-")
+                    .replace(/-+/g, "-")
+                    .trim("-");
+                // only auto-set slug if empty or derived from previous title
+                if (!prev.slug || prev.slug === "" || prev.slug === (prev.title || "").toLowerCase().replace(/\s+/g, "-")) {
+                    next.slug = slug;
+                }
+            }
+
+            // Determine first start/end after this change
+            const firstStart = (next.startDates && next.startDates.length) ? next.startDates[0] : next.startDate;
+            const firstEnd = (next.endDates && next.endDates.length) ? next.endDates[0] : next.endDate;
+
+            // If we have both start and end, compute duration and adjust itinerary
+            if (firstStart && firstEnd) {
+                const computedDuration = calculateDuration(firstStart, firstEnd);
+                next.duration = computedDuration;
+                const days = parseDurationToDays(computedDuration, firstStart, firstEnd);
+                if (days > 0) {
+                    next.itinerary = ensureItineraryLength(days, next.itinerary || []);
+                }
+            } else {
+                // if only duration changed explicitly, still allow updating itinerary
+                if (field === "duration") {
+                    const days = parseDurationToDays(value, firstStart, firstEnd);
+                    if (days > 0) {
+                        next.itinerary = ensureItineraryLength(days, next.itinerary || []);
+                    }
+                    next.duration = value;
+                }
+            }
+
+            return next;
+        });
 
         // Clear error for this field
         if (formErrors[field]) {
@@ -1719,7 +1837,7 @@ export default function Tours() {
                         </div>
 
                         <div>
-                            <Label htmlFor="duration" className="mt-2 block">Thời gian di chuyển</Label>
+                            <Label htmlFor="duration" className="mt-2 block">Thời lượng </Label>
                             <Input
                                 id="duration"
                                 value={formData.duration}
@@ -1863,81 +1981,101 @@ export default function Tours() {
                         />
                     </div>
                 </TabsContent>
-
                 <TabsContent value="itinerary" className="space-y-4 mt-6">
-                    <div>
-                        <Label htmlFor="description">Mô tả chi tiết</Label>
-                        <RichTextEditor
+                    <div className="space-y-4 mb-16">
+                        <Label className="text-xl font-semibold text-gray-900" htmlFor="description">Mô tả chi tiết</Label>
+                        <JoditEditorWrapper
                             value={formData.description}
-                            onChange={(value) => handleFormChange("description", value)}
-                            placeholder="Mô tả chi tiết về tour"
+                            onChange={(newContent) => handleFormChange("description", newContent)}
+                            placeholder="Mô tả chi tiết ngày này"
                         />
                     </div>
 
-                    <div>
-                        <Label>Lịch trình từng ngày</Label>
-                        <div className="mt-2 space-y-3">
-                            {formData.itinerary.map((day, index) => (
-                                <div key={index} className="border rounded-lg p-4">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-medium">Ngày {day.dayNumber}</h4>
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => duplicateItineraryDay(index)}
-                                            >
-                                                <Copy className="w-3 h-3 mr-1" />
-                                                Sao chép
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => removeItineraryDay(index)}
-                                            >
-                                                <Trash2 className="w-3 h-3 mr-1" />
-                                                Xóa
-                                            </Button>
-                                        </div>
+                    <Separator />
+                    {/* NOTE: show mapping info if we can/can't derive number of days */}
+                    {(() => {
+                        const expected = getExpectedItineraryDays();
+                        if (expected === 0) {
+                            return (
+                                <div className="text-sm text-gray-500 mb-2">
+                                    Không thể tự động xác định số ngày cho lịch trình chi tiết.
+                                    Vui lòng đảm bảo đã đặt Ngày bắt đầu & Ngày kết thúc cho chuyến đầu tiên
+                                    hoặc có trường Thời lượng hợp lệ để hệ thống tự map số ngày.
+                                </div>
+                            );
+                        }
+                        if (formData.itinerary.length !== expected) {
+                            return (
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-sm text-yellow-600">
+                                        Số ngày lịch trình hiện tại: {formData.itinerary.length} — mong đợi theo thời lượng: {expected} ngày.
+                                    </p>
+                                    <div className="flex items-center space-x-2">
+                                        <Button
+                                            size="sm"
+                                            onClick={() => {
+                                                const nextIt = ensureItineraryLength(expected, formData.itinerary || []);
+                                                handleFormChange("itinerary", nextIt);
+                                            }}
+                                        >
+                                            Đồng bộ với thời lượng
+                                        </Button>
                                     </div>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <Label className="text-xl font-semibold text-gray-900">Lịch trình chi tiết <span className="text-gray-500">{formData.itinerary.length} ngày theo thời lượng tour </span></Label>
+                            {/* <Button onClick={addItineraryDay} size="sm">
+                                 <Plus className="w-4 h-4 mr-2" />
+                                 Thêm ngày
+                             </Button> */}
+                        </div>
+                        {formData.itinerary.map((day, index) => (
+                            <div key={index} className="border rounded-lg p-4 space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h4 className="font-medium">Ngày {day.dayNumber}</h4>
+                                    <div className="flex space-x-2">
+                                        {/* <Button
+                                             variant="outline"
+                                             size="sm"
+                                             onClick={() => duplicateItineraryDay(index)}
+                                         >
+                                             <Copy className="w-4 h-4 mr-2" />
+                                             Sao chép
+                                         </Button> */}
+                                        {/* <Button
+                                             variant="destructive"
+                                             size="sm"
+                                             onClick={() => removeItineraryDay(index)}
+                                         >
+                                             <Trash2 className="w-4 h-4 mr-2" />
+                                             Xóa
+                                         </Button> */}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label htmlFor={`itinerary-title-${index}`}>Tiêu đề</Label>
                                     <Input
-                                        placeholder="Tiêu đề ngày"
+                                        id={`itinerary-title-${index}`}
                                         value={day.title}
                                         onChange={(e) => updateItineraryDay(index, "title", e.target.value)}
-                                        className="mb-2"
+                                        placeholder="Ví dụ: Khám phá hang Sửng Sốt"
                                     />
-                                    {/* Chi tiết hoạt động: dùng RichTextEditor thay cho Textarea */}
-                                    <RichTextEditor
+                                </div>
+                                <div>
+                                    <Label htmlFor={`itinerary-details-${index}`}>Chi tiết</Label>
+                                    <JoditEditorWrapper
                                         value={day.details}
-                                        onChange={(value) => updateItineraryDay(index, "details", value)}
-                                        placeholder="Chi tiết hoạt động trong ngày"
+                                        onChange={(newContent) => updateItineraryDay(index, "details", newContent)}
+                                        placeholder="Mô tả chi tiết ngày này"
                                     />
                                 </div>
-                            ))}
-
-                            {formData.itinerary.length === 0 && (
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                                    <p className="text-gray-500">Chưa có lịch trình nào</p>
-                                    <Button type="button" onClick={addItineraryDay} className="mt-2">
-                                        Thêm ngày đầu tiên
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-
-                        {formData.itinerary.length > 0 && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="w-full mt-4"
-                                onClick={addItineraryDay}
-                            >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Thêm ngày mới
-                            </Button>
-                        )}
+                            </div>
+                        ))}
                     </div>
                 </TabsContent>
 
