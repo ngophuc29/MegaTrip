@@ -1363,12 +1363,12 @@ export default function Buses() {
             icon: <Trash2 className="mr-2 h-4 w-4" />,
             variant: "destructive" as const,
         },
-        {
-            label: "Xóa ngay",
-            action: (bus: BusRoute) => handleForceDeleteApi(bus.id),
-            icon: <Trash2 className="mr-2 h-4 w-4" />,
-            variant: "destructive" as const,
-        },
+        // {
+        //     label: "Xóa ngay",
+        //     action: (bus: BusRoute) => handleForceDeleteApi(bus.id),
+        //     icon: <Trash2 className="mr-2 h-4 w-4" />,
+        //     variant: "destructive" as const,
+        // },
     ];
 
     const handleModalClose = () => {

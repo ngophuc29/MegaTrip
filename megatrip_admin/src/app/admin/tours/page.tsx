@@ -33,6 +33,7 @@ interface Tour {
     duration: string;
     priceAdult: number;
     priceChild?: number;
+    priceBaby?: number; // <-- thêm: giá em bé <5 tuổi
     seatsTotal: number;
     seatsBooked: number;
     minBooking: number;
@@ -74,6 +75,7 @@ interface TourFormData {
     duration: string;
     priceAdult: number;
     priceChild: number;
+    priceBaby: number; // <-- thêm: form field cho em bé <5
     seatsTotal: number;
     minBooking: number;
     categoryId: string;
@@ -127,6 +129,7 @@ const mockTours: Tour[] = [
         duration: "3 ngày 2 đêm",
         priceAdult: 6500000,
         priceChild: 4500000,
+        priceBaby: 1500000, // <-- thêm mẫu
         seatsTotal: 30,
         seatsBooked: 20,
         minBooking: 2,
@@ -183,6 +186,7 @@ const mockTours: Tour[] = [
         duration: "2 ngày 1 đêm",
         priceAdult: 3500000,
         priceChild: 2500000,
+        priceBaby: 1000000, // <-- thêm mẫu
         seatsTotal: 25,
         seatsBooked: 10,
         minBooking: 1,
@@ -231,6 +235,7 @@ const mockTours: Tour[] = [
         duration: "4 ngày 3 đêm",
         priceAdult: 7500000,
         priceChild: 5500000,
+        priceBaby: 2000000, // <-- thêm mẫu
         seatsTotal: 40,
         seatsBooked: 35,
         minBooking: 2,
@@ -306,6 +311,7 @@ export default function Tours() {
         duration: "",
         priceAdult: 0,
         priceChild: 0,
+        priceBaby: 0, // <-- khởi tạo
         seatsTotal: 1,
         minBooking: 1,
         categoryId: "",
@@ -372,6 +378,7 @@ export default function Tours() {
                 reviewCount: 0,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                // priceBaby sẽ được truyền từ data.priceBaby (đã có trong formData)
             };
             setTours((prev) => [...prev, newTour]);
             return newTour;
@@ -543,6 +550,18 @@ export default function Tours() {
             errors.priceAdult = "Giá người lớn phải lớn hơn 0";
         }
 
+        // New: validate priceChild (>=5 tuổi) and priceBaby (<5 tuổi)
+        if (typeof data.priceChild !== "number" || isNaN(data.priceChild) || data.priceChild < 0) {
+            errors.priceChild = "Giá trẻ em (≥5 tuổi) phải là số không âm";
+        }
+        if (typeof data.priceBaby !== "number" || isNaN(data.priceBaby) || data.priceBaby < 0) {
+            errors.priceBaby = "Giá em bé (<5 tuổi) phải là số không âm";
+        }
+        // sanity: em bé thường rẻ hơn trẻ em
+        if (typeof data.priceChild === "number" && typeof data.priceBaby === "number" && data.priceBaby > data.priceChild) {
+            errors.priceBaby = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
+        }
+
         if (data.seatsTotal < 1) {
             errors.seatsTotal = "Số chỗ tối đa phải ít nhất là 1";
         }
@@ -582,6 +601,7 @@ export default function Tours() {
             duration: "",
             priceAdult: 0,
             priceChild: 0,
+            priceBaby: 0,
             seatsTotal: 1,
             minBooking: 1,
             categoryId: "",
@@ -824,6 +844,7 @@ export default function Tours() {
             duration: tour.duration,
             priceAdult: tour.priceAdult,
             priceChild: tour.priceChild || 0,
+            priceBaby: tour.priceBaby || 0, // <-- populate priceBaby
             seatsTotal: tour.seatsTotal,
             minBooking: tour.minBooking,
             categoryId: tour.categoryId,
@@ -1018,11 +1039,19 @@ export default function Tours() {
                                         {new Intl.NumberFormat("vi-VN").format(selectedTour.priceAdult)} ₫
                                     </p>
                                 </div>
-                                {selectedTour.priceChild && (
+                                {selectedTour.priceChild !== undefined && (
                                     <div>
-                                        <Label className="text-sm font-medium text-gray-700">Giá trẻ em</Label>
+                                        <Label className="text-sm font-medium text-gray-700">Giá trẻ em (≥5 tuổi)</Label>
                                         <p className="mt-1 font-bold text-green-600">
-                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceChild)} ₫
+                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceChild || 0)} ₫
+                                        </p>
+                                    </div>
+                                )}
+                                {selectedTour.priceBaby !== undefined && (
+                                    <div>
+                                        <Label className="text-sm font-medium text-gray-700">Giá em bé (&lt;5 tuổi)</Label>
+                                        <p className="mt-1 font-bold text-green-600">
+                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceBaby || 0)} ₫
                                         </p>
                                     </div>
                                 )}
@@ -1085,8 +1114,8 @@ export default function Tours() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="grid w-full grid-cols-6">
                     <TabsTrigger value="basic">Thông tin cơ bản</TabsTrigger>
-                    <TabsTrigger value="itinerary">Lịch trình</TabsTrigger>
                     <TabsTrigger value="pricing">Giá & Chỗ</TabsTrigger>
+                    <TabsTrigger value="itinerary">Lịch trình</TabsTrigger>
                     <TabsTrigger value="media">Media</TabsTrigger>
                     <TabsTrigger value="seo">SEO</TabsTrigger>
                     <TabsTrigger value="settings">Cài đặt</TabsTrigger>
@@ -1334,7 +1363,7 @@ export default function Tours() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <div>
                             <Label htmlFor="priceAdult">Giá người lớn (VNĐ) *</Label>
                             <Input
@@ -1350,49 +1379,36 @@ export default function Tours() {
                             )}
                         </div>
                         <div>
-                            <Label htmlFor="priceChild">Giá trẻ em (VNĐ)</Label>
+                            <Label htmlFor="priceChild">Giá trẻ em (≥5 tuổi)</Label> {/* chỉnh label */}
                             <Input
                                 id="priceChild"
                                 type="number"
                                 value={formData.priceChild || ""}
                                 onChange={(e) => handleFormChange("priceChild", parseInt(e.target.value) || 0)}
                                 placeholder="2800000"
+                                className={formErrors.priceChild ? "border-red-500" : ""}
                             />
+                            {formErrors.priceChild && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.priceChild}</p>
+                            )}
+                        </div>
+                        <div>
+                            <Label htmlFor="priceBaby">Giá em bé (&lt;5 tuổi)</Label>
+                            <Input
+                                id="priceBaby"
+                                type="number"
+                                value={formData.priceBaby || ""}
+                                onChange={(e) => handleFormChange("priceBaby", parseInt(e.target.value) || 0)}
+                                placeholder="1000000"
+                                className={formErrors.priceBaby ? "border-red-500" : ""}
+                            />
+                            {formErrors.priceBaby && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.priceBaby}</p>
+                            )}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="seatsTotal">Số chỗ tối đa *</Label>
-                            <Input
-                                id="seatsTotal"
-                                type="number"
-                                min="1"
-                                value={formData.seatsTotal || ""}
-                                onChange={(e) => handleFormChange("seatsTotal", parseInt(e.target.value) || 1)}
-                                placeholder="25"
-                                className={formErrors.seatsTotal ? "border-red-500" : ""}
-                            />
-                            {formErrors.seatsTotal && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.seatsTotal}</p>
-                            )}
-                        </div>
-                        <div>
-                            <Label htmlFor="minBooking">Booking tối thiểu</Label>
-                            <Input
-                                id="minBooking"
-                                type="number"
-                                min="1"
-                                value={formData.minBooking || ""}
-                                onChange={(e) => handleFormChange("minBooking", parseInt(e.target.value) || 1)}
-                                placeholder="1"
-                                className={formErrors.minBooking ? "border-red-500" : ""}
-                            />
-                            {formErrors.minBooking && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.minBooking}</p>
-                            )}
-                        </div>
-                    </div>
+                   
 
                     <div>
                         <Label htmlFor="pickupPoints">Điểm đón</Label>

@@ -404,7 +404,7 @@ export function RichTextEditor({
                 }} 
               />
             ) : (
-              <p className="text-gray-400 italic">Xem trước sẽ hiển th�� ở đây...</p>
+              <p className="text-gray-400 italic">Xem trước sẽ hiển thị ở đây</p>
             )}
           </div>
         </div>
