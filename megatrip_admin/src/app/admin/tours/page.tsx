@@ -30,10 +30,12 @@ interface Tour {
     destination: string;
     startDate: string;
     endDate: string;
+    startDates?: string[];
+    endDates?: string[];
     duration: string;
     priceAdult: number;
     priceChild?: number;
-    priceBaby?: number; // <-- thêm: giá em bé <5 tuổi
+    priceBaby?: number;
     seatsTotal: number;
     seatsBooked: number;
     minBooking: number;
@@ -72,10 +74,12 @@ interface TourFormData {
     destination: string;
     startDate: string;
     endDate: string;
+    startDates?: string[];
+    endDates?: string[];
     duration: string;
     priceAdult: number;
     priceChild: number;
-    priceBaby: number; // <-- thêm: form field cho em bé <5
+    priceBaby: number;
     seatsTotal: number;
     minBooking: number;
     categoryId: string;
@@ -129,7 +133,7 @@ const mockTours: Tour[] = [
         duration: "3 ngày 2 đêm",
         priceAdult: 6500000,
         priceChild: 4500000,
-        priceBaby: 1500000, // <-- thêm mẫu
+        priceBaby: 1500000,
         seatsTotal: 30,
         seatsBooked: 20,
         minBooking: 2,
@@ -186,7 +190,7 @@ const mockTours: Tour[] = [
         duration: "2 ngày 1 đêm",
         priceAdult: 3500000,
         priceChild: 2500000,
-        priceBaby: 1000000, // <-- thêm mẫu
+        priceBaby: 1000000,
         seatsTotal: 25,
         seatsBooked: 10,
         minBooking: 1,
@@ -235,7 +239,7 @@ const mockTours: Tour[] = [
         duration: "4 ngày 3 đêm",
         priceAdult: 7500000,
         priceChild: 5500000,
-        priceBaby: 2000000, // <-- thêm mẫu
+        priceBaby: 2000000,
         seatsTotal: 40,
         seatsBooked: 35,
         minBooking: 2,
@@ -308,10 +312,12 @@ export default function Tours() {
         destination: "",
         startDate: "",
         endDate: "",
+        startDates: [],
+        endDates: [],
         duration: "",
         priceAdult: 0,
         priceChild: 0,
-        priceBaby: 0, // <-- khởi tạo
+        priceBaby: 0,
         seatsTotal: 1,
         minBooking: 1,
         categoryId: "",
@@ -332,6 +338,9 @@ export default function Tours() {
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);
+    const [recurrenceMode, setRecurrenceMode] = useState<"single" | "weekly" | "monthly" | "weekday_of_month">("single");
+    const [recurrenceWeekday, setRecurrenceWeekday] = useState<number>(1);
+    const [recurrenceApplied, setRecurrenceApplied] = useState<boolean>(false);
 
     const { toast } = useToast();
     const queryClient = useQueryClient();
@@ -363,22 +372,172 @@ export default function Tours() {
     };
 
     const refetch = () => {
-        setTours(mockTours); // Reset to original mock data
+        setTours(mockTours);
         toast({ title: "Dữ liệu đã được làm mới" });
+    };
+
+    const toLocalInput = (d: Date) => {
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
+
+    const parseLocalInput = (isoLocal: string) => {
+        if (!isoLocal) return null;
+        const [datePart, timePart] = isoLocal.split('T');
+        if (!datePart) return null;
+        const [y, m, day] = datePart.split('-').map(Number);
+        const [hh = 0, mm = 0] = (timePart || '').split(':').map(Number);
+        return new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0, 0, 0);
+    };
+
+    const localToIso = (localStr: string) => {
+        if (!localStr) return "";
+        const d = parseLocalInput(localStr);
+        return d ? d.toISOString() : localStr;
+    };
+
+    const generateConsecutiveDays = (startIsoLocal: string, daysCount: number) => {
+        const start = parseLocalInput(startIsoLocal);
+        if (!start) return [];
+        const result: string[] = [];
+        for (let i = 0; i < daysCount; i++) {
+            const dd = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+            result.push(toLocalInput(dd));
+        }
+        return result;
+    };
+
+    const generateWeekdayInMonth = (startIsoLocal: string, weekday: number) => {
+        const start = parseLocalInput(startIsoLocal);
+        if (!start) return [];
+        const year = start.getFullYear();
+        const month = start.getMonth();
+        const result: string[] = [];
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dt = new Date(year, month, d, start.getHours(), start.getMinutes());
+            if (dt.getDay() === weekday && dt.getTime() >= start.getTime()) {
+                result.push(toLocalInput(dt));
+            }
+        }
+        return result;
+    };
+
+    const applyRecurrence = () => {
+        const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
+        const firstEnd = (formData.endDates && formData.endDates.length) ? formData.endDates[0] : formData.endDate;
+
+        if (!firstStart) {
+            toast({ title: "Thiếu ngày bắt đầu", description: "Vui lòng chọn ngày khởi hành đầu tiên trước khi áp dụng", variant: "destructive" });
+            return;
+        }
+
+        let generatedStarts: string[] = [];
+        if (recurrenceMode === "weekly") {
+            generatedStarts = generateConsecutiveDays(firstStart, 7);
+        } else if (recurrenceMode === "monthly") {
+            generatedStarts = generateConsecutiveDays(firstStart, 30);
+        } else if (recurrenceMode === "weekday_of_month") {
+            generatedStarts = generateWeekdayInMonth(firstStart, recurrenceWeekday);
+        } else {
+            generatedStarts = Array.isArray(formData.startDates) && formData.startDates.length ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
+        }
+
+        let generatedEnds: string[] = [];
+        if (firstEnd) {
+            const startDate = parseLocalInput(firstStart);
+            const endDate = parseLocalInput(firstEnd);
+            if (startDate && endDate) {
+                const deltaMs = endDate.getTime() - startDate.getTime();
+                for (const dIso of generatedStarts) {
+                    const d = parseLocalInput(dIso);
+                    if (d) {
+                        const end = new Date(d.getTime() + deltaMs);
+                        generatedEnds.push(toLocalInput(end));
+                    } else {
+                        generatedEnds.push("");
+                    }
+                }
+            } else {
+                generatedEnds = generatedStarts.map(() => firstEnd);
+            }
+        } else {
+            generatedEnds = [];
+        }
+
+        if (!generatedStarts || generatedStarts.length === 0) {
+            toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
+            setRecurrenceApplied(false);
+            return;
+        }
+
+        handleFormChange('startDates' as any, generatedStarts);
+        handleFormChange('startDate' as any, generatedStarts[0]);
+
+        if (generatedEnds.length) {
+            handleFormChange('endDates' as any, generatedEnds);
+            handleFormChange('endDate' as any, generatedEnds[0]);
+            setRecurrenceApplied(true);
+        } else {
+            setRecurrenceApplied(false);
+        }
+
+        setIsFormDirty(true);
+        toast({ title: "Đã tạo ngày khởi hành", description: `Tạo ${generatedStarts.length} ngày theo chế độ ${recurrenceMode}` });
+    };
+
+    const handleResetSchedule = () => {
+        if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch khởi hành và giờ đến? Hành động này sẽ xóa startDates, endDates và giờ tương ứng.")) {
+            return;
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            startDates: [],
+            endDates: [],
+            startDate: "",
+            endDate: "",
+            duration: ""
+        }));
+
+        setFormErrors(prev => {
+            const next: Record<string, string> = { ...prev };
+            Object.keys(next).forEach(k => {
+                if (k === 'startDate' || k === 'endDate' || k.startsWith('startDates_') || k.startsWith('endDates_')) {
+                    delete next[k];
+                }
+            });
+            return next;
+        });
+
+        setIsFormDirty(true);
+        setRecurrenceApplied(false);
+
+        toast({ title: "Đã đặt lại lịch", description: "Lịch khởi hành và giờ đến đã được xóa", variant: "default" });
     };
 
     // Create tour mutation
     const createTourMutation = useMutation({
         mutationFn: async (data: TourFormData) => {
+            const payload: any = { ...data };
+            payload.startDates = (data.startDates && Array.isArray(data.startDates)) ? data.startDates.map((s: string) => localToIso(s)) : (data.startDate ? [localToIso(data.startDate)] : []);
+            payload.endDates = (data.endDates && Array.isArray(data.endDates)) ? data.endDates.map((s: string) => localToIso(s)) : (data.endDate ? [localToIso(data.endDate)] : []);
+
+            if (payload.startDates.length && payload.endDates.length) {
+                payload.duration = calculateDuration(payload.startDates[0], payload.endDates[0]);
+            }
+
+            delete payload.startDate;
+            delete payload.endDate;
+
             const newTour: Tour = {
-                ...data,
+                ...payload,
                 id: `tour_${Math.random().toString(36).substr(2, 9)}`,
                 seatsBooked: 0,
                 rating: 0,
                 reviewCount: 0,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                // priceBaby sẽ được truyền từ data.priceBaby (đã có trong formData)
             };
             setTours((prev) => [...prev, newTour]);
             return newTour;
@@ -404,12 +563,31 @@ export default function Tours() {
     // Update tour mutation
     const updateTourMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<TourFormData> }) => {
+            const payload: any = { ...data };
+            if (data.startDates && Array.isArray(data.startDates)) {
+                payload.startDates = data.startDates.map((s: string) => localToIso(s));
+            } else if (data.startDate && !payload.startDates?.length) {
+                payload.startDates = [localToIso(data.startDate)];
+            }
+            if (data.endDates && Array.isArray(data.endDates)) {
+                payload.endDates = data.endDates.map((s: string) => localToIso(s));
+            } else if (data.endDate && !payload.endDates?.length) {
+                payload.endDates = [localToIso(data.endDate)];
+            }
+
+            delete payload.startDate;
+            delete payload.endDate;
+
+            if (payload.startDates?.length && payload.endDates?.length) {
+                payload.duration = calculateDuration(payload.startDates[0], payload.endDates[0]);
+            }
+
             setTours((prev) =>
                 prev.map((tour) =>
-                    tour.id === id ? { ...tour, ...data, updatedAt: new Date().toISOString() } : tour
+                    tour.id === id ? { ...tour, ...payload, updatedAt: new Date().toISOString() } : tour
                 )
             );
-            return { id, ...data };
+            return { id, ...payload };
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tours"] });
@@ -534,30 +712,64 @@ export default function Tours() {
             errors.destination = "Bạn phải nhập điểm đến";
         }
 
-        if (!data.startDate) {
-            errors.startDate = "Bạn phải chọn ngày bắt đầu";
+        const now = new Date();
+        if (!Array.isArray(data.startDates) || data.startDates.length === 0) {
+            errors.startDate = "Bạn phải chọn ít nhất một ngày bắt đầu";
+        } else {
+            const seen = new Set<string>();
+            for (let i = 0; i < data.startDates.length; i++) {
+                const d = data.startDates[i];
+                if (!d || isNaN(new Date(d).getTime())) {
+                    errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không hợp lệ`;
+                } else {
+                    const dt = new Date(d);
+                    if (dt < now) {
+                        errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không được ở quá khứ`;
+                    }
+                    const key = dt.toISOString();
+                    if (seen.has(key)) {
+                        errors[`startDates_${i}`] = `Ngày bắt đầu trùng lặp`;
+                    }
+                    seen.add(key);
+                }
+            }
         }
 
-        if (!data.endDate) {
-            errors.endDate = "Bạn phải chọn ngày kết thúc";
-        }
-
-        if (data.startDate && data.endDate && new Date(data.endDate) <= new Date(data.startDate)) {
-            errors.endDate = "Ngày kết thúc phải sau ngày bắt đầu";
+        if (Array.isArray(data.endDates) && data.endDates.length > 0) {
+            for (let i = 0; i < (data.startDates || []).length; i++) {
+                const start = data.startDates?.[i];
+                const end = data.endDates?.[i];
+                if (!end || isNaN(new Date(end).getTime())) {
+                    errors[`endDates_${i}`] = `Ngày kết thúc thứ ${i + 1} không hợp lệ`;
+                } else if (start && !isNaN(new Date(start).getTime())) {
+                    if (new Date(end) <= new Date(start)) {
+                        errors[`endDates_${i}`] = `Ngày kết thúc thứ ${i + 1} phải sau ngày bắt đầu tương ứng`;
+                    }
+                }
+            }
+        } else {
+            if (!data.endDate) {
+                errors.endDate = "Bạn phải chọn ngày kết thúc";
+            } else if (isNaN(new Date(data.endDate).getTime())) {
+                errors.endDate = "Ngày kết thúc không hợp lệ";
+            } else {
+                const earliest = Array.isArray(data.startDates) && data.startDates.length ? new Date(data.startDates.slice().sort()[0]) : (data.startDate ? new Date(data.startDate) : null);
+                if (earliest && new Date(data.endDate) <= earliest) {
+                    errors.endDate = "Ngày kết thúc phải sau ngày bắt đầu (với tất cả ngày khởi hành)";
+                }
+            }
         }
 
         if (data.priceAdult <= 0) {
             errors.priceAdult = "Giá người lớn phải lớn hơn 0";
         }
 
-        // New: validate priceChild (>=5 tuổi) and priceBaby (<5 tuổi)
         if (typeof data.priceChild !== "number" || isNaN(data.priceChild) || data.priceChild < 0) {
             errors.priceChild = "Giá trẻ em (≥5 tuổi) phải là số không âm";
         }
         if (typeof data.priceBaby !== "number" || isNaN(data.priceBaby) || data.priceBaby < 0) {
             errors.priceBaby = "Giá em bé (<5 tuổi) phải là số không âm";
         }
-        // sanity: em bé thường rẻ hơn trẻ em
         if (typeof data.priceChild === "number" && typeof data.priceBaby === "number" && data.priceBaby > data.priceChild) {
             errors.priceBaby = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
         }
@@ -587,6 +799,28 @@ export default function Tours() {
         return youtubeRegex.test(url) || vimeoRegex.test(url);
     };
 
+    const calculateDuration = (start: string, end: string): string => {
+        if (!start || !end) return "";
+
+        const startTime = new Date(start);
+        const endTime = new Date(end);
+        const diffMs = endTime.getTime() - startTime.getTime();
+
+        if (diffMs <= 0) return "";
+
+        const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+        return `${days > 0 ? days + ' ngày ' : ''}${hours > 0 ? hours + 'h ' : ''}${minutes > 0 ? minutes + 'm' : ''}`.trim();
+    };
+
+    const isoLocalNow = () => {
+        const d = new Date();
+        const tzOffset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    };
+
     const resetForm = () => {
         setFormData({
             title: "",
@@ -598,6 +832,8 @@ export default function Tours() {
             destination: "",
             startDate: "",
             endDate: "",
+            startDates: [],
+            endDates: [],
             duration: "",
             priceAdult: 0,
             priceChild: 0,
@@ -623,6 +859,7 @@ export default function Tours() {
         setFormErrors({});
         setIsFormDirty(false);
         setActiveTab("basic");
+        setRecurrenceApplied(false);
     };
 
     const handleFormChange = (field: keyof TourFormData, value: any) => {
@@ -670,7 +907,6 @@ export default function Tours() {
 
     const removeItineraryDay = (index: number) => {
         const updatedItinerary = formData.itinerary.filter((_, i) => i !== index);
-        // Renumber days
         const renumberedItinerary = updatedItinerary.map((day, i) => ({
             ...day,
             dayNumber: i + 1,
@@ -770,10 +1006,10 @@ export default function Tours() {
                     </div>
                     <div
                         className={`text-xs ${record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.2
-                                ? "text-orange-600"
-                                : record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.5
-                                    ? "text-yellow-600"
-                                    : "text-green-600"
+                            ? "text-orange-600"
+                            : record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.5
+                                ? "text-yellow-600"
+                                : "text-green-600"
                             }`}
                     >
                         {record.seatsTotal - record.seatsBooked} chỗ trống
@@ -839,12 +1075,14 @@ export default function Tours() {
             description: tour.description,
             departure: tour.departure,
             destination: tour.destination,
-            startDate: tour.startDate,
-            endDate: tour.endDate,
+            startDate: tour.startDate ? tour.startDate.slice(0, 16) : "",
+            endDate: tour.endDate ? tour.endDate.slice(0, 16) : "",
+            startDates: Array.isArray(tour.startDates) ? tour.startDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (tour.startDate ? [tour.startDate.slice(0, 16)] : []),
+            endDates: Array.isArray(tour.endDates) ? tour.endDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (tour.endDate ? [tour.endDate.slice(0, 16)] : []),
             duration: tour.duration,
             priceAdult: tour.priceAdult,
             priceChild: tour.priceChild || 0,
-            priceBaby: tour.priceBaby || 0, // <-- populate priceBaby
+            priceBaby: tour.priceBaby || 0,
             seatsTotal: tour.seatsTotal,
             minBooking: tour.minBooking,
             categoryId: tour.categoryId,
@@ -893,10 +1131,24 @@ export default function Tours() {
             return;
         }
 
+        const dataToSend = { ...formData } as any;
+        const startsRaw = (formData.startDates && formData.startDates.length) ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
+        dataToSend.startDates = startsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+
+        const endsRaw = (formData.endDates && formData.endDates.length) ? formData.endDates : (formData.endDate ? [formData.endDate] : []);
+        dataToSend.endDates = endsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+
+        delete dataToSend.startDate;
+        delete dataToSend.endDate;
+
+        if (dataToSend.startDates.length && dataToSend.endDates.length) {
+            dataToSend.duration = calculateDuration(dataToSend.startDates[0], dataToSend.endDates[0]);
+        }
+
         if (modalMode === "create") {
-            createTourMutation.mutate({ ...formData, status: "active" });
+            createTourMutation.mutate({ ...dataToSend, status: "active" });
         } else if (modalMode === "edit" && selectedTour) {
-            updateTourMutation.mutate({ id: selectedTour.id, data: formData });
+            updateTourMutation.mutate({ id: selectedTour.id, data: dataToSend });
         }
     };
 
@@ -1006,6 +1258,13 @@ export default function Tours() {
 
     const renderTourForm = () => {
         if (modalMode === "view" && selectedTour) {
+            const startArray: string[] = Array.isArray(selectedTour.startDates) && selectedTour.startDates.length
+                ? selectedTour.startDates
+                : (selectedTour.startDate ? [selectedTour.startDate] : []);
+            const endArray: string[] = Array.isArray(selectedTour.endDates) && selectedTour.endDates.length
+                ? selectedTour.endDates
+                : (selectedTour.endDate ? [selectedTour.endDate] : []);
+
             return (
                 <div className="space-y-6">
                     <div className="grid grid-cols-2 gap-6">
@@ -1072,6 +1331,43 @@ export default function Tours() {
 
                     <div>
                         <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
+                        <div className="mt-1 space-y-2">
+                            {startArray.length ? (
+                                startArray.map((start, i) => {
+                                    const end = endArray[i];
+                                    const startDate = start ? new Date(start) : null;
+                                    const endDate = end ? new Date(end) : null;
+                                    const duration = (start && end) ? calculateDuration(start, end) : (selectedTour.duration || "");
+                                    return (
+                                        <div key={i} className="bg-gray-50 p-3 rounded">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="text-sm text-gray-500">Chuyến #{i + 1}</div>
+                                                    <div className="font-medium">
+                                                        Bắt đầu : {startDate ? startDate.toLocaleDateString('vi-VN') : '---'}{" "}
+                                                        <span className="text-gray-600">•</span>{" "}
+                                                        <span className="font-mono">{startDate ? startDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '---'}</span>
+                                                    </div>
+                                                    <div className="text-sm text-gray-500 mt-1">
+                                                        Kết thúc : {endDate ? `${endDate.toLocaleDateString('vi-VN')} • ${endDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Kết thúc chưa được đặt'}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-sm text-gray-500">Thời gian</div>
+                                                    <div className="font-medium">{duration || '—'}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <p className="text-sm text-gray-600">Không có lịch trình</p>
+                            )}
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label className="text-sm font-medium text-gray-700">Lịch trình chi tiết</Label>
                         <div className="mt-2 space-y-3">
                             {selectedTour.itinerary.map((day, index) => (
                                 <div key={index} className="border rounded-lg p-3">
@@ -1218,83 +1514,6 @@ export default function Tours() {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="itinerary" className="space-y-4 mt-6">
-                    <div>
-                        <Label htmlFor="description">Mô tả chi tiết</Label>
-                        <RichTextEditor
-                            value={formData.description}
-                            onChange={(value) => handleFormChange("description", value)}
-                            placeholder="Mô tả chi tiết về tour"
-                        />
-                    </div>
-
-                    <div>
-                        <Label>Lịch trình từng ngày</Label>
-                        <div className="mt-2 space-y-3">
-                            {formData.itinerary.map((day, index) => (
-                                <div key={index} className="border rounded-lg p-4">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-medium">Ngày {day.dayNumber}</h4>
-                                        <div className="flex space-x-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => duplicateItineraryDay(index)}
-                                            >
-                                                <Copy className="w-3 h-3 mr-1" />
-                                                Sao chép
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => removeItineraryDay(index)}
-                                            >
-                                                <Trash2 className="w-3 h-3 mr-1" />
-                                                Xóa
-                                            </Button>
-                                        </div>
-                                    </div>
-                                    <Input
-                                        placeholder="Tiêu đề ngày"
-                                        value={day.title}
-                                        onChange={(e) => updateItineraryDay(index, "title", e.target.value)}
-                                        className="mb-2"
-                                    />
-                                    <Textarea
-                                        placeholder="Chi tiết hoạt động trong ngày"
-                                        value={day.details}
-                                        onChange={(e) => updateItineraryDay(index, "details", e.target.value)}
-                                        rows={2}
-                                    />
-                                </div>
-                            ))}
-
-                            {formData.itinerary.length === 0 && (
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                                    <p className="text-gray-500">Chưa có lịch trình nào</p>
-                                    <Button type="button" onClick={addItineraryDay} className="mt-2">
-                                        Thêm ngày đầu tiên
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-
-                        {formData.itinerary.length > 0 && (
-                            <Button
-                                type="button"
-                                variant="outline"
-                                className="w-full mt-4"
-                                onClick={addItineraryDay}
-                            >
-                                <Plus className="w-4 h-4 mr-2" />
-                                Thêm ngày mới
-                            </Button>
-                        )}
-                    </div>
-                </TabsContent>
-
                 <TabsContent value="pricing" className="space-y-4 mt-6">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -1326,39 +1545,187 @@ export default function Tours() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
-                        <div>
-                            <Label htmlFor="startDate">Ngày bắt đầu *</Label>
-                            <Input
-                                id="startDate"
-                                type="date"
-                                value={formData.startDate}
-                                onChange={(e) => handleFormChange("startDate", e.target.value)}
-                                className={formErrors.startDate ? "border-red-500" : ""}
-                            />
-                            {formErrors.startDate && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.startDate}</p>
-                            )}
+                        <div className="col-span-2">
+                            <Label>Lịch khởi hành *</Label>
+
+                            <div className="flex items-center space-x-2 mb-2">
+                                <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} >
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="single">Chỉ ngày được chọn</SelectItem>
+                                        <SelectItem value="weekly">Tạo theo 1 tuần (7 ngày liên tiếp)</SelectItem>
+                                        <SelectItem value="monthly">Tạo theo 1 tháng (30 ngày liên tiếp)</SelectItem>
+                                        <SelectItem value="weekday_of_month">Chọn 1 ngày trong mỗi tuần của tháng</SelectItem>
+                                    </SelectContent>
+                                </Select>
+
+                                {recurrenceMode === "weekday_of_month" && (
+                                    <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}>
+                                        <SelectTrigger className="w-40">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="1">Thứ 2</SelectItem>
+                                            <SelectItem value="2">Thứ 3</SelectItem>
+                                            <SelectItem value="3">Thứ 4</SelectItem>
+                                            <SelectItem value="4">Thứ 5</SelectItem>
+                                            <SelectItem value="5">Thứ 6</SelectItem>
+                                            <SelectItem value="6">Thứ 7</SelectItem>
+                                            <SelectItem value="0">Chủ nhật</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                )}
+
+                                <div className="flex items-center space-x-2">
+                                    <Button onClick={applyRecurrence}>Áp dụng</Button>
+                                    {recurrenceApplied && (
+                                        <Button
+                                            onClick={handleResetSchedule}
+                                            className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-1 text-sm"
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className="h-4 w-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
+                                            </svg>
+                                            Clear
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="mt-2 space-y-2">
+                                {(formData.startDates && formData.startDates.length ? formData.startDates : [formData.startDate || ""]).map((d, idx) => {
+                                    const endVal = (formData.endDates && formData.endDates[idx]) || "";
+                                    return (
+                                        <div key={idx} className="flex items-center space-x-2">
+                                            <div className="flex-1">
+                                                <Label className="text-xs">Bắt đầu #{idx + 1}</Label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={d || ""}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
+                                                        if (idx >= starts.length) starts.push(val); else starts[idx] = val;
+                                                        handleFormChange('startDates' as any, starts);
+                                                        if (idx === 0) handleFormChange('startDate', val);
+
+                                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                                        if (!ends[idx]) {
+                                                            let defaultEnd = "";
+                                                            const firstStart = (formData.startDates && formData.startDates[0]) || formData.startDate;
+                                                            const firstEnd = (formData.endDates && formData.endDates[0]) || formData.endDate;
+                                                            if (firstStart && firstEnd) {
+                                                                const baseStart = parseLocalInput(firstStart);
+                                                                const baseEnd = parseLocalInput(firstEnd);
+                                                                if (baseStart && baseEnd) {
+                                                                    const delta = baseEnd.getTime() - baseStart.getTime();
+                                                                    const thisStart = parseLocalInput(val) || parseLocalInput(firstStart);
+                                                                    if (thisStart) defaultEnd = toLocalInput(new Date(thisStart.getTime() + delta));
+                                                                }
+                                                            }
+                                                            if (!defaultEnd) {
+                                                                const thisStart = parseLocalInput(val);
+                                                                defaultEnd = thisStart ? toLocalInput(new Date(thisStart.getTime() + 6 * 3600000)) : "";
+                                                            }
+                                                            ends[idx] = defaultEnd;
+                                                            handleFormChange('endDates' as any, ends);
+                                                            if (idx === 0) handleFormChange('endDate', ends[0] || "");
+                                                        }
+                                                    }}
+                                                    min={isoLocalNow()}
+                                                    className={formErrors[`startDates_${idx}`] ? "border-red-500" : ""}
+                                                />
+                                            </div>
+
+                                            <div className="flex-1">
+                                                <Label className="text-xs">Kết thúc #{idx + 1}</Label>
+                                                <Input
+                                                    type="datetime-local"
+                                                    value={endVal || ""}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                                        if (idx >= ends.length) ends.push(val); else ends[idx] = val;
+                                                        handleFormChange('endDates' as any, ends);
+                                                        if (idx === 0) handleFormChange('endDate', val);
+
+                                                        const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
+                                                        const firstEnd = (ends && ends.length) ? ends[0] : formData.endDate;
+                                                        if (firstStart && firstEnd) {
+                                                            const duration = calculateDuration(firstStart, firstEnd);
+                                                            if (duration) handleFormChange('duration', duration);
+                                                        }
+                                                    }}
+                                                    min={(formData.startDates && formData.startDates.length && formData.startDates[idx]) ? formData.startDates[idx] : isoLocalNow()}
+                                                    className={formErrors[`endDates_${idx}`] ? "border-red-500" : ""}
+                                                />
+                                            </div>
+
+                                            <div className="flex items-end" style={{ marginTop: 'auto' }}>
+                                                <Button variant="outline" onClick={() => {
+                                                    const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
+                                                    const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                                    if (!starts.length && formData.startDate) starts.push(formData.startDate);
+                                                    starts.splice(idx, 1);
+                                                    ends.splice(idx, 1);
+                                                    handleFormChange('startDates' as any, starts);
+                                                    handleFormChange('endDates' as any, ends);
+                                                    handleFormChange('startDate', (starts[0] || ""));
+                                                    handleFormChange('endDate', (ends[0] || ""));
+                                                }}>Xóa</Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div>
+                                    <Button variant="ghost" onClick={() => {
+                                        const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
+                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                        const newStart = "";
+                                        starts.push(newStart);
+                                        let newEnd = "";
+                                        const firstStart = (formData.startDates && formData.startDates[0]) || formData.startDate;
+                                        const firstEnd = (formData.endDates && formData.endDates[0]) || formData.endDate;
+                                        if (newStart && firstStart && firstEnd) {
+                                            const baseStart = parseLocalInput(firstStart);
+                                            const baseEnd = parseLocalInput(firstEnd);
+                                            if (baseStart && baseEnd) {
+                                                const delta = baseEnd.getTime() - baseStart.getTime();
+                                                const thisStart = parseLocalInput(newStart);
+                                                if (thisStart) newEnd = toLocalInput(new Date(thisStart.getTime() + delta));
+                                            }
+                                        }
+                                        ends.push(newEnd);
+                                        handleFormChange('startDates' as any, starts);
+                                        handleFormChange('endDates' as any, ends);
+                                        if (starts.length === 1 && starts[0]) handleFormChange('startDate', starts[0]);
+                                        if (ends.length === 1 && ends[0]) handleFormChange('endDate', ends[0]);
+                                    }}>Thêm ngày khởi hành</Button>
+                                </div>
+                            </div>
                         </div>
+
                         <div>
-                            <Label htmlFor="endDate">Ngày kết thúc *</Label>
-                            <Input
-                                id="endDate"
-                                type="date"
-                                value={formData.endDate}
-                                onChange={(e) => handleFormChange("endDate", e.target.value)}
-                                className={formErrors.endDate ? "border-red-500" : ""}
-                            />
-                            {formErrors.endDate && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.endDate}</p>
-                            )}
-                        </div>
-                        <div>
-                            <Label htmlFor="duration">Thời gian</Label>
+                            <Label htmlFor="duration" className="mt-2 block">Thời gian di chuyển</Label>
                             <Input
                                 id="duration"
                                 value={formData.duration}
                                 onChange={(e) => handleFormChange("duration", e.target.value)}
                                 placeholder="3 ngày 2 đêm"
+                                readOnly
                             />
                         </div>
                     </div>
@@ -1379,7 +1746,7 @@ export default function Tours() {
                             )}
                         </div>
                         <div>
-                            <Label htmlFor="priceChild">Giá trẻ em (≥5 tuổi)</Label> {/* chỉnh label */}
+                            <Label htmlFor="priceChild">Giá trẻ em (≥5 tuổi)</Label>
                             <Input
                                 id="priceChild"
                                 type="number"
@@ -1397,6 +1764,7 @@ export default function Tours() {
                             <Input
                                 id="priceBaby"
                                 type="number"
+
                                 value={formData.priceBaby || ""}
                                 onChange={(e) => handleFormChange("priceBaby", parseInt(e.target.value) || 0)}
                                 placeholder="1000000"
@@ -1408,7 +1776,36 @@ export default function Tours() {
                         </div>
                     </div>
 
-                   
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="seatsTotal">Số chỗ tối đa *</Label>
+                            <Input
+                                id="seatsTotal"
+                                type="number"
+                                value={formData.seatsTotal || ""}
+                                onChange={(e) => handleFormChange("seatsTotal", parseInt(e.target.value) || 1)}
+                                placeholder="30"
+                                className={formErrors.seatsTotal ? "border-red-500" : ""}
+                            />
+                            {formErrors.seatsTotal && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.seatsTotal}</p>
+                            )}
+                        </div>
+                        <div>
+                            <Label htmlFor="minBooking">Số booking tối thiểu *</Label>
+                            <Input
+                                id="minBooking"
+                                type="number"
+                                value={formData.minBooking || ""}
+                                onChange={(e) => handleFormChange("minBooking", parseInt(e.target.value) || 1)}
+                                placeholder="1"
+                                className={formErrors.minBooking ? "border-red-500" : ""}
+                            />
+                            {formErrors.minBooking && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.minBooking}</p>
+                            )}
+                        </div>
+                    </div>
 
                     <div>
                         <Label htmlFor="pickupPoints">Điểm đón</Label>
@@ -1464,6 +1861,83 @@ export default function Tours() {
                             placeholder="Mô tả chính sách hủy tour và hoàn tiền"
                             rows={3}
                         />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="itinerary" className="space-y-4 mt-6">
+                    <div>
+                        <Label htmlFor="description">Mô tả chi tiết</Label>
+                        <RichTextEditor
+                            value={formData.description}
+                            onChange={(value) => handleFormChange("description", value)}
+                            placeholder="Mô tả chi tiết về tour"
+                        />
+                    </div>
+
+                    <div>
+                        <Label>Lịch trình từng ngày</Label>
+                        <div className="mt-2 space-y-3">
+                            {formData.itinerary.map((day, index) => (
+                                <div key={index} className="border rounded-lg p-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="font-medium">Ngày {day.dayNumber}</h4>
+                                        <div className="flex space-x-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => duplicateItineraryDay(index)}
+                                            >
+                                                <Copy className="w-3 h-3 mr-1" />
+                                                Sao chép
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => removeItineraryDay(index)}
+                                            >
+                                                <Trash2 className="w-3 h-3 mr-1" />
+                                                Xóa
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    <Input
+                                        placeholder="Tiêu đề ngày"
+                                        value={day.title}
+                                        onChange={(e) => updateItineraryDay(index, "title", e.target.value)}
+                                        className="mb-2"
+                                    />
+                                    {/* Chi tiết hoạt động: dùng RichTextEditor thay cho Textarea */}
+                                    <RichTextEditor
+                                        value={day.details}
+                                        onChange={(value) => updateItineraryDay(index, "details", value)}
+                                        placeholder="Chi tiết hoạt động trong ngày"
+                                    />
+                                </div>
+                            ))}
+
+                            {formData.itinerary.length === 0 && (
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                                    <p className="text-gray-500">Chưa có lịch trình nào</p>
+                                    <Button type="button" onClick={addItineraryDay} className="mt-2">
+                                        Thêm ngày đầu tiên
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        {formData.itinerary.length > 0 && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full mt-4"
+                                onClick={addItineraryDay}
+                            >
+                                <Plus className="w-4 h-4 mr-2" />
+                                Thêm ngày mới
+                            </Button>
+                        )}
                     </div>
                 </TabsContent>
 
@@ -1779,7 +2253,6 @@ export default function Tours() {
                         : undefined
                 }
             >
-                {/* Bọc scroll chỉ phần nội dung form, không bọc toàn bộ ModalForm children */}
                 <div className="max-h-[60vh] overflow-y-auto pr-2">
                     {renderTourForm()}
                 </div>
