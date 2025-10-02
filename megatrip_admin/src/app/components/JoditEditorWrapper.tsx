@@ -12,9 +12,9 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
     onChange,
     placeholder,
 }) => {
-    const editor = useRef(null);
+    const editor = useRef<any>(null);
 
-    const config = {
+    const config: any = {
         readonly: false,
         placeholder: placeholder || "Start typing...",
         height: 400,
@@ -34,6 +34,7 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
             "brush",
             "paragraph",
             "|",
+            // image button allows inserting by URL; uploader below enables local file upload (as base64)
             "image",
             "link",
             "|",
@@ -55,6 +56,17 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
         style: {
             fontFamily: "Inter, sans-serif",
         },
+
+        // Enable simple client-side image upload (data URI) so users can pick files from their machine
+        uploader: {
+            insertImageAsBase64URI: true, // insert uploaded images as base64 data URIs
+            imagesExtensions: ["jpg", "jpeg", "png", "gif", "webp"],
+        },
+
+        // Allow dropping/pasting images directly into the editor
+        allowDragAndDropFiles: true,
+        // Accept pasted images and convert to base64
+        convertToXhtml: false,
     };
 
     return (
@@ -62,8 +74,9 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
             ref={editor}
             value={value}
             config={config}
+            // keep onBlur but also forward onChange so parent updates live
             onBlur={(newContent: string) => onChange(newContent)}
-            onChange={(newContent: string) => { }}
+            onChange={(newContent: string) => onChange(newContent)}
         />
     );
 };

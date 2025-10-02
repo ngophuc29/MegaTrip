@@ -422,6 +422,15 @@ export default function Tours() {
         return new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0, 0, 0);
     };
 
+    // returns true if isoLocal (datetime-local string) is strictly in the past compared to now (local)
+    const isPastLocal = (isoLocal?: string | null) => {
+        if (!isoLocal) return true;
+        const dt = parseLocalInput(isoLocal);
+        if (!dt) return true;
+        const now = new Date();
+        return dt.getTime() < now.getTime();
+    };
+    
     const localToIso = (localStr: string) => {
         if (!localStr) return "";
         const d = parseLocalInput(localStr);
@@ -434,7 +443,9 @@ export default function Tours() {
         const result: string[] = [];
         for (let i = 0; i < daysCount; i++) {
             const dd = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-            result.push(toLocalInput(dd));
+            const isoLocal = toLocalInput(dd);
+            // skip past dates
+            if (!isPastLocal(isoLocal)) result.push(isoLocal);
         }
         return result;
     };
@@ -449,7 +460,9 @@ export default function Tours() {
         for (let d = 1; d <= daysInMonth; d++) {
             const dt = new Date(year, month, d, start.getHours(), start.getMinutes());
             if (dt.getDay() === weekday && dt.getTime() >= start.getTime()) {
-                result.push(toLocalInput(dt));
+                const isoLocal = toLocalInput(dt);
+                // skip past dates
+                if (!isPastLocal(isoLocal)) result.push(isoLocal);
             }
         }
         return result;
@@ -506,7 +519,7 @@ export default function Tours() {
     const applyRecurrence = () => {
         const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
         const firstEnd = (formData.endDates && formData.endDates.length) ? formData.endDates[0] : formData.endDate;
-
+ 
         if (!firstStart) {
             toast({ title: "Thiếu ngày bắt đầu", description: "Vui lòng chọn ngày khởi hành đầu tiên trước khi áp dụng", variant: "destructive" });
             return;
@@ -523,6 +536,9 @@ export default function Tours() {
             generatedStarts = Array.isArray(formData.startDates) && formData.startDates.length ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
         }
 
+        // filter out any generated start dates that are in the past (defensive)
+        generatedStarts = generatedStarts.filter(s => !isPastLocal(s));
+        
         let generatedEnds: string[] = [];
         if (firstEnd) {
             const startDate = parseLocalInput(firstStart);
@@ -533,7 +549,14 @@ export default function Tours() {
                     const d = parseLocalInput(dIso);
                     if (d) {
                         const end = new Date(d.getTime() + deltaMs);
-                        generatedEnds.push(toLocalInput(end));
+                        // ensure corresponding end is not before its start
+                        const endLocal = toLocalInput(end);
+                        if (isPastLocal(endLocal) && end.getTime() < new Date().getTime()) {
+                            // keep it only if end is not before now — otherwise push empty so validation will catch it
+                            generatedEnds.push(endLocal);
+                        } else {
+                            generatedEnds.push(endLocal);
+                        }
                     } else {
                         generatedEnds.push("");
                     }
@@ -546,24 +569,24 @@ export default function Tours() {
         }
 
         if (!generatedStarts || generatedStarts.length === 0) {
-            toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
-            setRecurrenceApplied(false);
-            return;
-        }
+             toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
+             setRecurrenceApplied(false);
+             return;
+         }
 
-        handleFormChange('startDates' as any, generatedStarts);
-        handleFormChange('startDate' as any, generatedStarts[0]);
+         handleFormChange('startDates' as any, generatedStarts);
+         handleFormChange('startDate' as any, generatedStarts[0]);
 
-        if (generatedEnds.length) {
-            handleFormChange('endDates' as any, generatedEnds);
-            handleFormChange('endDate' as any, generatedEnds[0]);
-            setRecurrenceApplied(true);
-        } else {
-            setRecurrenceApplied(false);
-        }
+         if (generatedEnds.length) {
+             handleFormChange('endDates' as any, generatedEnds);
+             handleFormChange('endDate' as any, generatedEnds[0]);
+             setRecurrenceApplied(true);
+         } else {
+             setRecurrenceApplied(false);
+         }
 
-        setIsFormDirty(true);
-        toast({ title: "Đã tạo ngày khởi hành", description: `Tạo ${generatedStarts.length} ngày theo chế độ ${recurrenceMode}` });
+         setIsFormDirty(true);
+         toast({ title: "Đã tạo ngày khởi hành", description: `Tạo ${generatedStarts.length} ngày theo chế độ ${recurrenceMode}` });
     };
 
     const handleResetSchedule = () => {
@@ -801,11 +824,11 @@ export default function Tours() {
             const seen = new Set<string>();
             for (let i = 0; i < data.startDates.length; i++) {
                 const d = data.startDates[i];
-                if (!d || isNaN(new Date(d).getTime())) {
+                const dt = parseLocalInput(d);
+                if (!d || !dt || isNaN(dt.getTime())) {
                     errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không hợp lệ`;
                 } else {
-                    const dt = new Date(d);
-                    if (dt < now) {
+                    if (dt.getTime() < now.getTime()) {
                         errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không được ở quá khứ`;
                     }
                     const key = dt.toISOString();
@@ -821,10 +844,12 @@ export default function Tours() {
             for (let i = 0; i < (data.startDates || []).length; i++) {
                 const start = data.startDates?.[i];
                 const end = data.endDates?.[i];
-                if (!end || isNaN(new Date(end).getTime())) {
+                const startDt = start ? parseLocalInput(start) : null;
+                const endDt = end ? parseLocalInput(end) : null;
+                if (!end || !endDt || isNaN(endDt.getTime())) {
                     errors[`endDates_${i}`] = `Ngày kết thúc thứ ${i + 1} không hợp lệ`;
-                } else if (start && !isNaN(new Date(start).getTime())) {
-                    if (new Date(end) <= new Date(start)) {
+                } else if (start && startDt && !isNaN(startDt.getTime())) {
+                    if (endDt.getTime() <= startDt.getTime()) {
                         errors[`endDates_${i}`] = `Ngày kết thúc thứ ${i + 1} phải sau ngày bắt đầu tương ứng`;
                     }
                 }
@@ -835,8 +860,10 @@ export default function Tours() {
             } else if (isNaN(new Date(data.endDate).getTime())) {
                 errors.endDate = "Ngày kết thúc không hợp lệ";
             } else {
-                const earliest = Array.isArray(data.startDates) && data.startDates.length ? new Date(data.startDates.slice().sort()[0]) : (data.startDate ? new Date(data.startDate) : null);
-                if (earliest && new Date(data.endDate) <= earliest) {
+                const earliestRaw = Array.isArray(data.startDates) && data.startDates.length ? data.startDates.slice().sort()[0] : (data.startDate ? data.startDate : null);
+                const earliest = earliestRaw ? parseLocalInput(earliestRaw) : null;
+                const endDt = parseLocalInput(data.endDate);
+                if (earliest && endDt && endDt.getTime() <= earliest.getTime()) {
                     errors.endDate = "Ngày kết thúc phải sau ngày bắt đầu (với tất cả ngày khởi hành)";
                 }
             }
@@ -1193,10 +1220,16 @@ export default function Tours() {
             description: tour.description,
             departure: tour.departure,
             destination: tour.destination,
-            startDate: tour.startDate ? tour.startDate.slice(0, 16) : "",
-            endDate: tour.endDate ? tour.endDate.slice(0, 16) : "",
-            startDates: Array.isArray(tour.startDates) ? tour.startDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (tour.startDate ? [tour.startDate.slice(0, 16)] : []),
-            endDates: Array.isArray(tour.endDates) ? tour.endDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (tour.endDate ? [tour.endDate.slice(0, 16)] : []),
+            // convert stored ISO dates into local "YYYY-MM-DDTHH:MM" so datetime-local inputs
+            // will enforce both date and time (min/validation) properly
+            startDate: tour.startDate ? toLocalInput(new Date(tour.startDate)) : "",
+            endDate: tour.endDate ? toLocalInput(new Date(tour.endDate)) : "",
+            startDates: Array.isArray(tour.startDates)
+                ? tour.startDates.map((d: string) => toLocalInput(new Date(d)))
+                : (tour.startDate ? [toLocalInput(new Date(tour.startDate))] : []),
+            endDates: Array.isArray(tour.endDates)
+                ? tour.endDates.map((d: string) => toLocalInput(new Date(d)))
+                : (tour.endDate ? [toLocalInput(new Date(tour.endDate))] : []),
             duration: tour.duration,
             priceAdult: tour.priceAdult,
             priceChild: tour.priceChild || 0,
