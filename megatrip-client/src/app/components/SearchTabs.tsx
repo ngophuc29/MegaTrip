@@ -61,13 +61,19 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   
   // load airports for flight selects (only)
   useEffect(() => {
-    fetch("http://localhost:7700/airports")
+    fetch('/airport.json')
       .then((res) => res.json())
       .then((data) => {
-        const list = data?.airports ? Object.values(data.airports) : [];
+        console.log('[SearchTabs] /airport.json raw:', data);
+        const raw = data?.airports ?? data;
+        const list = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+        console.log('[SearchTabs] parsed airports:', list.length, list.slice(0, 6));
         setAirports(list);
       })
-      .catch(() => setAirports([])); // ✅ đặt catch đúng chỗ
+      .catch((err) => {
+        console.error('[SearchTabs] failed to load /airport.json', err);
+        setAirports([]);
+      });
   }, []);
 
 

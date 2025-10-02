@@ -154,11 +154,14 @@ export default function TravelokaBanner() {
       setProvinces(data);
     });
 
-    // load airport list for flight selects
-    fetch('http://localhost:7700/airports')
+    // load airport list from local public/airport.json (no external API)
+    fetch('/airport.json')
       .then(res => res.json())
       .then(data => {
-        const list = data?.airports ? Object.values(data.airports) : [];
+        console.log('[TravelokaBanner] /airport.json raw:', data);
+        const raw = data?.airports ?? data;
+        const list = Array.isArray(raw) ? raw : (raw ? Object.values(raw) : []);
+        console.log('[TravelokaBanner] parsed airports:', list.length, list.slice(0, 6));
         setAirports(list);
         // optional defaults if not selected yet
         if (list.length > 0 && !fromProvince && !toProvince) {
@@ -166,7 +169,10 @@ export default function TravelokaBanner() {
           setToProvince(list[1]?.icao || list[0].icao);
         }
       })
-      .catch(() => setAirports([]));
+      .catch((err) => {
+        console.error('[TravelokaBanner] failed to load /airport.json', err);
+        setAirports([]);
+      });
   }, []);
 
   useEffect(() => {
