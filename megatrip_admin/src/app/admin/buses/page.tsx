@@ -1391,10 +1391,21 @@ export default function Buses() {
 
     const renderBusForm = () => {
         if (modalMode === "view" && selectedBus) {
+            // Render schedule using arrays (departureDates / arrivalDates) if available,
+            // otherwise fall back to single departureAt/arrivalAt.
+            const depArray: string[] = Array.isArray((selectedBus as any).departureDates) && (selectedBus as any).departureDates.length
+                ? (selectedBus as any).departureDates
+                : (selectedBus.departureAt ? [(selectedBus as any).departureAt] : []);
+            const arrArray: string[] = Array.isArray((selectedBus as any).arrivalDates) && (selectedBus as any).arrivalDates.length
+                ? (selectedBus as any).arrivalDates
+                : (selectedBus.arrivalAt ? [(selectedBus as any).arrivalAt] : []);
+
             return (
-                <div className="space-y-6">
+                <div className="space-y-6" >
                     <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-4">
+                        {/* <div className="space-y-4"> */}
+                        <div className="space-y-4 " >
+
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Mã tuyến xe</Label>
                                 <p className="mt-1 font-mono text-lg font-bold">{selectedBus.busCode}</p>
@@ -1422,47 +1433,75 @@ export default function Buses() {
                                         {selectedBus.routeFrom.name} → {selectedBus.routeTo.name}
                                     </p>
                                 </div>
-                            </div>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
-                                <div className="mt-1 space-y-1">
-                                    <p className="font-medium">
-                                        {new Date(selectedBus.departureAt).toLocaleString('vi-VN')} →{" "}
-                                        {new Date(selectedBus.arrivalAt).toLocaleString('vi-VN')}
+                                <div>
+                                    <Label className="text-sm font-medium text-gray-700">Giá vé</Label>
+                                    <p className="mt-1 text-lg font-bold text-green-600">
+                                        {new Intl.NumberFormat('vi-VN').format(selectedBus.price)} ₫
                                     </p>
-                                    <p className="text-sm text-gray-600">Thời gian di chuyển: {selectedBus.duration}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-sm font-medium text-gray-700">Ghế ngồi</Label>
+                                    <p className="mt-1">
+                                        {selectedBus.seatsAvailable} / {selectedBus.seatsTotal} ghế còn trống
+                                    </p>
+                                </div>
+                                <div>
+                                    <Label className="text-sm font-medium text-gray-700">Loại xe</Label>
+                                    <div className="mt-1 flex space-x-2">
+                                        {selectedBus.busType.map((type, index) => (
+                                            <Badge key={index} variant="outline">{type}</Badge>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <Label className="text-sm font-medium text-gray-700">Tiện ích</Label>
+                                    <p className="mt-1 text-gray-900">{selectedBus.amenities}</p>
                                 </div>
                             </div>
+                        </div>
+                        <div className="space-y-4" style={{ height: '70vh', overflowY: 'auto' }}>
                             <div>
-                                <Label className="text-sm font-medium text-gray-700">Giá vé</Label>
-                                <p className="mt-1 text-lg font-bold text-green-600">
-                                    {new Intl.NumberFormat('vi-VN').format(selectedBus.price)} ₫
-                                </p>
+                                <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
+                                <div className="mt-1 space-y-2">
+                                    {depArray.length ? (
+                                        depArray.map((dep, i) => {
+                                            const arr = arrArray[i];
+                                            const depDate = dep ? new Date(dep) : null;
+                                            const arrDate = arr ? new Date(arr) : null;
+                                            const duration = (dep && arr) ? calculateDuration(dep, arr) : (selectedBus.duration || "");
+                                            return (
+                                                <div key={i} className="bg-gray-50 p-3 rounded">
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <div className="text-sm text-gray-500">Chuyến #{i + 1}</div>
+                                                            <div className="font-medium">
+                                                                Giờ đi : {depDate ? depDate.toLocaleDateString('vi-VN') : '---'}{" "}
+                                                                <span className="text-gray-600">•</span>{" "}
+                                                                <span className="font-mono">{depDate ? depDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '---'}</span>
+                                                            </div>
+                                                            <div className="text-sm text-gray-500 mt-1">
+                                                                Giờ đến : {arrDate ? `${arrDate.toLocaleDateString('vi-VN')} • ${arrDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Giờ đến chưa được đặt'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="text-sm text-gray-500">Thời gian di chuyển</div>
+                                                            <div className="font-medium">{duration || '—'}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-sm text-gray-600">Không có lịch trình</p>
+                                    )}
+                                </div>
                             </div>
-                            <div>
-                                <Label className="text-sm font-medium text-gray-700">Ghế ngồi</Label>
-                                <p className="mt-1">
-                                    {selectedBus.seatsAvailable} / {selectedBus.seatsTotal} ghế còn trống
-                                </p>
-                            </div>
+                           
                         </div>
                     </div>
 
-                    <div>
-                        <Label className="text-sm font-medium text-gray-700">Loại xe</Label>
-                        <div className="mt-1 flex space-x-2">
-                            {selectedBus.busType.map((type, index) => (
-                                <Badge key={index} variant="outline">{type}</Badge>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div>
-                        <Label className="text-sm font-medium text-gray-700">Tiện ích</Label>
-                        <p className="mt-1 text-gray-900">{selectedBus.amenities}</p>
-                    </div>
+                   
                 </div>
             );
         }
@@ -2133,7 +2172,7 @@ export default function Buses() {
                 }
                 description={
                     modalMode === "create" ? "Tạo tuyến xe mới trong hệ thống" :
-                        modalMode === "edit" ? "Cập nhật thông tin tuyến xe" :
+                        modalMode === "edit" ? "Xem chi tiết và cập nhật thông tin tuyến xe" :
                             "Xem thông tin chi tiết tuyến xe"
                 }
                 mode={modalMode}
