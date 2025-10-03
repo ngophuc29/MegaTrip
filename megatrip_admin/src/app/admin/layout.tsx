@@ -40,6 +40,7 @@ import {
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import NProgressBar from "../components/NProgressBar";
+import { Toaster } from "../components/ui/toaster";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -305,6 +306,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {/* Main content area */}
           <main className="min-h-[calc(100vh-4rem)]">
             {children}
+            <Toaster />
           </main>
 
           {/* Footer */}

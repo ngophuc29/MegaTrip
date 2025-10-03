@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Plus, Edit, Eye, Trash2, Calendar, DollarSign, Users, Star, Upload, RefreshCw, Globe, Settings, Image, Copy, ExternalLink, Save, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -23,22 +23,21 @@ import { Separator } from "@/app/components/ui/separator";
 const JoditEditorWrapper = dynamic(() => import("../../components/JoditEditorWrapper"), { ssr: false });
 interface Tour {
     id: string;
-    title: string;
-    title_vn?: string;
+    name: string;
     slug: string;
-    summary: string;
     description: string;
-    departure: string;
+    departureFrom: string;
     destination: string;
     startDate: string;
     endDate: string;
     startDates?: string[];
     endDates?: string[];
     duration: string;
-    priceAdult: number;
-    priceChild?: number;
-    priceBaby?: number;
-    seatsTotal: number;
+    difficulty?: "easy" | "medium" | "difficult";
+    adultPrice: number;
+    childPrice?: number;
+    infantPrice?: number;
+    maxGroupSize: number;
     seatsBooked: number;
     minBooking: number;
     status: "active" | "hidden" | "draft";
@@ -53,12 +52,18 @@ interface Tour {
         title: string;
         details: string;
     }>;
-    inclusions: string[];
-    exclusions: string[];
+    // inclusions: string[];
+    // exclusions: string[];
+    services: string[]; // merged inclusions/exclusions -> services
     pickupPoints: string[];
+    startLocation?: {
+        type?: string; // "Point"
+        address?: string;
+        pickupDropoff?: string; // required by BE
+    };
     cancellationPolicy?: string;
-    rating: number;
-    reviewCount: number;
+    ratingsAverage: number;
+    ratingsQuantity: number;
     metaTitle?: string;
     metaDescription?: string;
     metaKeywords?: string;
@@ -67,35 +72,42 @@ interface Tour {
 }
 
 interface TourFormData {
-    title: string;
-    title_vn: string;
+    name: string;
     slug: string;
-    summary: string;
     description: string;
-    departure: string;
+    departureFrom: string;
     destination: string;
     startDate: string;
     endDate: string;
     startDates?: string[];
     endDates?: string[];
     duration: string;
-    priceAdult: number;
-    priceChild: number;
-    priceBaby: number;
-    seatsTotal: number;
+    difficulty: "easy" | "medium" | "difficult";
+    adultPrice: number;
+    childPrice: number;
+    infantPrice: number;
+    maxGroupSize: number;
     minBooking: number;
     categoryId: string;
     tags: string[];
     images: string[];
     videoUrl: string;
     itinerary: Array<{
-        dayNumber: number;
-        title: string;
-        details: string;
+        day: number;
+        address: string;
+        description: string;
+        image?: string;
     }>;
-    inclusions: string[];
-    exclusions: string[];
-    pickupPoints: string[];
+    // inclusions: string[];
+    // exclusions: string[];
+    services: string[]; // checkbox list
+    // pickupPoints: string[];
+    // startLocation for admin input (bind to BE.startLocation)
+    startLocation?: {
+        type?: string;
+        address?: string;
+        pickupDropoff?: string;
+    };
     cancellationPolicy: string;
     status: "active" | "hidden" | "draft";
     highlight: boolean;
@@ -111,7 +123,15 @@ interface TourFilters {
     priceRange?: [number, number];
     dateRange?: [string, string];
 }
-
+const durationOptions = [
+    { value: 1, label: "1 ngày 0 đêm" },
+    { value: 2, label: "2 ngày 1 đêm" },
+    { value: 3, label: "3 ngày 2 đêm" },
+    { value: 4, label: "4 ngày 3 đêm" },
+    { value: 5, label: "5 ngày 4 đêm" },
+    { value: 6, label: "6 ngày 5 đêm" },
+    { value: 7, label: "7 ngày 6 đêm" },
+];
 const mockCategories = [
     { id: "cat_001", name: "Tour biển đảo" },
     { id: "cat_002", name: "Tour núi non" },
@@ -123,20 +143,19 @@ const mockCategories = [
 const mockTours: Tour[] = [
     {
         id: "tour_001",
-        title: "Du thuyền Vịnh Hạ Long 3N2Đ",
-        title_vn: "Du thuyền Vịnh Hạ Long 3 ngày 2 đêm",
+        name: "Du thuyền Vịnh Hạ Long 3N2Đ",
+
         slug: "du-thuyen-vinh-ha-long-3n2d",
-        summary: "Khám phá Vịnh Hạ Long hùng vĩ với hành trình 3 ngày 2 đêm trên du thuyền 5 sao.",
         description: "Trải nghiệm du thuyền sang trọng, khám phá các hang động và thưởng thức ẩm thực địa phương.",
-        departure: "Hà Nội",
+        departureFrom: "Hà Nội",
         destination: "Vịnh Hạ Long",
         startDate: "2025-10-01",
         endDate: "2025-10-03",
         duration: "3 ngày 2 đêm",
-        priceAdult: 6500000,
-        priceChild: 4500000,
-        priceBaby: 1500000,
-        seatsTotal: 30,
+        adultPrice: 6500000,
+        childPrice: 4500000,
+        infantPrice: 1500000,
+        maxGroupSize: 30,
         seatsBooked: 20,
         minBooking: 2,
         status: "active",
@@ -166,129 +185,18 @@ const mockTours: Tour[] = [
                 details: "Thăm đảo Titop, tắm biển và trở về Hà Nội.",
             },
         ],
-        inclusions: ["Vé du thuyền", "Ăn uống theo chương trình", "Hướng dẫn viên"],
-        exclusions: ["Chi phí cá nhân", "Đồ uống ngoài chương trình"],
+        services: ["hướng dẫn viên", "resort 4 sao", "xe đưa đón"],
         pickupPoints: ["Hà Nội", "Hải Phòng"],
         cancellationPolicy: "Hủy trước 7 ngày: hoàn 100%. Hủy trước 3 ngày: hoàn 50%.",
-        rating: 4.8,
-        reviewCount: 120,
+        ratingsAverage: 4.8,
+        ratingsQuantity: 120,
         metaTitle: "Du thuyền Vịnh Hạ Long 3N2Đ",
         metaDescription: "Trải nghiệm du thuyền 5 sao tại Vịnh Hạ Long với hành trình 3 ngày 2 đêm.",
         metaKeywords: "du thuyền, vịnh hạ long, tour biển đảo",
         createdAt: "2025-09-01T10:00:00Z",
         updatedAt: "2025-09-10T15:30:00Z",
-    },
-    {
-        id: "tour_002",
-        title: "Khám phá Sapa 2N1Đ",
-        title_vn: "Khám phá Sapa 2 ngày 1 đêm",
-        slug: "kham-pha-sapa-2n1d",
-        summary: "Hành trình khám phá Sapa với núi non hùng vĩ và văn hóa bản địa đặc sắc.",
-        description: "Tham quan núi Hàm Rồng, bản Cát Cát và trải nghiệm văn hóa dân tộc thiểu số.",
-        departure: "Hà Nội",
-        destination: "Sapa",
-        startDate: "2025-11-01",
-        endDate: "2025-11-02",
-        duration: "2 ngày 1 đêm",
-        priceAdult: 3500000,
-        priceChild: 2500000,
-        priceBaby: 1000000,
-        seatsTotal: 25,
-        seatsBooked: 10,
-        minBooking: 1,
-        status: "draft",
-        highlight: false,
-        visibility: "public",
-        categoryId: "cat_002",
-        tags: ["núi non", "văn hóa", "trekking"],
-        images: ["https://example.com/images/sapa1.jpg"],
-        videoUrl: "",
-        itinerary: [
-            {
-                dayNumber: 1,
-                title: "Khám phá núi Hàm Rồng",
-                details: "Đón khách tại Hà Nội, di chuyển đến Sapa, tham quan núi Hàm Rồng.",
-            },
-            {
-                dayNumber: 2,
-                title: "Thăm bản Cát Cát",
-                details: "Khám phá bản Cát Cát, trải nghiệm văn hóa dân tộc H'Mông.",
-            },
-        ],
-        inclusions: ["Vé tham quan", "Ăn uống", "Xe đưa đón"],
-        exclusions: ["Chi phí cá nhân", "Bảo hiểm du lịch"],
-        pickupPoints: ["Hà Nội"],
-        cancellationPolicy: "Hủy trước 5 ngày: hoàn 100%.",
-        rating: 4.5,
-        reviewCount: 80,
-        metaTitle: "Khám phá Sapa 2N1Đ",
-        metaDescription: "Hành trình khám phá Sapa với núi non và văn hóa dân tộc đặc sắc.",
-        metaKeywords: "sapa, núi non, văn hóa bản địa",
-        createdAt: "2025-08-15T09:00:00Z",
-        updatedAt: "2025-09-05T12:00:00Z",
-    },
-    {
-        id: "tour_003",
-        title: "Tour Đà Nẵng - Hội An 4N3Đ",
-        title_vn: "Tour Đà Nẵng - Hội An 4 ngày 3 đêm",
-        slug: "tour-da-nang-hoi-an-4n3d",
-        summary: "Khám phá Đà Nẵng hiện đại và phố cổ Hội An lãng mạn trong 4 ngày 3 đêm.",
-        description: "Tham quan cầu Rồng, Bà Nà Hills, phố cổ Hội An và bãi biển Mỹ Khê.",
-        departure: "TP. Hồ Chí Minh",
-        destination: "Đà Nẵng",
-        startDate: "2025-12-01",
-        endDate: "2025-12-04",
-        duration: "4 ngày 3 đêm",
-        priceAdult: 7500000,
-        priceChild: 5500000,
-        priceBaby: 2000000,
-        seatsTotal: 40,
-        seatsBooked: 35,
-        minBooking: 2,
-        status: "active",
-        highlight: true,
-        visibility: "public",
-        categoryId: "cat_003",
-        tags: ["thành phố", "biển", "văn hóa"],
-        images: [
-            "https://example.com/images/danang1.jpg",
-            "https://example.com/images/hoian1.jpg",
-        ],
-        videoUrl: "https://vimeo.com/123456789",
-        itinerary: [
-            {
-                dayNumber: 1,
-                title: "Đến Đà Nẵng - Cầu Rồng",
-                details: "Đón khách tại sân bay Đà Nẵng, tham quan cầu Rồng và bãi biển Mỹ Khê.",
-            },
-            {
-                dayNumber: 2,
-                title: "Bà Nà Hills",
-                details: "Khám phá khu du lịch Bà Nà Hills, cáp treo và cầu Vàng.",
-            },
-            {
-                dayNumber: 3,
-                title: "Phố cổ Hội An",
-                details: "Tham quan phố cổ Hội An, chùa Cầu và thưởng thức ẩm thực địa phương.",
-            },
-            {
-                dayNumber: 4,
-                title: "Tự do và trở về",
-                details: "Tự do mua sắm, tắm biển và trở về TP. Hồ Chí Minh.",
-            },
-        ],
-        inclusions: ["Vé máy bay", "Khách sạn 4 sao", "Vé tham quan"],
-        exclusions: ["Chi phí cá nhân", "Đồ uống"],
-        pickupPoints: ["TP. Hồ Chí Minh", "Hà Nội"],
-        cancellationPolicy: "Hủy trước 10 ngày: hoàn 100%. Hủy trước 5 ngày: hoàn 50%.",
-        rating: 4.9,
-        reviewCount: 150,
-        metaTitle: "Tour Đà Nẵng - Hội An 4N3Đ",
-        metaDescription: "Khám phá Đà Nẵng và Hội An với hành trình 4 ngày 3 đêm đầy thú vị.",
-        metaKeywords: "đà nẵng, hội an, tour thành phố",
-        createdAt: "2025-07-20T08:00:00Z",
-        updatedAt: "2025-09-12T10:00:00Z",
-    },
+    }
+
 ];
 const DEFAULT_CANCELLATION_POLICY = `
         CHÍNH SÁCH ĐẶT TOUR
@@ -319,7 +227,18 @@ const DEFAULT_CANCELLATION_POLICY = `
         - Các bên ưu tiên thương lượng, hòa giải.
         - Nếu không đạt được thỏa thuận, tranh chấp sẽ được giải quyết theo **pháp luật Việt Nam**.
         `;
-
+const SERVICE_OPTIONS = [
+    "hướng dẫn viên",
+    "khách sạn 2 sao",
+    "khách sạn 3 sao",
+    "resort 4 sao",
+    "homestay",
+    "bảo hiểm du lịch",
+    "vé máy bay",
+    "xe đưa đón",
+    "tàu hỏa",
+];
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -334,31 +253,32 @@ export default function Tours() {
     const [tourToDelete, setTourToDelete] = useState<Tour | null>(null);
     const [activeTab, setActiveTab] = useState("basic");
     const [formData, setFormData] = useState<TourFormData>({
-        title: "",
-        title_vn: "",
+        name: "",
         slug: "",
-        summary: "",
         description: "",
-        departure: "",
+        departureFrom: "",
         destination: "",
         startDate: "",
         endDate: "",
         startDates: [],
         endDates: [],
         duration: "",
-        priceAdult: 0,
-        priceChild: 0,
-        priceBaby: 0,
-        seatsTotal: 1,
+        difficulty: "easy",
+        adultPrice: 0,
+        childPrice: 0,
+        infantPrice: 0,
+        maxGroupSize: 1,
         minBooking: 1,
         categoryId: "",
         tags: [],
         images: [],
         videoUrl: "",
         itinerary: [],
-        inclusions: [],
-        exclusions: [],
-        pickupPoints: [],
+        // inclusions: [],
+        // exclusions: [],
+        services: [], // new checkbox-backed field
+        // pickupPoints: [],
+        startLocation: { type: "Point", address: "", pickupDropoff: "" },
         // set default cancellation policy text here
         cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
         status: "draft",
@@ -382,16 +302,94 @@ export default function Tours() {
         pageSize: 10,
     });
 
-    // Fake data with filtering and pagination
+    // Data    loading state (try real API, fallback to mock)
     const [tours, setTours] = useState<Tour[]>(mockTours);
-    const isLoading = false;
-    const error = null;
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [error, setError] = useState<any>(null);
+
+    // map server tour -> UI Tour
+    const mapServerTour = (t: any): Tour => {
+        const toLocal = (iso?: string | null) => (iso ? toLocalInput(new Date(iso)) : "");
+        const startDatesLocal = Array.isArray(t.startDates) ? t.startDates.map((d: string) => toLocal(d)) : (t.startDate ? [toLocal(t.startDate)] : []);
+        const endDatesLocal = Array.isArray(t.endDates) ? t.endDates.map((d: string) => toLocal(d)) : (t.endDate ? [toLocal(t.endDate)] : []);
+        const durationDisplay = (startDatesLocal[0] && endDatesLocal[0]) ? calculateDuration(startDatesLocal[0], endDatesLocal[0]) : (typeof t.duration === "number" ? `${t.duration} ngày ${Math.max(0, t.duration - 1)} đêm` : (t.duration || ""));
+        return {
+            id: t._id || t.id,
+            name: t.name || "",
+            slug: t.slug || "",
+            description: t.description || "",
+            departureFrom: t.departureFrom || "",
+            destination: t.destination || "",
+            startDate: startDatesLocal[0] || toLocal(t.startDate),
+            endDate: endDatesLocal[0] || toLocal(t.endDate),
+            startDates: startDatesLocal,
+            endDates: endDatesLocal,
+            duration: durationDisplay,
+            difficulty: t.difficulty,
+            adultPrice: Number(t.adultPrice || 0),
+            childPrice: t.childPrice !== undefined ? Number(t.childPrice) : undefined,
+            infantPrice: t.infantPrice !== undefined ? Number(t.infantPrice) : undefined,
+            maxGroupSize: Number(t.maxGroupSize || 1),
+            seatsBooked: Number(t.seatsBooked || 0),
+            minBooking: Number(t.minBooking || 1),
+            status: t.status || "draft",
+            highlight: Boolean(t.highlight),
+            visibility: t.visibility || "public",
+            categoryId: t.categoryId || "",
+            tags: Array.isArray(t.tags) ? t.tags : [],
+            images: Array.isArray(t.images) ? t.images : [],
+            videoUrl: t.videoUrl || "",
+            itinerary: Array.isArray(t.itinerary) ? t.itinerary : [],
+            services: Array.isArray(t.services) ? t.services : [],
+            pickupPoints: Array.isArray(t.pickupPoints) ? t.pickupPoints : [],
+            startLocation: t.startLocation || undefined,
+            cancellationPolicy: t.cancellationPolicy || "",
+            ratingsAverage: Number(t.ratingsAverage || 0),
+            ratingsQuantity: Number(t.ratingsQuantity || 0),
+            metaTitle: t.metaTitle || "",
+            metaDescription: t.metaDescription || "",
+            metaKeywords: t.metaKeywords || "",
+            createdAt: t.createdAt || t.created_at || new Date().toISOString(),
+            updatedAt: t.updatedAt || t.updated_at || new Date().toISOString(),
+        } as any;
+    };
+
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            setIsLoading(true);
+            setError(null);
+            try {
+                const res = await fetch(`${API_BASE}/api/tours`);
+                if (!mounted) return;
+                if (!res.ok) {
+                    console.warn("Fetch /api/tours failed:", res.status);
+                    setError({ status: res.status });
+                    return;
+                }
+                const body = await res.json().catch(() => null);
+                const data = body?.data || body;
+                if (Array.isArray(data) && data.length > 0) {
+                    setTours(data.map(mapServerTour));
+                } else {
+                    console.info("No tours returned from API — keeping mock data");
+                }
+            } catch (err) {
+                console.error("Error fetching tours:", err);
+                setError(err);
+            } finally {
+                if (mounted) setIsLoading(false);
+            }
+        };
+        load();
+        return () => { mounted = false; };
+    }, []);
 
     const filteredTours = mockTours
         .filter((tour) => {
             if (filters.status !== "all" && tour.status !== filters.status) return false;
             if (filters.category !== "all" && tour.categoryId !== filters.category) return false;
-            if (searchQuery && !tour.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+            if (searchQuery && !tour.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             return true;
         })
         .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
@@ -413,13 +411,20 @@ export default function Tours() {
         return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
 
-    const parseLocalInput = (isoLocal: string) => {
+    // const parseLocalInput = (isoLocal: string) => {
+    //     if (!isoLocal) return null;
+    //     const [datePart, timePart] = isoLocal.split('T');
+    //     if (!datePart) return null;
+    //     const [y, m, day] = datePart.split('-').map(Number);
+    //     const [hh = 0, mm = 0] = (timePart || '').split(':').map(Number);
+    //     return new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0, 0, 0);
+    // };
+    const parseLocalInput = (isoLocal?: string | null): Date | null => {
         if (!isoLocal) return null;
-        const [datePart, timePart] = isoLocal.split('T');
-        if (!datePart) return null;
-        const [y, m, day] = datePart.split('-').map(Number);
-        const [hh = 0, mm = 0] = (timePart || '').split(':').map(Number);
-        return new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0, 0, 0);
+        const parts = isoLocal.split(/[-T:]/).map(p => parseInt(p, 10));
+        if (parts.length < 3 || parts.some(isNaN)) return null;
+        const [y, m, d, hh = 0, mm = 0, ss = 0] = parts;
+        return new Date(y, m - 1, d, hh, mm, ss);
     };
 
     // returns true if isoLocal (datetime-local string) is strictly in the past compared to now (local)
@@ -430,12 +435,11 @@ export default function Tours() {
         const now = new Date();
         return dt.getTime() < now.getTime();
     };
-    
-    const localToIso = (localStr: string) => {
-        if (!localStr) return "";
+
+    const localToIso = (localStr?: string | null) => {
         const d = parseLocalInput(localStr);
-        return d ? d.toISOString() : localStr;
-    };
+        return d ? d.toISOString() : null;
+    }
 
     const generateConsecutiveDays = (startIsoLocal: string, daysCount: number) => {
         const start = parseLocalInput(startIsoLocal);
@@ -468,29 +472,37 @@ export default function Tours() {
         return result;
     };
 
-    // Chuyển chuỗi duration (ví dụ "3 ngày 2 đêm" hoặc "3N2Đ") sang số ngày (3).
-    const parseDurationToDays = (durationStr?: string, startIso?: string, endIso?: string): number => {
-        if (durationStr) {
-            // match "3 ngày", "3 ngày 2 đêm"
-            const vnMatch = durationStr.match(/(\d+)\s*ngày/i);
-            if (vnMatch) return Math.max(1, parseInt(vnMatch[1], 10));
-
-            // match compact "3N2Đ" or "3n2đ"
-            const compactMatch = durationStr.match(/(\d+)\s*[Nn]\s*(\d+)?\s*[ĐĐd]?/);
-            if (compactMatch) return Math.max(1, parseInt(compactMatch[1], 10));
-        }
-
+    const parseDurationToDays = (durationStr?: string | number, startIso?: string, endIso?: string): number => {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        // Nếu có start và end, tính số ngày = số khoảng 24h (BE convention)
         if (startIso && endIso) {
             const s = parseLocalInput(startIso);
             const e = parseLocalInput(endIso);
             if (s && e && e.getTime() >= s.getTime()) {
-                // số ngày = chênh lệch ngày (full days) + 1 (inclusive)
-                const diffDays = Math.floor((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24));
-                return diffDays + 1;
+                const diffMs = e.getTime() - s.getTime();
+                const diffDays = Math.round(diffMs / msPerDay); // số khoảng 24h
+                return Math.max(1, diffDays);
             }
         }
 
-        return 0;
+        // Nếu duration là số, trả về số ngày
+        if (typeof durationStr === "number" && !isNaN(durationStr)) {
+            return Math.max(1, Math.floor(durationStr));
+        }
+
+        // Nếu duration là chuỗi, parse các định dạng (hiển thị user-facing like "2 ngày 1 đêm")
+        if (typeof durationStr === "string" && durationStr.trim()) {
+            const vnMatch = durationStr.match(/(\d+)\s*ngày/i);
+            if (vnMatch) return Math.max(1, parseInt(vnMatch[1], 10));
+
+            const compactMatch = durationStr.match(/(\d+)\s*[Nn]/);
+            if (compactMatch) return Math.max(1, parseInt(compactMatch[1], 10));
+
+            const simpleNum = durationStr.match(/^\s*(\d+)\s*$/);
+            if (simpleNum) return Math.max(1, parseInt(simpleNum[1], 10));
+        }
+
+        return 1;
     };
 
     // Đảm bảo itinerary có đúng số ngày; giữ nội dung hiện có nếu có, tạo rỗng nếu cần
@@ -500,9 +512,13 @@ export default function Tours() {
         for (let i = 0; i < n; i++) {
             const existingDay = existing && existing[i];
             if (existingDay) {
-                next.push({ ...existingDay, dayNumber: i + 1 });
+                // normalize legacy keys if any (support older data)
+                const dayVal = (existingDay as any).day ?? (existingDay as any).dayNumber ?? (i + 1);
+                const addressVal = (existingDay as any).address ?? (existingDay as any).title ?? "";
+                const descVal = (existingDay as any).description ?? (existingDay as any).details ?? "";
+                next.push({ ...existingDay, day: dayVal, address: addressVal, description: descVal });
             } else {
-                next.push({ dayNumber: i + 1, title: "", details: "" });
+                next.push({ day: i + 1, address: "", description: "" });
             }
         }
         return next;
@@ -516,15 +532,90 @@ export default function Tours() {
         return parseDurationToDays(formData.duration || undefined, firstStart, firstEnd);
     };
 
+    // const applyRecurrence = () => {
+    //     const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
+    //     const firstEnd = (formData.endDates && formData.endDates.length) ? formData.endDates[0] : formData.endDate;
+
+    //     if (!firstStart) {
+    //         toast({ title: "Thiếu ngày bắt đầu", description: "Vui lòng chọn ngày khởi hành đầu tiên trước khi áp dụng", variant: "destructive" });
+    //         return;
+    //     }
+
+    //     let generatedStarts: string[] = [];
+    //     if (recurrenceMode === "weekly") {
+    //         generatedStarts = generateConsecutiveDays(firstStart, 7);
+    //     } else if (recurrenceMode === "monthly") {
+    //         generatedStarts = generateConsecutiveDays(firstStart, 30);
+    //     } else if (recurrenceMode === "weekday_of_month") {
+    //         generatedStarts = generateWeekdayInMonth(firstStart, recurrenceWeekday);
+    //     } else {
+    //         generatedStarts = Array.isArray(formData.startDates) && formData.startDates.length ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
+    //     }
+
+    //     // filter out any generated start dates that are in the past (defensive)
+    //     generatedStarts = generatedStarts.filter(s => !isPastLocal(s));
+
+    //     let generatedEnds: string[] = [];
+    //     if (firstEnd) {
+    //         const startDate = parseLocalInput(firstStart);
+    //         const endDate = parseLocalInput(firstEnd);
+    //         if (startDate && endDate) {
+    //             const deltaMs = endDate.getTime() - startDate.getTime();
+    //             for (const dIso of generatedStarts) {
+    //                 const d = parseLocalInput(dIso);
+    //                 if (d) {
+    //                     const end = new Date(d.getTime() + deltaMs);
+    //                     // ensure corresponding end is not before its start
+    //                     const endLocal = toLocalInput(end);
+    //                     if (isPastLocal(endLocal) && end.getTime() < new Date().getTime()) {
+    //                         // keep it only if end is not before now — otherwise push empty so validation will catch it
+    //                         generatedEnds.push(endLocal);
+    //                     } else {
+    //                         generatedEnds.push(endLocal);
+    //                     }
+    //                 } else {
+    //                     generatedEnds.push("");
+    //                 }
+    //             }
+    //         } else {
+    //             generatedEnds = generatedStarts.map(() => firstEnd);
+    //         }
+    //     } else {
+    //         generatedEnds = [];
+    //     }
+
+    //     if (!generatedStarts || generatedStarts.length === 0) {
+    //         toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
+    //         setRecurrenceApplied(false);
+    //         return;
+    //     }
+
+    //     handleFormChange('startDates' as any, generatedStarts);
+    //     handleFormChange('startDate' as any, generatedStarts[0]);
+
+    //     if (generatedEnds.length) {
+    //         handleFormChange('endDates' as any, generatedEnds);
+    //         handleFormChange('endDate' as any, generatedEnds[0]);
+    //         setRecurrenceApplied(true);
+    //     } else {
+    //         setRecurrenceApplied(false);
+    //     }
+
+    //     setIsFormDirty(true);
+    //     toast({ title: "Đã tạo ngày khởi hành", description: `Tạo ${generatedStarts.length} ngày theo chế độ ${recurrenceMode}` });
+    // };
+
+
     const applyRecurrence = () => {
         const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
         const firstEnd = (formData.endDates && formData.endDates.length) ? formData.endDates[0] : formData.endDate;
- 
+
         if (!firstStart) {
             toast({ title: "Thiếu ngày bắt đầu", description: "Vui lòng chọn ngày khởi hành đầu tiên trước khi áp dụng", variant: "destructive" });
             return;
         }
 
+        // Tạo danh sách startDates theo recurrence mode
         let generatedStarts: string[] = [];
         if (recurrenceMode === "weekly") {
             generatedStarts = generateConsecutiveDays(firstStart, 7);
@@ -533,62 +624,67 @@ export default function Tours() {
         } else if (recurrenceMode === "weekday_of_month") {
             generatedStarts = generateWeekdayInMonth(firstStart, recurrenceWeekday);
         } else {
-            generatedStarts = Array.isArray(formData.startDates) && formData.startDates.length ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
+            generatedStarts = Array.isArray(formData.startDates) && formData.startDates.length
+                ? formData.startDates
+                : (formData.startDate ? [formData.startDate] : []);
         }
 
-        // filter out any generated start dates that are in the past (defensive)
+        // Lọc các ngày start trong quá khứ
         generatedStarts = generatedStarts.filter(s => !isPastLocal(s));
-        
-        let generatedEnds: string[] = [];
-        if (firstEnd) {
-            const startDate = parseLocalInput(firstStart);
-            const endDate = parseLocalInput(firstEnd);
-            if (startDate && endDate) {
-                const deltaMs = endDate.getTime() - startDate.getTime();
-                for (const dIso of generatedStarts) {
-                    const d = parseLocalInput(dIso);
-                    if (d) {
-                        const end = new Date(d.getTime() + deltaMs);
-                        // ensure corresponding end is not before its start
-                        const endLocal = toLocalInput(end);
-                        if (isPastLocal(endLocal) && end.getTime() < new Date().getTime()) {
-                            // keep it only if end is not before now — otherwise push empty so validation will catch it
-                            generatedEnds.push(endLocal);
-                        } else {
-                            generatedEnds.push(endLocal);
-                        }
-                    } else {
-                        generatedEnds.push("");
-                    }
-                }
-            } else {
-                generatedEnds = generatedStarts.map(() => firstEnd);
-            }
-        } else {
-            generatedEnds = [];
-        }
 
         if (!generatedStarts || generatedStarts.length === 0) {
-             toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
-             setRecurrenceApplied(false);
-             return;
-         }
+            toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
+            setRecurrenceApplied(false);
+            return;
+        }
 
-         handleFormChange('startDates' as any, generatedStarts);
-         handleFormChange('startDate' as any, generatedStarts[0]);
+        // Tính duration từ firstStart và firstEnd (nếu có), hoặc mặc định "2 ngày 1 đêm" -> duration = 1
+        let duration: number;
+        if (firstStart && firstEnd) {
+            duration = parseDurationToDays(formData.duration, firstStart, firstEnd);
+        } else {
+            // Mặc định duration = 1 cho "2 ngày 1 đêm" nếu không có endDate
+            duration = parseDurationToDays(formData.duration) || 1;
+        }
 
-         if (generatedEnds.length) {
-             handleFormChange('endDates' as any, generatedEnds);
-             handleFormChange('endDate' as any, generatedEnds[0]);
-             setRecurrenceApplied(true);
-         } else {
-             setRecurrenceApplied(false);
-         }
+        // Tính endDates dựa trên startDates + duration
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const generatedEnds: string[] = generatedStarts.map(dIso => {
+            const startDate = parseLocalInput(dIso);
+            if (startDate) {
+                // use the numeric 'duration' computed above (avoid reading formData.duration which may be display string)
+                const numericDuration = duration || 1;
+                // match BE: end - start === numericDuration * 24h
+                const endDate = new Date(startDate.getTime() + numericDuration * msPerDay);
+                return toLocalInput(endDate);
+            }
+            return "";
+        });
 
-         setIsFormDirty(true);
-         toast({ title: "Đã tạo ngày khởi hành", description: `Tạo ${generatedStarts.length} ngày theo chế độ ${recurrenceMode}` });
+        // Tạo chuỗi duration hiển thị thân thiện (VD: "2 ngày 1 đêm")
+        const displayDuration = firstStart && generatedEnds[0]
+            ? calculateDuration(firstStart, generatedEnds[0])
+            : `${duration} ngày ${Math.max(0, duration - 1)} đêm`;
+
+        handleFormChange('startDates' as any, generatedStarts);
+        handleFormChange('startDate' as any, generatedStarts[0]);
+        handleFormChange('endDates' as any, generatedEnds);
+        handleFormChange('endDate' as any, generatedEnds[0]);
+        // store numeric duration and human-friendly string separately
+        handleFormChange('duration' as any, duration);
+        handleFormChange('durationDisplay' as any, displayDuration);
+
+        // Đồng bộ itinerary với duration
+        const updatedItinerary = ensureItineraryLength(duration, formData.itinerary || []);
+        handleFormChange('itinerary', updatedItinerary);
+
+        setRecurrenceApplied(true);
+        setIsFormDirty(true);
+        toast({
+            title: "Đã tạo ngày khởi hành",
+            description: `Tạo ${generatedStarts.length} ngày với thời lượng ${displayDuration}`,
+        });
     };
-
     const handleResetSchedule = () => {
         if (!confirm("Bạn có chắc chắn muốn xóa toàn bộ lịch khởi hành và giờ đến? Hành động này sẽ xóa startDates, endDates và giờ tương ứng.")) {
             return;
@@ -618,83 +714,210 @@ export default function Tours() {
 
         toast({ title: "Đã đặt lại lịch", description: "Lịch khởi hành và giờ đến đã được xóa", variant: "default" });
     };
+    // Normalize payload so it matches BE schema exactly
+    function normalizePayloadForBE(data: TourFormData) {
+        const msPerDay = 24 * 60 * 60 * 1000;
 
+        const toIsoAuto = (s?: string | null) => {
+            if (!s) return null;
+            // try parse as local "YYYY-MM-DDTHH:mm" using existing helper
+            const p = parseLocalInput(s);
+            if (p) return p.toISOString();
+            const d = new Date(s);
+            if (!isNaN(d.getTime())) return d.toISOString();
+            return null;
+        };
+
+        // gather start / end inputs (support single or array UI fields)
+        const startsLocal = (data.startDates && data.startDates.length) ? data.startDates.slice() : (data.startDate ? [data.startDate] : []);
+        const endsLocal = (data.endDates && data.endDates.length) ? data.endDates.slice() : (data.endDate ? [data.endDate] : []);
+
+        const startDatesIso = startsLocal.map(s => toIsoAuto(s)).filter(Boolean) as string[];
+        const endDatesIsoProvided = endsLocal.map(e => toIsoAuto(e)).filter(Boolean) as string[];
+
+        // determine numeric duration (days)
+        let numericDuration = 0;
+        if (startDatesIso.length && endDatesIsoProvided.length) {
+            const s = new Date(startDatesIso[0]);
+            const e = new Date(endDatesIsoProvided[0]);
+            if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+                numericDuration = Math.max(1, Math.round((e.getTime() - s.getTime()) / msPerDay));
+            }
+        }
+
+        if (!numericDuration) {
+            if (typeof (data.duration as any) === "number" && !isNaN(data.duration as any)) {
+                numericDuration = Math.max(1, Math.floor(data.duration as any));
+            } else if (typeof data.duration === "string") {
+                const m = data.duration.match(/(\d+)/);
+                numericDuration = m ? Math.max(1, Number(m[1])) : 0;
+            }
+        }
+
+        // final fallback to 1 day
+        if (!numericDuration) numericDuration = 1;
+
+        // Normalize endDates to exact start + duration*24h (BE requires exact equality)
+        const endDatesIso = startDatesIso.map(si => {
+            const sDate = new Date(si);
+            return new Date(sDate.getTime() + numericDuration * msPerDay).toISOString();
+        });
+
+        // map & normalize itinerary: enforce day numbers, trim/pad to numericDuration
+        const rawItin = Array.isArray(data.itinerary) ? data.itinerary.slice() : [];
+        const normalizedItin: Array<{ day: number; address: string; description: string; image?: string }> = [];
+        for (let i = 0; i < numericDuration; i++) {
+            const existing = rawItin[i] || rawItin.find((it: any) => (it as any).day === i + 1) || null;
+            if (existing) {
+                const dayVal = (existing as any).day ?? (existing as any).dayNumber ?? (i + 1);
+                normalizedItin.push({
+                    day: Number(dayVal) || (i + 1),
+                    address: (existing as any).address ?? (existing as any).title ?? "",
+                    description: (existing as any).description ?? (existing as any).details ?? "",
+                    image: (existing as any).image ?? undefined,
+                });
+            } else {
+                normalizedItin.push({ day: i + 1, address: "", description: "" });
+            }
+        }
+
+        // price relationships validation
+        if (typeof data.childPrice === "number" && typeof data.adultPrice === "number" && data.childPrice > data.adultPrice) {
+            throw new Error("childPrice must be <= adultPrice");
+        }
+        if (typeof data.infantPrice === "number" && typeof data.childPrice === "number" && data.infantPrice > data.childPrice) {
+            throw new Error("infantPrice must be <= childPrice");
+        }
+
+        // ensure startLocation has pickupDropoff (BE requires it)
+        const startLocationPayload = data.startLocation && data.startLocation.pickupDropoff
+            ? {
+                type: data.startLocation.type ?? "Point",
+                address: data.startLocation.address ?? "",
+                pickupDropoff: String(data.startLocation.pickupDropoff).trim()
+            }
+            : {
+                type: "Point",
+                address: data.startLocation?.address ?? "",
+                pickupDropoff: (data.departureFrom ? String(data.departureFrom).trim() : "")
+            };
+
+        // Build payload containing ONLY fields expected by BE
+        const payload: any = {
+            name: String(data.name || "").trim(),
+            slug: data.slug || undefined,
+            description: (typeof data.description === "string" && data.description.trim()) ? data.description : undefined,
+            departureFrom: data.departureFrom || undefined,
+            destination: data.destination || undefined,
+            adultPrice: Number(data.adultPrice || 0),
+            childPrice: typeof data.childPrice === "number" ? Number(data.childPrice) : undefined,
+            infantPrice: typeof data.infantPrice === "number" ? Number(data.infantPrice) : undefined,
+            duration: Number(numericDuration),
+            maxGroupSize: Number(data.maxGroupSize || 1),
+            difficulty: data.difficulty || "easy",
+            images: Array.isArray(data.images) ? data.images : [],
+            services: Array.isArray(data.services) ? data.services : [],
+            startLocation: startLocationPayload,
+            startDates: startDatesIso,
+            endDates: endDatesIso,
+            itinerary: normalizedItin,
+        };
+
+        // remove undefined keys
+        Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
+
+        return payload;
+    }
     // Create tour mutation
     const createTourMutation = useMutation({
-        mutationFn: async (data: TourFormData) => {
-            const payload: any = { ...data };
-            payload.startDates = (data.startDates && Array.isArray(data.startDates)) ? data.startDates.map((s: string) => localToIso(s)) : (data.startDate ? [localToIso(data.startDate)] : []);
-            payload.endDates = (data.endDates && Array.isArray(data.endDates)) ? data.endDates.map((s: string) => localToIso(s)) : (data.endDate ? [localToIso(data.endDate)] : []);
-
-            if (payload.startDates.length && payload.endDates.length) {
-                payload.duration = calculateDuration(payload.startDates[0], payload.endDates[0]);
+        mutationFn: async (payload: any) => {
+            console.log('[DEBUG] Sending POST /api/tours with payload:', payload);
+            const res = await fetch(`${API_BASE}/api/tours`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                let text;
+                try { text = await res.json(); } catch { text = await res.text(); }
+                const msg = (text && (text.message || text.error || JSON.stringify(text))) || `Create failed (${res.status})`;
+                throw new Error(msg);
             }
-
-            delete payload.startDate;
-            delete payload.endDate;
+            const body = await res.json();
+            console.log('[DEBUG] POST /api/tours response:', body);
+            return body.data || body;
+        },
+        onSuccess: (createdTour: any) => {
+            // update local UI list (convert numeric duration -> display string)
+            const displayDuration = calculateDuration(
+                createdTour.startDates?.[0] ? toLocalInput(new Date(createdTour.startDates[0])) : undefined,
+                createdTour.endDates?.[0] ? toLocalInput(new Date(createdTour.endDates[0])) : undefined
+            ) || `${createdTour.duration} ngày ${Math.max(0, createdTour.duration - 1)} đêm`;
 
             const newTour: Tour = {
-                ...payload,
-                id: `tour_${Math.random().toString(36).substr(2, 9)}`,
-                seatsBooked: 0,
-                rating: 0,
-                reviewCount: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            };
-            setTours((prev) => [...prev, newTour]);
-            return newTour;
-        },
-        onSuccess: () => {
+                ...createdTour,
+                id: createdTour._id || createdTour.id || `tour_${Math.random().toString(36).slice(2, 9)}`,
+                duration: displayDuration as any,
+                seatsBooked: createdTour.seatsBooked ?? 0,
+                ratingsAverage: createdTour.ratingsAverage ?? 0,
+                ratingsQuantity: createdTour.ratingsQuantity ?? 0,
+                createdAt: createdTour.createdAt ?? new Date().toISOString(),
+                updatedAt: createdTour.updatedAt ?? new Date().toISOString(),
+            } as any;
+
+            setTours(prev => [...prev, newTour]);
             queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
-            toast({
-                title: "Tạo tour thành công",
-                description: "Tour mới đã được tạo và lưu",
-            });
+            toast({ title: "Tạo tour thành công", description: "Tour mới đã được tạo và lưu" });
         },
         onError: (error: any) => {
+            console.error('[DEBUG] createTourMutation error:', error);
             toast({
                 title: "Lỗi khi tạo tour",
-                description: error.message,
+                description: error?.message || "Lỗi khi gọi API",
                 variant: "destructive",
             });
         },
     });
 
-    
+
 
     // Update tour mutation
     const updateTourMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<TourFormData> }) => {
-            const payload: any = { ...data };
-            if (data.startDates && Array.isArray(data.startDates)) {
-                payload.startDates = data.startDates.map((s: string) => localToIso(s));
-            } else if (data.startDate && !payload.startDates?.length) {
-                payload.startDates = [localToIso(data.startDate)];
+            console.log("[DEBUG] Sending PUT /api/tours/" + id, data);
+            const res = await fetch(`${API_BASE}/api/tours/${id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) {
+                let text;
+                try { text = await res.json(); } catch { text = await res.text(); }
+                const msg = (text && (text.message || text.error || JSON.stringify(text))) || `Update failed (${res.status})`;
+                throw new Error(msg);
             }
-            if (data.endDates && Array.isArray(data.endDates)) {
-                payload.endDates = data.endDates.map((s: string) => localToIso(s));
-            } else if (data.endDate && !payload.endDates?.length) {
-                payload.endDates = [localToIso(data.endDate)];
-            }
-
-            delete payload.startDate;
-            delete payload.endDate;
-
-            if (payload.startDates?.length && payload.endDates?.length) {
-                payload.duration = calculateDuration(payload.startDates[0], payload.endDates[0]);
-            }
-
+            const body = await res.json();
+            // return updated tour from server
+            return body.data || body;
+        },
+        onSuccess: (updatedTour: any) => {
+            // sync local list with server-updated tour
+            const id = updatedTour._id || updatedTour.id;
             setTours((prev) =>
                 prev.map((tour) =>
-                    tour.id === id ? { ...tour, ...payload, updatedAt: new Date().toISOString() } : tour
+                    tour.id === id ? {
+                        ...tour,
+                        ...updatedTour,
+                        duration: calculateDuration(
+                            updatedTour.startDates?.[0] ? toLocalInput(new Date(updatedTour.startDates[0])) : undefined,
+                            updatedTour.endDates?.[0] ? toLocalInput(new Date(updatedTour.endDates[0])) : undefined
+                        ) || `${updatedTour.duration} ngày ${Math.max(0, updatedTour.duration - 1)} đêm`,
+                        updatedAt: updatedTour.updatedAt ?? new Date().toISOString()
+                    } : tour
                 )
             );
-            return { id, ...payload };
-        },
-        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
@@ -715,26 +938,37 @@ export default function Tours() {
     // Delete tour mutation
     const deleteTourMutation = useMutation({
         mutationFn: async (id: string) => {
-            setTours((prev) => prev.filter((tour) => tour.id !== id));
-            return { id };
+            console.log("[DEBUG] Sending DELETE /api/tours/" + id);
+            const res = await fetch(`${API_BASE}/api/tours/${id}`, {
+                method: "DELETE",
+            });
+            if (!res.ok) {
+                let text;
+                try { text = await res.json(); } catch { text = await res.text(); }
+                const msg = (text && (text.message || text.error || JSON.stringify(text))) || `Delete failed (${res.status})`;
+                throw new Error(msg);
+            }
+            const body = await res.json().catch(() => null);
+            return { id, body };
         },
-        onSuccess: (_, tourId) => {
+        onSuccess: (_result, tourId) => {
+            // remove from UI
+            setTours((prev) => prev.filter((tour) => tour.id !== tourId));
             queryClient.invalidateQueries({ queryKey: ["tours"] });
             setDeleteModalOpen(false);
             setTourToDelete(null);
 
-            const tour = toursData?.data?.find((t: Tour) => t.id === tourId);
             toast({
                 title: "Đã xóa tour",
-                description: `Tour ${tour?.title} đã được xóa thành công`,
+                description: `Tour đã được xóa thành công`,
                 action: (
                     <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
                             toast({
-                                title: "Khôi phục thành công",
-                                description: "Tour đã được khôi phục",
+                                title: "Khôi phục không khả dụng",
+                                description: "Không thể hoàn tác sau khi xóa trên server",
                             });
                         }}
                     >
@@ -795,22 +1029,21 @@ export default function Tours() {
     const validateForm = (data: TourFormData): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        if (!data.title.trim()) {
-            errors.title = "Bạn phải nhập tên tour";
+        if (!data.name.trim()) {
+            errors.name = "Bạn phải nhập tên tour";
         }
 
-        if (!data.summary.trim()) {
-            errors.summary = "Bạn phải nhập mô tả ngắn";
-        } else if (data.summary.length > 300) {
-            errors.summary = "Mô tả ngắn không được vượt quá 300 ký tự";
-        }
+
 
         if (!data.categoryId) {
             errors.categoryId = "Bạn phải chọn danh mục";
         }
 
-        if (!data.departure.trim()) {
-            errors.departure = "Bạn phải nhập điểm khởi hành";
+        if (!data.departureFrom.trim()) {
+            errors.departureFrom = "Bạn phải nhập điểm khởi hành";
+        }
+        if (!data.startLocation || !String(data.startLocation.pickupDropoff || "").trim()) {
+            errors.pickupDropoff = "Bạn phải nhập điểm đón chính (startLocation.pickupDropoff)";
         }
 
         if (!data.destination.trim()) {
@@ -869,35 +1102,35 @@ export default function Tours() {
             }
         }
 
-        if (data.priceAdult <= 0) {
+        if (data.adultPrice <= 0) {
             errors.priceAdult = "Giá người lớn phải lớn hơn 0";
         }
 
-        if (typeof data.priceChild !== "number" || isNaN(data.priceChild) || data.priceChild < 0) {
-            errors.priceChild = "Giá trẻ em (≥5 tuổi) phải là số không âm";
+        if (typeof data.childPrice !== "number" || isNaN(data.childPrice) || data.childPrice < 0) {
+            errors.childPrice = "Giá trẻ em (≥5 tuổi) phải là số không âm";
         }
-        if (typeof data.priceBaby !== "number" || isNaN(data.priceBaby) || data.priceBaby < 0) {
-            errors.priceBaby = "Giá em bé (<5 tuổi) phải là số không âm";
+        if (typeof data.infantPrice !== "number" || isNaN(data.infantPrice) || data.infantPrice < 0) {
+            errors.infantPrice = "Giá em bé (<5 tuổi) phải là số không âm";
         }
-        if (typeof data.priceChild === "number" && typeof data.priceBaby === "number" && data.priceBaby > data.priceChild) {
-            errors.priceBaby = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
+        if (typeof data.childPrice === "number" && typeof data.infantPrice === "number" && data.infantPrice > data.childPrice) {
+            errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
         }
 
-        if (data.seatsTotal < 1) {
-            errors.seatsTotal = "Số chỗ tối đa phải ít nhất là 1";
+        if (data.maxGroupSize < 1) {
+            errors.maxGroupSize = "Số chỗ tối đa phải ít nhất là 1";
         }
 
         if (data.minBooking < 1) {
             errors.minBooking = "Số booking tối thiểu phải ít nhất là 1";
         }
 
-        if (data.images.length === 0) {
-            errors.images = "Bạn phải tải lên ít nhất 1 hình ảnh";
-        }
+        // if (data.images.length === 0) {
+        //     errors.images = "Bạn phải tải lên ít nhất 1 hình ảnh";
+        // }
 
-        if (data.videoUrl && !isValidVideoUrl(data.videoUrl)) {
-            errors.videoUrl = "URL video không hợp lệ (chỉ hỗ trợ YouTube/Vimeo)";
-        }
+        // if (data.videoUrl && !isValidVideoUrl(data.videoUrl)) {
+        //     errors.videoUrl = "URL video không hợp lệ (chỉ hỗ trợ YouTube/Vimeo)";
+        // }
 
         return errors;
     };
@@ -914,15 +1147,13 @@ export default function Tours() {
         const startTime = parseLocalInput(start) || new Date(start);
         const endTime = parseLocalInput(end) || new Date(end);
         const diffMs = endTime.getTime() - startTime.getTime();
-
         if (diffMs <= 0) return "";
 
-        // diff full days, inclusive days = diffDays + 1, nights = diffDays
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-        const days = diffDays + 1;
-        const nights = Math.max(0, diffDays);
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const diffDays = Math.round(diffMs / msPerDay); // số khoảng 24h
+        const days = Math.max(1, diffDays); // ví dụ diffDays=2 => 2 ngày
+        const nights = Math.max(0, diffDays - 1); // nights = days - 1
 
-        // trả về dạng thân thiện: "3 ngày 2 đêm"
         return `${days} ngày ${nights} đêm`;
     };
 
@@ -935,30 +1166,29 @@ export default function Tours() {
 
     const resetForm = () => {
         setFormData({
-            title: "",
-            title_vn: "",
+            name: "",
             slug: "",
-            summary: "",
+
             description: "",
-            departure: "",
+            departureFrom: "",
             destination: "",
             startDate: "",
             endDate: "",
             startDates: [],
             endDates: [],
             duration: "",
-            priceAdult: 0,
-            priceChild: 0,
-            priceBaby: 0,
-            seatsTotal: 1,
+            difficulty: "easy",
+            adultPrice: 0,
+            childPrice: 0,
+            infantPrice: 0,
+            maxGroupSize: 1,
             minBooking: 1,
             categoryId: "",
             tags: [],
             images: [],
             videoUrl: "",
             itinerary: [],
-            inclusions: [],
-            exclusions: [],
+            services: [], // ensure services always defined
             pickupPoints: [],
             // restore default cancellation policy on reset
             cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
@@ -982,8 +1212,8 @@ export default function Tours() {
         setFormData((prev) => {
             const next: any = { ...prev, [field]: value };
 
-            // Auto-generate slug from title if user types title
-            if (field === "title" && value) {
+            // Auto-generate slug from name if user types name
+            if (field === "name" && value) {
                 const slug = value
                     .toLowerCase()
                     .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, "a")
@@ -998,7 +1228,7 @@ export default function Tours() {
                     .replace(/-+/g, "-")
                     .trim("-");
                 // only auto-set slug if empty or derived from previous title
-                if (!prev.slug || prev.slug === "" || prev.slug === (prev.title || "").toLowerCase().replace(/\s+/g, "-")) {
+                if (!prev.slug || prev.slug === "" || prev.slug === (prev.name || "").toLowerCase().replace(/\s+/g, "-")) {
                     next.slug = slug;
                 }
             }
@@ -1009,9 +1239,12 @@ export default function Tours() {
 
             // If we have both start and end, compute duration and adjust itinerary
             if (firstStart && firstEnd) {
-                const computedDuration = calculateDuration(firstStart, firstEnd);
-                next.duration = computedDuration;
-                const days = parseDurationToDays(computedDuration, firstStart, firstEnd);
+                // compute display string and numeric days separately
+                const computedDisplay = calculateDuration(firstStart, firstEnd);
+                const days = parseDurationToDays(computedDisplay, firstStart, firstEnd);
+                // store numeric duration (days) and human-friendly string separately
+                next.duration = days; // numeric days for logic / select
+                next.durationDisplay = computedDisplay; // string for UI
                 if (days > 0) {
                     next.itinerary = ensureItineraryLength(days, next.itinerary || []);
                 }
@@ -1022,7 +1255,9 @@ export default function Tours() {
                     if (days > 0) {
                         next.itinerary = ensureItineraryLength(days, next.itinerary || []);
                     }
-                    next.duration = value;
+                    // when user changes duration select, value will be numeric days
+                    next.duration = typeof value === "number" ? value : days;
+                    next.durationDisplay = typeof value === "string" ? String(value) : `${next.duration} ngày ${Math.max(0, next.duration - 1)} đêm`;
                 }
             }
 
@@ -1037,14 +1272,14 @@ export default function Tours() {
 
     const addItineraryDay = () => {
         const newDay = {
-            dayNumber: formData.itinerary.length + 1,
-            title: "",
-            details: "",
+            day: formData.itinerary.length + 1,
+            address: "",
+            description: "",
         };
         handleFormChange("itinerary", [...formData.itinerary, newDay]);
     };
 
-    const updateItineraryDay = (index: number, field: "title" | "details", value: string) => {
+    const updateItineraryDay = (index: number, field: "address" | "description", value: string) => {
         const updatedItinerary = [...formData.itinerary];
         updatedItinerary[index] = { ...updatedItinerary[index], [field]: value };
         handleFormChange("itinerary", updatedItinerary);
@@ -1054,7 +1289,7 @@ export default function Tours() {
         const updatedItinerary = formData.itinerary.filter((_, i) => i !== index);
         const renumberedItinerary = updatedItinerary.map((day, i) => ({
             ...day,
-            dayNumber: i + 1,
+            day: i + 1,
         }));
         handleFormChange("itinerary", renumberedItinerary);
     };
@@ -1063,8 +1298,9 @@ export default function Tours() {
         const dayToCopy = formData.itinerary[index];
         const newDay = {
             ...dayToCopy,
-            dayNumber: formData.itinerary.length + 1,
-            title: `${dayToCopy.title} (sao chép)`,
+            day: formData.itinerary.length + 1,
+            address: `${(dayToCopy as any).address || (dayToCopy as any).title || ""} (sao chép)`,
+            description: (dayToCopy as any).description || (dayToCopy as any).details || "",
         };
         handleFormChange("itinerary", [...formData.itinerary, newDay]);
     };
@@ -1091,7 +1327,7 @@ export default function Tours() {
             render: (value) => <span className="font-mono text-sm">{value}</span>,
         },
         {
-            key: "title",
+            key: "name",
             title: "Tên tour",
             sortable: true,
             filterable: true,
@@ -1099,28 +1335,28 @@ export default function Tours() {
                 <div className="max-w-xs">
                     <div className="font-medium truncate">{value}</div>
                     <div className="text-sm text-gray-500">
-                        {record.departure} → {record.destination}
+                        {record.departureFrom} → {record.destination}
                     </div>
                     <div className="text-xs text-gray-400">{record.duration}</div>
                 </div>
             ),
         },
-        {
-            key: "schedule",
-            title: "Lịch trình",
-            sortable: true,
-            render: (_, record: Tour) => (
-                <div className="text-sm">
-                    <div className="flex items-center">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {new Date(record.startDate).toLocaleDateString("vi-VN")}
-                    </div>
-                    <div className="text-gray-500">
-                        đến {new Date(record.endDate).toLocaleDateString("vi-VN")}
-                    </div>
-                </div>
-            ),
-        },
+        // {
+        //     key: "schedule",
+        //     title: "Lịch trình",
+        //     sortable: true,
+        //     render: (_, record: Tour) => (
+        //         <div className="text-sm">
+        //             <div className="flex items-center">
+        //                 <Calendar className="w-3 h-3 mr-1" />
+        //                 {new Date(record.startDate).toLocaleDateString("vi-VN")}
+        //             </div>
+        //             <div className="text-gray-500">
+        //                 đến {new Date(record.endDate).toLocaleDateString("vi-VN")}
+        //             </div>
+        //         </div>
+        //     ),
+        // },
         {
             key: "priceAdult",
             title: "Giá",
@@ -1129,11 +1365,16 @@ export default function Tours() {
                 <div className="text-sm">
                     <div className="font-medium flex items-center">
                         <DollarSign className="w-3 h-3 mr-1" />
-                        {new Intl.NumberFormat("vi-VN").format(value)} ₫
+                        {new Intl.NumberFormat("vi-VN").format(record.adultPrice)} ₫
                     </div>
-                    {record.priceChild && (
+                    {record.childPrice && (
                         <div className="text-gray-500 text-xs">
-                            Trẻ em: {new Intl.NumberFormat("vi-VN").format(record.priceChild)} ₫
+                            Trẻ em: {new Intl.NumberFormat("vi-VN").format(record.childPrice)} ₫
+                        </div>
+                    )}
+                    {record.infantPrice && (
+                        <div className="text-gray-500 text-xs">
+                            Trẻ sơ sinh: {new Intl.NumberFormat("vi-VN").format(record.infantPrice)} ₫
                         </div>
                     )}
                 </div>
@@ -1147,23 +1388,23 @@ export default function Tours() {
                 <div className="text-sm">
                     <div className="flex items-center">
                         <Users className="w-3 h-3 mr-1" />
-                        {record.seatsBooked}/{record.seatsTotal}
+                        {record.seatsBooked}/{record.maxGroupSize}
                     </div>
                     <div
-                        className={`text-xs ${record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.2
+                        className={`text-xs ${record.maxGroupSize - record.seatsBooked <= record.maxGroupSize * 0.2
                             ? "text-orange-600"
-                            : record.seatsTotal - record.seatsBooked <= record.seatsTotal * 0.5
+                            : record.maxGroupSize - record.seatsBooked <= record.maxGroupSize * 0.5
                                 ? "text-yellow-600"
                                 : "text-green-600"
                             }`}
                     >
-                        {record.seatsTotal - record.seatsBooked} chỗ trống
+                        {record.maxGroupSize - record.seatsBooked} chỗ trống
                     </div>
                 </div>
             ),
         },
         {
-            key: "rating",
+            key: "ratingsAverage",
             title: "Đánh giá",
             sortable: true,
             render: (value, record: Tour) => (
@@ -1172,7 +1413,7 @@ export default function Tours() {
                         <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
                         {value}
                     </div>
-                    <div className="text-gray-500 text-xs">{record.reviewCount} đánh giá</div>
+                    <div className="text-gray-500 text-xs">{record.ratingsQuantity} đánh giá</div>
                 </div>
             ),
         },
@@ -1213,12 +1454,10 @@ export default function Tours() {
     const handleEdit = (tour: Tour) => {
         setSelectedTour(tour);
         setFormData({
-            title: tour.title,
-            title_vn: tour.title_vn || "",
+            name: tour.name,
             slug: tour.slug,
-            summary: tour.summary,
             description: tour.description,
-            departure: tour.departure,
+            departureFrom: tour.departureFrom,
             destination: tour.destination,
             // convert stored ISO dates into local "YYYY-MM-DDTHH:MM" so datetime-local inputs
             // will enforce both date and time (min/validation) properly
@@ -1231,19 +1470,30 @@ export default function Tours() {
                 ? tour.endDates.map((d: string) => toLocalInput(new Date(d)))
                 : (tour.endDate ? [toLocalInput(new Date(tour.endDate))] : []),
             duration: tour.duration,
-            priceAdult: tour.priceAdult,
-            priceChild: tour.priceChild || 0,
-            priceBaby: tour.priceBaby || 0,
-            seatsTotal: tour.seatsTotal,
+            difficulty: (tour as any).difficulty ?? "easy",
+            adultPrice: (tour as any).adultPrice ?? (tour as any).priceAdult ?? 0,
+            childPrice: (tour as any).childPrice ?? (tour as any).priceChild ?? 0,
+            infantPrice: (tour as any).infantPrice ?? (tour as any).priceBaby ?? 0,
+            maxGroupSize: (tour as any).maxGroupSize ?? (tour as any).seatsTotal ?? 1,
             minBooking: tour.minBooking,
             categoryId: tour.categoryId,
             tags: tour.tags,
             images: tour.images,
             videoUrl: tour.videoUrl || "",
-            itinerary: tour.itinerary,
-            inclusions: tour.inclusions,
-            exclusions: tour.exclusions,
-            pickupPoints: tour.pickupPoints,
+            // normalize incoming itinerary (support legacy keys)
+            itinerary: Array.isArray(tour.itinerary)
+                ? tour.itinerary.map((it: any, idx: number) => ({
+                    day: it.day ?? it.dayNumber ?? (idx + 1),
+                    address: it.address ?? it.title ?? "",
+                    description: it.description ?? it.details ?? "",
+                    image: it.image,
+                }))
+                : [],
+            services: (tour as any).services ?? [], // new checkbox-backed field
+            // pickupPoints: tour.pickupPoints,
+            startLocation: tour.startLocation
+                ? { type: tour.startLocation.type || "Point", address: tour.startLocation.address || "", pickupDropoff: tour.startLocation.pickupDropoff || "" }
+                : { type: "Point", address: "", pickupDropoff: tour.departureFrom || "" },
             cancellationPolicy: tour.cancellationPolicy || "",
             status: tour.status,
             highlight: tour.highlight,
@@ -1269,11 +1519,50 @@ export default function Tours() {
         setModalOpen(true);
     };
 
+    // const handleSubmit = () => {
+    //     const errors = validateForm(formData);
+    //     setFormErrors(errors);
+
+    //     if (Object.keys(errors).length > 0) {
+    //         toast({
+    //             title: "Lỗi validation",
+    //             description: "Vui lòng kiểm tra lại thông tin nhập vào",
+    //             variant: "destructive",
+    //         });
+    //         return;
+    //     }
+
+    //     const dataToSend = { ...formData } as any;
+    //     const startsRaw = (formData.startDates && formData.startDates.length) ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
+    //     dataToSend.startDates = startsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+
+    //     const endsRaw = (formData.endDates && formData.endDates.length) ? formData.endDates : (formData.endDate ? [formData.endDate] : []);
+    //     dataToSend.endDates = endsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+
+    //     delete dataToSend.startDate;
+    //     delete dataToSend.endDate;
+
+    //     // if (dataToSend.startDates.length && dataToSend.endDates.length) {
+    //     //     dataToSend.duration = calculateDuration(dataToSend.startDates[0], dataToSend.endDates[0]);
+    //     // }
+    //     // send numeric duration (days) to BE while keeping UI formData.duration as human-friendly string
+    //     dataToSend.duration = parseDurationToDays(formData.duration, dataToSend.startDates?.[0], dataToSend.endDates?.[0]);
+    //     if (modalMode === "create") {
+    //         createTourMutation.mutate({ ...dataToSend, status: "active" });
+    //     } else if (modalMode === "edit" && selectedTour) {
+    //         updateTourMutation.mutate({ id: selectedTour.id, data: dataToSend });
+    //     }
+    // };
+
+    // ...existing code...
     const handleSubmit = () => {
+        console.log("[DEBUG] handleSubmit called, modalMode =", modalMode);
         const errors = validateForm(formData);
         setFormErrors(errors);
+        console.log("[DEBUG] validateForm returned errors:", errors);
 
         if (Object.keys(errors).length > 0) {
+            console.warn("[DEBUG] Validation failed - showing toast and returning", errors);
             toast({
                 title: "Lỗi validation",
                 description: "Vui lòng kiểm tra lại thông tin nhập vào",
@@ -1285,24 +1574,54 @@ export default function Tours() {
         const dataToSend = { ...formData } as any;
         const startsRaw = (formData.startDates && formData.startDates.length) ? formData.startDates : (formData.startDate ? [formData.startDate] : []);
         dataToSend.startDates = startsRaw.map((s: string) => localToIso(s)).filter(Boolean);
-
         const endsRaw = (formData.endDates && formData.endDates.length) ? formData.endDates : (formData.endDate ? [formData.endDate] : []);
         dataToSend.endDates = endsRaw.map((s: string) => localToIso(s)).filter(Boolean);
-
         delete dataToSend.startDate;
         delete dataToSend.endDate;
+        dataToSend.duration = parseDurationToDays(formData.duration, dataToSend.startDates?.[0], dataToSend.endDates?.[0]);
 
-        if (dataToSend.startDates.length && dataToSend.endDates.length) {
-            dataToSend.duration = calculateDuration(dataToSend.startDates[0], dataToSend.endDates[0]);
+        console.log("[DEBUG] prepared dataToSend (before normalize):", dataToSend);
+
+        // --- DEBUG: normalize payload for BE and log it for inspection ---
+        let normalized: any = null;
+        try {
+            normalized = normalizePayloadForBE(dataToSend);
+            console.groupCollapsed("[DEBUG] normalized payload (for BE)");
+            console.log(normalized);
+            console.trace("[DEBUG] normalizePayloadForBE trace");
+            console.groupEnd();
+        } catch (err: any) {
+            console.error("[DEBUG] Lỗi khi chuẩn hóa payload trước khi gửi:", err?.message || err, err);
+            toast({
+                title: "Lỗi chuẩn hóa dữ liệu",
+                description: err?.message || "Kiểm tra console để biết chi tiết",
+                variant: "destructive",
+            });
+            return;
         }
+        // --- END DEBUG ---
 
-        if (modalMode === "create") {
-            createTourMutation.mutate({ ...dataToSend, status: "active" });
-        } else if (modalMode === "edit" && selectedTour) {
-            updateTourMutation.mutate({ id: selectedTour.id, data: dataToSend });
+        console.debug("[DEBUG] final payload to send (normalized):", normalized);
+
+        // Use normalized payload when mutating so what we log is what we'll actually send
+        try {
+            if (modalMode === "create") {
+                console.log("[DEBUG] calling createTourMutation.mutate");
+                createTourMutation.mutate({ ...normalized, status: "active" });
+            } else if (modalMode === "edit" && selectedTour) {
+                console.log("[DEBUG] calling updateTourMutation.mutate for id:", selectedTour.id);
+                updateTourMutation.mutate({ id: selectedTour.id, data: normalized });
+            }
+        } catch (err) {
+            console.error("[DEBUG] Unexpected error while calling mutate:", err);
+            toast({
+                title: "Lỗi nội bộ",
+                description: (err as any)?.message || "Kiểm tra console",
+                variant: "destructive",
+            });
         }
     };
-
+    // ...existing code...
     const handleSaveDraft = () => {
         if (modalMode === "create") {
             createTourMutation.mutate({ ...formData, status: "draft" });
@@ -1371,7 +1690,7 @@ export default function Tours() {
             action: (tour: Tour) => {
                 const duplicatedTour = {
                     ...tour,
-                    title: `${tour.title} (sao chép)`,
+                    name: `${tour.name} (sao chép)`,
                     slug: `${tour.slug}-copy`,
                     status: "draft" as const,
                 };
@@ -1421,19 +1740,18 @@ export default function Tours() {
                     <div className="grid grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div>
-                                <h3 className="text-lg font-semibold">{selectedTour.title}</h3>
-                                <p className="text-gray-500">{selectedTour.summary}</p>
+                                <h3 className="text-lg font-semibold">{selectedTour.name}</h3>
                                 <div className="flex items-center mt-2">
                                     <Star className="w-4 h-4 text-yellow-500 fill-current mr-1" />
                                     <span>
-                                        {selectedTour.rating} ({selectedTour.reviewCount} đánh giá)
+                                        {selectedTour.ratingsAverage} ({selectedTour.ratingsQuantity} đánh giá)
                                     </span>
                                 </div>
                             </div>
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Tuyến</Label>
                                 <p className="mt-1">
-                                    {selectedTour.departure} → {selectedTour.destination}
+                                    {selectedTour.departureFrom} → {selectedTour.destination}
                                 </p>
                             </div>
                             <div>
@@ -1446,22 +1764,22 @@ export default function Tours() {
                                 <div>
                                     <Label className="text-sm font-medium text-gray-700">Giá người lớn</Label>
                                     <p className="mt-1 font-bold text-green-600">
-                                        {new Intl.NumberFormat("vi-VN").format(selectedTour.priceAdult)} ₫
+                                        {new Intl.NumberFormat("vi-VN").format(selectedTour.adultPrice)} ₫
                                     </p>
                                 </div>
-                                {selectedTour.priceChild !== undefined && (
+                                {selectedTour.childPrice !== undefined && (
                                     <div>
                                         <Label className="text-sm font-medium text-gray-700">Giá trẻ em (≥5 tuổi)</Label>
                                         <p className="mt-1 font-bold text-green-600">
-                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceChild || 0)} ₫
+                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.childPrice || 0)} ₫
                                         </p>
                                     </div>
                                 )}
-                                {selectedTour.priceBaby !== undefined && (
+                                {selectedTour.infantPrice !== undefined && (
                                     <div>
                                         <Label className="text-sm font-medium text-gray-700">Giá em bé (&lt;5 tuổi)</Label>
                                         <p className="mt-1 font-bold text-green-600">
-                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.priceBaby || 0)} ₫
+                                            {new Intl.NumberFormat("vi-VN").format(selectedTour.infantPrice || 0)} ₫
                                         </p>
                                     </div>
                                 )}
@@ -1469,7 +1787,7 @@ export default function Tours() {
                             <div>
                                 <Label className="text-sm font-medium text-gray-700">Số chỗ</Label>
                                 <p className="mt-1">
-                                    {selectedTour.seatsBooked}/{selectedTour.seatsTotal} đã đặt
+                                    {selectedTour.seatsBooked}/{selectedTour.maxGroupSize} đã đặt
                                 </p>
                             </div>
                         </div>
@@ -1533,23 +1851,17 @@ export default function Tours() {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label className="text-sm font-medium text-gray-700">Bao gồm</Label>
+                            <Label className="text-sm font-medium text-gray-700">Dịch vụ</Label>
                             <ul className="mt-1 text-sm list-disc list-inside">
-                                {selectedTour.inclusions.map((item, index) => (
-                                    <li key={index} className="text-green-600">
-                                        {item}
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <div>
-                            <Label className="text-sm font-medium text-gray-700">Không bao gồm</Label>
-                            <ul className="mt-1 text-sm list-disc list-inside">
-                                {selectedTour.exclusions.map((item, index) => (
-                                    <li key={index} className="text-red-600">
-                                        {item}
-                                    </li>
-                                ))}
+                                {selectedTour.services && selectedTour.services.length ? (
+                                    selectedTour.services.map((item, index) => (
+                                        <li key={index} className="text-green-600">
+                                            {item}
+                                        </li>
+                                    ))
+                                ) : (
+                                    <li className="text-gray-500">Không có dịch vụ nào được chọn</li>
+                                )}
                             </ul>
                         </div>
                     </div>
@@ -1569,29 +1881,29 @@ export default function Tours() {
                 </TabsList>
 
                 <TabsContent value="basic" className="space-y-4 mt-6">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
-                            <Label htmlFor="title">Tên tour *</Label>
+                            <Label htmlFor="name">Tên tour *</Label>
                             <Input
-                                id="title"
-                                value={formData.title}
-                                onChange={(e) => handleFormChange("title", e.target.value)}
+                                id="name"
+                                value={formData.name}
+                                onChange={(e) => handleFormChange("name", e.target.value)}
                                 placeholder="Du thuyền Vịnh Hạ Long 3N2Đ"
-                                className={formErrors.title ? "border-red-500" : ""}
+                                className={formErrors.name ? "border-red-500" : ""}
                             />
-                            {formErrors.title && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.title}</p>
+                            {formErrors.name && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.name}</p>
                             )}
                         </div>
-                        <div>
-                            <Label htmlFor="title_vn">Tên tour (Tiếng Việt)</Label>
-                            <Input
-                                id="title_vn"
-                                value={formData.title_vn}
-                                onChange={(e) => handleFormChange("title_vn", e.target.value)}
-                                placeholder="Tên tiếng Việt"
-                            />
-                        </div>
+
+                    </div>
+                    <div className="space-y-4 mb-10">
+                        <Label className="text-xl font-semibold text-gray-900" htmlFor="description">Mô tả chi tiết</Label>
+                        <JoditEditorWrapper
+                            value={formData.description}
+                            onChange={(newContent) => handleFormChange("description", newContent)}
+                            placeholder="Mô tả chi tiết ngày này"
+                        />
                     </div>
 
                     <div>
@@ -1605,24 +1917,7 @@ export default function Tours() {
                         <p className="text-xs text-gray-500 mt-1">Nếu để trống sẽ tự động tạo từ tiêu đề</p>
                     </div>
 
-                    <div>
-                        <Label htmlFor="summary">Mô tả ngắn * (tối đa 300 ký tự)</Label>
-                        <Textarea
-                            id="summary"
-                            value={formData.summary}
-                            onChange={(e) => handleFormChange("summary", e.target.value)}
-                            placeholder="Mô tả ngắn về tour"
-                            rows={2}
-                            maxLength={300}
-                            className={formErrors.summary ? "border-red-500" : ""}
-                        />
-                        <div className="flex justify-between items-center mt-1">
-                            {formErrors.summary && (
-                                <p className="text-sm text-red-500">{formErrors.summary}</p>
-                            )}
-                            <p className="text-xs text-gray-500 ml-auto">{formData.summary.length}/300</p>
-                        </div>
-                    </div>
+
 
                     <div>
                         <Label htmlFor="categoryId">Danh mục *</Label>
@@ -1668,16 +1963,16 @@ export default function Tours() {
                 <TabsContent value="pricing" className="space-y-4 mt-6">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label htmlFor="departure">Điểm khởi hành *</Label>
+                            <Label htmlFor="departureFrom">Điểm khởi hành *</Label>
                             <Input
-                                id="departure"
-                                value={formData.departure}
-                                onChange={(e) => handleFormChange("departure", e.target.value)}
+                                id="departureFrom"
+                                value={formData.departureFrom}
+                                onChange={(e) => handleFormChange("departureFrom", e.target.value)}
                                 placeholder="Hà Nội"
-                                className={formErrors.departure ? "border-red-500" : ""}
+                                className={formErrors.departureFrom ? "border-red-500" : ""}
                             />
-                            {formErrors.departure && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.departure}</p>
+                            {formErrors.departureFrom && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.departureFrom}</p>
                             )}
                         </div>
                         <div>
@@ -1767,6 +2062,7 @@ export default function Tours() {
                                                     type="datetime-local"
                                                     value={d || ""}
                                                     onChange={(e) => {
+                                                        const msPerDay = 24 * 60 * 60 * 1000;
                                                         const val = e.target.value;
                                                         const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
                                                         if (idx >= starts.length) starts.push(val); else starts[idx] = val;
@@ -1774,24 +2070,16 @@ export default function Tours() {
                                                         if (idx === 0) handleFormChange('startDate', val);
 
                                                         const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
-                                                        if (!ends[idx]) {
-                                                            let defaultEnd = "";
-                                                            const firstStart = (formData.startDates && formData.startDates[0]) || formData.startDate;
-                                                            const firstEnd = (formData.endDates && formData.endDates[0]) || formData.endDate;
-                                                            if (firstStart && firstEnd) {
-                                                                const baseStart = parseLocalInput(firstStart);
-                                                                const baseEnd = parseLocalInput(firstEnd);
-                                                                if (baseStart && baseEnd) {
-                                                                    const delta = baseEnd.getTime() - baseStart.getTime();
-                                                                    const thisStart = parseLocalInput(val) || parseLocalInput(firstStart);
-                                                                    if (thisStart) defaultEnd = toLocalInput(new Date(thisStart.getTime() + delta));
-                                                                }
-                                                            }
-                                                            if (!defaultEnd) {
-                                                                const thisStart = parseLocalInput(val);
-                                                                defaultEnd = thisStart ? toLocalInput(new Date(thisStart.getTime() + 6 * 3600000)) : "";
-                                                            }
-                                                            ends[idx] = defaultEnd;
+
+                                                        // compute numericDuration consistently
+                                                        const firstStartCand = (formData.startDates && formData.startDates[0]) || formData.startDate;
+                                                        const firstEndCand = (formData.endDates && formData.endDates[0]) || formData.endDate;
+                                                        const numericDuration = parseDurationToDays(formData.duration, firstStartCand, firstEndCand) || 1;
+
+                                                        const thisStart = parseLocalInput(val);
+                                                        if (thisStart) {
+                                                            const defaultEndLocal = toLocalInput(new Date(thisStart.getTime() + numericDuration * msPerDay));
+                                                            ends[idx] = defaultEndLocal;
                                                             handleFormChange('endDates' as any, ends);
                                                             if (idx === 0) handleFormChange('endDate', ends[0] || "");
                                                         }
@@ -1873,13 +2161,61 @@ export default function Tours() {
 
                         <div>
                             <Label htmlFor="duration" className="mt-2 block">Thời lượng </Label>
-                            <Input
-                                id="duration"
-                                value={formData.duration}
-                                onChange={(e) => handleFormChange("duration", e.target.value)}
-                                placeholder="3 ngày 2 đêm"
-                                readOnly
-                            />
+
+                            { /* disable select until user đã chọn ít nhất 1 start date */}
+                            <select
+                                className="mt-1 block w-full rounded-md border px-3 py-2"
+                                value={String(
+                                    parseDurationToDays(
+                                        // parseDurationToDays handles number/string/display
+                                        (formData.duration as any) || formData.durationDisplay || "",
+                                        formData.startDates?.[0],
+                                        formData.endDates?.[0]
+                                    ) || 1
+                                )}
+                                onChange={(e) => {
+                                    const days = Math.max(1, Number(e.target.value) || 1);
+                                    // store numeric duration
+                                    handleFormChange("duration" as any, days);
+
+                                    // update display (optional)
+                                    const display = `${days} ngày ${Math.max(0, days - 1)} đêm`;
+                                    handleFormChange("durationDisplay" as any, display);
+
+                                    // recompute endDates from existing startDates using BE convention (end = start + days*24h)
+                                    const msPerDay = 24 * 60 * 60 * 1000;
+                                    const starts = Array.isArray(formData.startDates) && formData.startDates.length
+                                        ? formData.startDates.slice()
+                                        : (formData.startDate ? [formData.startDate] : []);
+
+                                    const newEnds = starts.map(s => {
+                                        const sd = parseLocalInput(s);
+                                        return sd ? toLocalInput(new Date(sd.getTime() + days * msPerDay)) : "";
+                                    });
+                                    handleFormChange("endDates" as any, newEnds);
+                                    handleFormChange("endDate" as any, newEnds[0] || "");
+                                }}
+                                disabled={
+                                    !(
+                                        (Array.isArray(formData.startDates) && formData.startDates.length && formData.startDates.some(Boolean))
+                                        || Boolean(formData.startDate)
+                                    )
+                                }
+                            >
+                                {durationOptions.map(opt => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+
+                            { /* helper text when no start chosen */}
+                            {!(
+                                (Array.isArray(formData.startDates) && formData.startDates.length && formData.startDates.some(Boolean))
+                                || Boolean(formData.startDate)
+                            ) && (
+                                    <p className="text-xs text-gray-500 mt-1">Vui lòng chọn ngày bắt đầu trước khi chọn thời lượng</p>
+                                )}
                         </div>
                     </div>
 
@@ -1887,61 +2223,61 @@ export default function Tours() {
                         <div>
                             <Label htmlFor="priceAdult">Giá người lớn (VNĐ) *</Label>
                             <Input
-                                id="priceAdult"
+                                id="adultPrice"
                                 type="number"
-                                value={formData.priceAdult || ""}
-                                onChange={(e) => handleFormChange("priceAdult", parseInt(e.target.value) || 0)}
+                                value={formData.adultPrice || ""}
+                                onChange={(e) => handleFormChange("adultPrice", parseInt(e.target.value) || 0)}
                                 placeholder="3500000"
-                                className={formErrors.priceAdult ? "border-red-500" : ""}
+                                className={formErrors.adultPrice ? "border-red-500" : ""}
                             />
-                            {formErrors.priceAdult && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.priceAdult}</p>
+                            {formErrors.adultPrice && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
                             )}
                         </div>
                         <div>
-                            <Label htmlFor="priceChild">Giá trẻ em (≥5 tuổi)</Label>
+                            <Label htmlFor="childPrice">Giá trẻ em (≥5 tuổi)</Label>
                             <Input
-                                id="priceChild"
+                                id="childPrice"
                                 type="number"
-                                value={formData.priceChild || ""}
-                                onChange={(e) => handleFormChange("priceChild", parseInt(e.target.value) || 0)}
-                                placeholder="2800000"
-                                className={formErrors.priceChild ? "border-red-500" : ""}
-                            />
-                            {formErrors.priceChild && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.priceChild}</p>
-                            )}
-                        </div>
-                        <div>
-                            <Label htmlFor="priceBaby">Giá em bé (&lt;5 tuổi)</Label>
-                            <Input
-                                id="priceBaby"
-                                type="number"
+                                value={formData.childPrice || ""}
+                                onChange={(e) => handleFormChange("childPrice", parseInt(e.target.value) || 0)}
 
-                                value={formData.priceBaby || ""}
-                                onChange={(e) => handleFormChange("priceBaby", parseInt(e.target.value) || 0)}
-                                placeholder="1000000"
-                                className={formErrors.priceBaby ? "border-red-500" : ""}
+                                placeholder="2800000"
+                                className={formErrors.childPrice ? "border-red-500" : ""}
                             />
-                            {formErrors.priceBaby && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.priceBaby}</p>
+                            {formErrors.childPrice && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
+                            )}
+                        </div>
+                        <div>
+                            <Label htmlFor="infantPrice">Giá em bé (&lt;5 tuổi)</Label>
+                            <Input
+                                id="infantPrice"
+                                type="number"
+                                value={formData.infantPrice || ""}
+                                onChange={(e) => handleFormChange("infantPrice", parseInt(e.target.value) || 0)}
+                                placeholder="1000000"
+                                className={formErrors.infantPrice ? "border-red-500" : ""}
+                            />
+                            {formErrors.infantPrice && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.infantPrice}</p>
                             )}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <Label htmlFor="seatsTotal">Số chỗ tối đa *</Label>
+                            <Label htmlFor="maxGroupSize">Số chỗ tối đa *</Label>
                             <Input
-                                id="seatsTotal"
+                                id="maxGroupSize"
                                 type="number"
-                                value={formData.seatsTotal || ""}
-                                onChange={(e) => handleFormChange("seatsTotal", parseInt(e.target.value) || 1)}
+                                value={formData.maxGroupSize || ""}
+                                onChange={(e) => handleFormChange("maxGroupSize", parseInt(e.target.value) || 1)}
                                 placeholder="30"
-                                className={formErrors.seatsTotal ? "border-red-500" : ""}
+                                className={formErrors.maxGroupSize ? "border-red-500" : ""}
                             />
-                            {formErrors.seatsTotal && (
-                                <p className="text-sm text-red-500 mt-1">{formErrors.seatsTotal}</p>
+                            {formErrors.maxGroupSize && (
+                                <p className="text-sm text-red-500 mt-1">{formErrors.maxGroupSize}</p>
                             )}
                         </div>
                         <div>
@@ -1960,7 +2296,7 @@ export default function Tours() {
                         </div>
                     </div>
 
-                    <div>
+                    {/* <div>
                         <Label htmlFor="pickupPoints">Điểm đón</Label>
                         <Input
                             id="pickupPoints"
@@ -1976,35 +2312,67 @@ export default function Tours() {
                             }
                             placeholder="Hà Nội, Hải Phòng"
                         />
+                    </div> */}
+                    <div>
+                        <Label htmlFor="startLocationPickup">Pickup chính (startLocation.pickupDropoff) *</Label>
+                        <Input
+                            id="startLocationPickup"
+                            value={(formData.startLocation && formData.startLocation.pickupDropoff) || ""}
+                            onChange={(e) =>
+                                handleFormChange("startLocation", {
+                                    ...(formData.startLocation || { type: "Point", address: "", pickupDropoff: "" }),
+                                    pickupDropoff: e.target.value,
+                                } as any)
+                            }
+                            placeholder="Ví dụ: Bến xe Mỹ Đình"
+                            className={formErrors.pickupDropoff ? "border-red-500" : ""}
+                        />
+                        {formErrors.pickupDropoff && <p className="text-sm text-red-500 mt-1">{formErrors.pickupDropoff}</p>}
+                        <p className="text-xs text-gray-500 mt-1">Bắt buộc nhập — sẽ gửi lên BE ở startLocation.pickupDropoff</p>
                     </div>
 
+                    <div className="mt-2">
+                        <Label htmlFor="startLocationAddress">Địa chỉ điểm đón (tùy chọn)</Label>
+                        <Input
+                            id="startLocationAddress"
+                            value={(formData.startLocation && formData.startLocation.address) || ""}
+                            onChange={(e) =>
+                                handleFormChange("startLocation", {
+                                    ...(formData.startLocation || { type: "Point", address: "", pickupDropoff: "" }),
+                                    address: e.target.value,
+                                } as any)
+                            }
+                            placeholder="Địa chỉ chi tiết (tùy chọn)"
+                        />
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="inclusions">Dịch vụ bao gồm</Label>
-                            <Textarea
-                                id="inclusions"
-                                value={formData.inclusions.join("\n")}
-                                onChange={(e) =>
-                                    handleFormChange("inclusions", e.target.value.split("\n").filter(Boolean))
-                                }
-                                placeholder="Mỗi dòng là một dịch vụ bao gồm"
-                                rows={4}
-                            />
-                        </div>
-                        <div>
-                            <Label htmlFor="exclusions">Dịch vụ không bao gồm</Label>
-                            <Textarea
-                                id="exclusions"
-                                value={formData.exclusions.join("\n")}
-                                onChange={(e) =>
-                                    handleFormChange("exclusions", e.target.value.split("\n").filter(Boolean))
-                                }
-                                placeholder="Mỗi dòng là một dịch vụ không bao gồm"
-                                rows={4}
-                            />
+                        <div className="col-span-2">
+                            <Label>Dịch vụ (chọn các mục áp dụng)</Label>
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                {SERVICE_OPTIONS.map((opt) => {
+                                    const checked = Array.isArray(formData.services) && formData.services.includes(opt);
+                                    return (
+                                        <label key={opt} className="flex items-center space-x-2">
+                                            <Checkbox
+                                                checked={checked}
+                                                onCheckedChange={(c) => {
+                                                    const next = formData.services ? formData.services.slice() : [];
+                                                    if (c) {
+                                                        if (!next.includes(opt)) next.push(opt);
+                                                    } else {
+                                                        const idx = next.indexOf(opt);
+                                                        if (idx >= 0) next.splice(idx, 1);
+                                                    }
+                                                    handleFormChange("services" as any, next);
+                                                }}
+                                            />
+                                            <span className="text-sm">{opt}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
-
                     <div>
                         <Label htmlFor="cancellationPolicy">Chính sách hủy tour</Label>
                         <Textarea
@@ -2017,14 +2385,7 @@ export default function Tours() {
                     </div>
                 </TabsContent>
                 <TabsContent value="itinerary" className="space-y-4 mt-6">
-                    <div className="space-y-4 mb-16">
-                        <Label className="text-xl font-semibold text-gray-900" htmlFor="description">Mô tả chi tiết</Label>
-                        <JoditEditorWrapper
-                            value={formData.description}
-                            onChange={(newContent) => handleFormChange("description", newContent)}
-                            placeholder="Mô tả chi tiết ngày này"
-                        />
-                    </div>
+
 
                     <Separator />
                     {/* NOTE: show mapping info if we can/can't derive number of days */}
@@ -2072,7 +2433,7 @@ export default function Tours() {
                         {formData.itinerary.map((day, index) => (
                             <div key={index} className="border rounded-lg p-4 space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h4 className="font-medium">Ngày {day.dayNumber}</h4>
+                                    <h4 className="font-medium">Ngày {(day as any).day ?? (day as any).dayNumber ?? index + 1}</h4>
                                     <div className="flex space-x-2">
                                         {/* <Button
                                              variant="outline"
@@ -2093,19 +2454,19 @@ export default function Tours() {
                                     </div>
                                 </div>
                                 <div>
-                                    <Label htmlFor={`itinerary-title-${index}`}>Tiêu đề</Label>
+                                    <Label htmlFor={`itinerary-address-${index}`}>Tiêu đề / Địa điểm</Label>
                                     <Input
-                                        id={`itinerary-title-${index}`}
-                                        value={day.title}
-                                        onChange={(e) => updateItineraryDay(index, "title", e.target.value)}
+                                        id={`itinerary-address-${index}`}
+                                        value={(day as any).address ?? (day as any).title ?? ""}
+                                        onChange={(e) => updateItineraryDay(index, "address", e.target.value)}
                                         placeholder="Ví dụ: Khám phá hang Sửng Sốt"
                                     />
                                 </div>
                                 <div>
-                                    <Label htmlFor={`itinerary-details-${index}`}>Chi tiết</Label>
+                                    <Label htmlFor={`itinerary-description-${index}`}>Chi tiết</Label>
                                     <JoditEditorWrapper
-                                        value={day.details}
-                                        onChange={(newContent) => updateItineraryDay(index, "details", newContent)}
+                                        value={(day as any).description ?? (day as any).details ?? ""}
+                                        onChange={(newContent) => updateItineraryDay(index, "description", newContent)}
                                         placeholder="Mô tả chi tiết ngày này"
                                     />
                                 </div>
@@ -2294,7 +2655,7 @@ export default function Tours() {
                             <div>
                                 <p className="text-sm text-gray-600">Sắp hết chỗ</p>
                                 <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.seatsTotal - t.seatsBooked <= t.seatsTotal * 0.2)
+                                    {tours.filter((t: Tour) => t.maxGroupSize - t.seatsBooked <= t.maxGroupSize * 0.2)
                                         .length}
                                 </p>
                             </div>
@@ -2407,24 +2768,24 @@ export default function Tours() {
                 submitDisabled={isSubmitDisabled()}
                 submitText={modalMode === "create" ? "Tạo & Xuất bản" : "Cập nhật"}
                 cancelText="Hủy"
-                // extraActions={
-                //     modalMode !== "view"
-                //         ? [
-                //             {
-                //                 text: "Lưu nháp",
-                //                 onClick: handleSaveDraft,
-                //                 variant: "outline" as const,
-                //                 icon: <Save className="w-4 h-4 mr-2" />,
-                //             },
-                //             {
-                //                 text: "Xem trước",
-                //                 onClick: handlePreview,
-                //                 variant: "outline" as const,
-                //                 icon: <ExternalLink className="w-4 h-4 mr-2" />,
-                //             },
-                //         ]
-                //         : undefined
-                // }
+            // extraActions={
+            //     modalMode !== "view"
+            //         ? [
+            //             {
+            //                 text: "Lưu nháp",
+            //                 onClick: handleSaveDraft,
+            //                 variant: "outline" as const,
+            //                 icon: <Save className="w-4 h-4 mr-2" />,
+            //             },
+            //             {
+            //                 text: "Xem trước",
+            //                 onClick: handlePreview,
+            //                 variant: "outline" as const,
+            //                 icon: <ExternalLink className="w-4 h-4 mr-2" />,
+            //             },
+            //         ]
+            //         : undefined
+            // }
             >
                 <div className="max-h-[60vh] overflow-y-auto pr-2">
                     {renderTourForm()}
@@ -2436,7 +2797,7 @@ export default function Tours() {
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}
                 title="Xóa tour"
-                message={`Bạn có chắc chắn muốn xóa tour "${tourToDelete?.title}"?${tourToDelete?.seatsBooked ? " Tour này có đơn hàng đã đặt." : ""
+                message={`Bạn có chắc chắn muốn xóa tour "${tourToDelete?.name}"?${tourToDelete?.seatsBooked ? " Tour này có đơn hàng đã đặt." : ""
                     }`}
                 type="danger"
                 requireTyping={true}
