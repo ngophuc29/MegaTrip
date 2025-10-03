@@ -1035,9 +1035,9 @@ export default function Tours() {
 
 
 
-        if (!data.categoryId) {
-            errors.categoryId = "Bạn phải chọn danh mục";
-        }
+        // if (!data.categoryId) {
+        //     errors.categoryId = "Bạn phải chọn danh mục";
+        // }
 
         if (!data.departureFrom.trim()) {
             errors.departureFrom = "Bạn phải nhập điểm khởi hành";
@@ -1919,7 +1919,7 @@ export default function Tours() {
 
 
 
-                    <div>
+                    {/* <div>
                         <Label htmlFor="categoryId">Danh mục *</Label>
                         <Select
                             value={formData.categoryId}
@@ -1939,7 +1939,7 @@ export default function Tours() {
                         {formErrors.categoryId && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.categoryId}</p>
                         )}
-                    </div>
+                    </div> */}
 
                     <div>
                         <Label htmlFor="tags">Tags</Label>
