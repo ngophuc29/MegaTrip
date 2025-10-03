@@ -150,9 +150,16 @@ export default function TravelokaBanner() {
   };
 
   useEffect(() => {
-    fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
-      setProvinces(data);
-    });
+    fetch('/provinces.json')
+      .then((res) => res.json())
+      .then((data) => {
+        // provinces.json is an array
+        setProvinces(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error('[TravelokaBanner] failed to load /provinces.json', err);
+        setProvinces([]);
+      });
 
     // load airport list from local public/airport.json (no external API)
     fetch('/airport.json')

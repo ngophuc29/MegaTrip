@@ -81,9 +81,15 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   
 
   useEffect(() => {
-    fetch('https://provinces.open-api.vn/api/v2/').then(res => res.json()).then(data => {
-      setProvinces(data);
-    });
+    fetch('/provinces.json')
+      .then((res) => res.json())
+      .then((data) => {
+        setProvinces(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error('[SearchTabs] failed to load /provinces.json', err);
+        setProvinces([]);
+      });
   }, []);
 
   // normalize helper: enforce rules
@@ -335,6 +341,8 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       qs.set('adults', String(adults));
       qs.set('children', String(children));
       qs.set('infants', String(infants));
+      // notify parent if provided (optional)
+      if (typeof onSearch === 'function') onSearch({ type: 'flight', ...Object.fromEntries(qs.entries()) });
       router.push(`/ve-may-bay?${qs.toString()}`);
     } else if (type === 'bus') {
       const payload = {
@@ -344,6 +352,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         departure: busDeparture ? busDeparture.toISOString().split('T')[0] : ''
       };
       console.log('Search clicked:', payload);
+      if (typeof onSearch === 'function') onSearch(payload);
       router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (type === 'tour') {
       const payload = {
@@ -353,6 +362,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         departure: tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''
       };
       console.log('Search clicked:', payload);
+      if (typeof onSearch === 'function') onSearch(payload);
       router.push(`/tour?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     }
   };
