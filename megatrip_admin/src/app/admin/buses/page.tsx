@@ -101,13 +101,15 @@ const busTypeOptions = [
 	{ value: "VIP", label: "VIP" }
 ];
 
-// --- New: amenities options ---
+// --- New: amenities options (value = stored key, label = display text) ---
 const amenitiesOptions = [
-	"Wifi miễn phí",
-	"Điều hòa",
-	"Nước uống",
-	"Ăn nhẹ",
-	"Bữa ăn dọc đường"
+	{ value: "wifi", label: "Wi‑Fi miễn phí trên xe" },
+	{ value: "water", label: "Nước uống miễn phí" },
+	{ value: "blanket", label: "Chăn đắp" },
+	{ value: "toilet", label: "Nhà vệ sinh trên xe" },
+	{ value: "entertainment", label: "Màn hình giải trí / TV" },
+	{ value: "massage", label: "Ghế massage" },
+	{ value: "snack", label: "Đồ ăn nhẹ / Snack" }
 ];
 
 // --- New helper: safe collect all subtypes without flatMap ---
@@ -1223,7 +1225,11 @@ export default function Buses() {
             if (found) setSelectedSubtypeId(found.id);
         }
         // populate amenitiesSelected from comma-separated amenities string
-		setAmenitiesSelected((bus.amenities || "").split(',').map((s) => s.trim()).filter(Boolean));
+        setAmenitiesSelected(
+            Array.isArray(bus.amenities)
+                ? bus.amenities.map(s => String(s).trim()).filter(Boolean)
+                : (bus.amenities || "").split(',').map(s => s.trim()).filter(Boolean)
+        );
     };
 
     const handleDelete = (bus: BusRoute) => {
@@ -1456,7 +1462,7 @@ export default function Buses() {
 
                                 <div>
                                     <Label className="text-sm font-medium text-gray-700">Tiện ích</Label>
-                                    <p className="mt-1 text-gray-900">{selectedBus.amenities}</p>
+                                    <p className="mt-1 text-gray-900">{Array.isArray(selectedBus.amenities) ? selectedBus.amenities.join(', ') : selectedBus.amenities}</p>
                                 </div>
                             </div>
                         </div>
@@ -1979,18 +1985,18 @@ export default function Buses() {
 					<Label>Tiện ích</Label>
 					<div className="mt-2 space-y-2">
 						{amenitiesOptions.map((opt) => {
-							const checked = amenitiesSelected.includes(opt);
+							const checked = amenitiesSelected.includes(opt.value);
 							return (
-								<div key={opt} className="flex items-center space-x-2">
+								<div key={opt.value} className="flex items-center space-x-2">
 									<Checkbox
-										id={opt}
+										id={opt.value}
 										checked={checked}
 										onCheckedChange={(c) => {
 											setIsFormDirty(true);
 											if (c) {
-												setAmenitiesSelected(prev => [...prev, opt]);
+												setAmenitiesSelected(prev => [...prev, opt.value]);
 											} else {
-												setAmenitiesSelected(prev => prev.filter(a => a !== opt));
+												setAmenitiesSelected(prev => prev.filter(a => a !== opt.value));
 											}
 											// clear errors if any
 											if (formErrors['amenities']) {
@@ -1998,7 +2004,7 @@ export default function Buses() {
 											}
 										}}
 									/>
-									<Label htmlFor={opt}>{opt}</Label>
+									<Label htmlFor={opt.value}>{opt.label}</Label>
 								</div>
 							);
 						})}

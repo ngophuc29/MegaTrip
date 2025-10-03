@@ -106,14 +106,12 @@ export default function BusResults({
                     <div className="flex items-center gap-2 mt-3">
                       <span className="text-sm text-[hsl(var(--muted-foreground))]">Tiện ích:</span>
                       <div className="flex gap-1">
-                        {bus.amenities.slice(0, 4).map((amenity, index) => (
+                        {bus.amenities.map((amenity, index) => (
                           <span key={index} className="text-sm" title={amenity}>
                             {getAmenityIcon(amenity)}
                           </span>
                         ))}
-                        {bus.amenities.length > 4 && (
-                          <span className="text-xs text-[hsl(var(--muted-foreground))]">+{bus.amenities.length - 4} khác</span>
-                        )}
+
                       </div>
                     </div>
                   </div>
@@ -159,7 +157,12 @@ export default function BusResults({
                       <div>
                         <h4 className="font-medium mb-2">Điểm đón</h4>
                         <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
-                          {bus.pickup.map((location, index) => (
+                          {(
+                            // prefer explicit pickup array, otherwise fallback to routeFrom.name if available
+                            (Array.isArray(bus.pickup) && bus.pickup.length > 0)
+                              ? bus.pickup
+                              : (bus.routeFrom && bus.routeFrom.name ? [bus.routeFrom.name] : [])
+                          ).map((location, index) => (
                             <div key={index} className="flex items-start gap-1">
                               <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
                               {location}
@@ -170,7 +173,12 @@ export default function BusResults({
                       <div>
                         <h4 className="font-medium mb-2">Điểm trả</h4>
                         <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
-                          {bus.dropoff.map((location, index) => (
+                          {(
+                            // prefer explicit dropoff array, otherwise fallback to routeTo.name if available
+                            (Array.isArray(bus.dropoff) && bus.dropoff.length > 0)
+                              ? bus.dropoff
+                              : (bus.routeTo && bus.routeTo.name ? [bus.routeTo.name] : [])
+                          ).map((location, index) => (
                             <div key={index} className="flex items-start gap-1">
                               <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
                               {location}

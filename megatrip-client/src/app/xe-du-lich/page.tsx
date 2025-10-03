@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import SearchTabs from '../components/SearchTabs';
@@ -140,6 +140,264 @@ export default function XeDuLich() {
     const [selectedRoute, setSelectedRoute] = useState<{ from: string, to: string, price?: string } | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
+    const [fetchedBuses, setFetchedBuses] = useState<any[]>([]); // dữ liệu từ server
+
+    // base API (config bằng NEXT_PUBLIC_API_BASE hoặc fallback)
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+
+    // helper: parse MongoDB extended JSON number wrappers into JS Number
+    const parseNumber = (v: any): number => {
+        if (v == null) return 0;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : 0;
+        }
+        if (typeof v === 'object') {
+            if ('$numberInt' in v) return Number(v['$numberInt']);
+            if ('$numberLong' in v) return Number(v['$numberLong']);
+            if ('$numberDecimal' in v) return Number(v['$numberDecimal']);
+            if ('$numberDouble' in v) return Number(v['$numberDouble']);
+            // sometimes price is nested like { $numberInt: "600" }
+            // fallback: try to extract any numeric-looking property
+            for (const key of Object.keys(v)) {
+                const candidate = v[key];
+                const n = Number(candidate);
+                if (Number.isFinite(n)) return n;
+            }
+        }
+        return 0;
+    };
+
+    // helper: parse MongoDB extended JSON date wrappers into JS Date
+    const parseDate = (v: any): Date | null => {
+        if (!v && v !== 0) return null;
+        if (v instanceof Date) return v;
+        if (typeof v === 'string') {
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        if (typeof v === 'number') {
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : d;
+        }
+        if (typeof v === 'object') {
+            // common mongo extended forms
+            if ('$date' in v) {
+                const dv = v['$date'];
+                if (typeof dv === 'object' && dv !== null && ('$numberLong' in dv)) {
+                    const t = Number(dv['$numberLong']);
+                    return isNaN(t) ? null : new Date(t);
+                }
+                if (typeof dv === 'string') {
+                    const d = new Date(dv);
+                    return isNaN(d.getTime()) ? null : d;
+                }
+                if (typeof dv === 'number') {
+                    const d = new Date(dv);
+                    return isNaN(d.getTime()) ? null : d;
+                }
+            }
+            // sometimes date is stored directly as { $numberLong: "..." }
+            if ('$numberLong' in v) {
+                const t = Number(v['$numberLong']);
+                return isNaN(t) ? null : new Date(t);
+            }
+        }
+        return null;
+    };
+
+    // fetch buses từ server (client-facing endpoint)
+    const fetchBuses = async (from?: string, to?: string, departure?: string) => {
+        try {
+            setIsLoading(true);
+            const params = new URLSearchParams();
+            if (from) params.append('from', from);
+            if (to) params.append('to', to);
+            if (departure) params.append('departure', departure);
+            // page & pageSize defaults (client listing)
+            params.append('page', '1');
+            params.append('pageSize', '50');
+            const url = `${API_BASE}/api/client/buses?${params.toString()}`;
+
+            // Log the outgoing request for debugging
+            console.log('fetchBuses -> requesting', { url, from, to, departure });
+
+            const res = await fetch(url);
+            if (!res.ok) {
+                const text = await res.text();
+                console.warn('fetchBuses non-ok', { status: res.status, body: text });
+                setFetchedBuses([]);
+                setIsLoading(false);
+                return;
+            }
+            const json = await res.json();
+            // Log full response for debugging, including relaxed flag
+            console.log('fetchBuses -> raw response json:', json);
+
+            // server trả { data: [...] , pagination: ... } hoặc mảng trực tiếp
+            const list = Array.isArray(json) ? json : (Array.isArray(json.data) ? json.data : []);
+
+            // normalize server objects to client UI shape
+            const normalizeServerBus = (b: any, idx: number) => {
+                // robustly extract first departure/arrival date from possibly extended json
+                const departureRaw = b.departureAt ?? (Array.isArray(b.departureDates) && b.departureDates[0]) ?? null;
+                const arrivalRaw = b.arrivalAt ?? (Array.isArray(b.arrivalDates) && b.arrivalDates[0]) ?? null;
+                const departureDate = parseDate(departureRaw);
+                const arrivalDate = parseDate(arrivalRaw);
+
+                const fmtTime = (dAny: any) => {
+                    const d = parseDate(dAny) ?? null;
+                    if (!d) return '00:00';
+                    try {
+                        return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                    } catch (e) {
+                        const iso = d.toISOString();
+                        return iso.slice(11, 16);
+                    }
+                };
+
+                const routeFromName = b.routeFrom?.city || b.routeFrom?.name || String(b.routeFrom?.code || '') ;
+                const routeToName = b.routeTo?.city || b.routeTo?.name || String(b.routeTo?.code || '') ;
+
+                // parse numeric fields that might be wrapped by mongo extjson
+                const priceNum = parseNumber(b.price ?? b.pricePerSeat ?? b.price_total);
+                const seatsTotal = parseNumber(b.seatsTotal ?? b.seats ?? b.totalSeats);
+                const seatsAvailable = parseNumber(b.seatsAvailable ?? b.availableSeats ?? b.seats_free);
+
+                // amenities normalization
+                const amenitiesArr = Array.isArray(b.amenities)
+                    ? b.amenities
+                    : (typeof b.amenities === 'string' ? b.amenities.split(',').map((s:string)=>s.trim()).filter(Boolean) : (b.amenity_list || []));
+
+                return {
+                    // id used as key in UI
+                    id: b._id?.['$oid'] || b._id || b.busCode || b.id || `srv-${idx}`,
+                    company: b.operator?.name || b.company || (b.operator && b.operator.id) || (b.busCode || 'Nhà xe'),
+                    route: (b.route && typeof b.route === 'string') ? b.route : `${routeFromName} - ${routeToName}`.trim(),
+                    // include structured routeFrom/routeTo so client filters can match codes/cities/names
+                    routeFrom: b.routeFrom || null,
+                    routeTo: b.routeTo || null,
+                    type: Array.isArray(b.busType) ? (b.busType[0] || 'Ghế') : (b.type || (b.busType || 'Ghế ngồi')),
+                    departure: {
+                        time: (b.departure && b.departure.time) || fmtTime(departureDate),
+                        location: (b.departure && b.departure.location) || routeFromName || ''
+                    },
+                    arrival: {
+                        time: (b.arrival && b.arrival.time) || fmtTime(arrivalDate),
+                        location: (b.arrival && b.arrival.location) || routeToName || ''
+                    },
+                    duration: b.duration || '',
+                    distance: b.distance || '',
+                    price: priceNum,
+                    originalPrice: parseNumber(b.originalPrice ?? b.listPrice ?? b.price_before_discount) || undefined,
+                    seats: seatsTotal,
+                    availableSeats: seatsAvailable,
+                    amenities: amenitiesArr,
+                    rating: b.rating || (b.operator && b.operator.rating) || 0,
+                    reviews: b.reviews || 0,
+                    images: b.images || ['/placeholder.svg'],
+                    busNumber: b.busCode || b.busNumber || '',
+                    discount: b.discount || undefined,
+                    cancellable: !!b.cancellable,
+                    pickup: b.pickup || b.pickupPoints || [],
+                    dropoff: b.dropoff || b.dropoffPoints || []
+                };
+            };
+
+            const normalized = list.map((b: any, i: number) => normalizeServerBus(b, i));
+
+            // Adjust client priceRange immediately so newly-fetched buses aren't filtered out on first render.
+            try {
+                if (Array.isArray(normalized) && normalized.length > 0) {
+                    const prices = normalized.map((x:any) => Number(x.price || 0)).filter(p => Number.isFinite(p) && p > 0);
+                    if (prices.length > 0) {
+                        const minP = Math.min(...prices);
+                        const maxP = Math.max(...prices);
+                        const [curMin, curMax] = priceRange;
+                        // expand only when necessary (don't shrink user's current range)
+                        if (minP < curMin || maxP > curMax) {
+                            const pad = Math.max(20000, Math.floor((maxP - minP) * 0.1));
+                            const newMin = Math.max(0, Math.min(curMin, minP - pad));
+                            const newMax = Math.max(curMax, maxP + pad);
+                            setPriceRange([newMin, newMax]);
+                            console.log('fetchBuses -> expanded priceRange to include server prices', { newMin, newMax, minP, maxP });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('fetchBuses priceRange expand failed', e);
+            }
+
+            // Log response summary so we can see if there's data
+            console.log('fetchBuses -> normalized response', {
+                totalReturned: normalized.length,
+                sample: normalized.length ? normalized.slice(0,3) : []
+            });
+            if (normalized.length === 0) {
+                console.warn('fetchBuses -> empty list returned from server, full response:', json);
+            }
+            setFetchedBuses(normalized);
+        } catch (err) {
+            console.error('fetchBuses error', err);
+            setFetchedBuses([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // If the page is loaded with ?from=&to=&departure=... then automatically run the search.
+    useEffect(() => {
+        try {
+            if (typeof window === 'undefined') return;
+            const params = new URLSearchParams(window.location.search);
+            const qFrom = params.get('from') || params.get('From') || params.get('FROM') || '';
+            const qTo = params.get('to') || params.get('To') || params.get('TO') || '';
+            const qDeparture = params.get('departure') || params.get('date') || params.get('departureDate') || '';
+
+            if (qFrom || qTo || qDeparture) {
+                // set UI to reflect incoming params
+                if (qFrom || qTo) {
+                    setSelectedRoute({
+                        from: qFrom || selectedRoute?.from || '',
+                        to: qTo || selectedRoute?.to || '',
+                        price: selectedRoute?.price
+                    });
+                }
+                if (qDeparture) setSelectedDate(qDeparture);
+
+                // call the same handler used by SearchTabs to keep behavior consistent
+                handleSearch({ from: qFrom || undefined, to: qTo || undefined, departure: qDeparture || undefined });
+            }
+        } catch (e) {
+            console.warn('initial search params parse failed', e);
+        }
+    }, []);
+
+    // If server returns buses outside current priceRange, expand the range so results are visible.
+	useEffect(() => {
+		if (!Array.isArray(fetchedBuses) || fetchedBuses.length === 0) return;
+		try {
+			const prices = fetchedBuses.map(b => Number(b.price || 0)).filter(p => Number.isFinite(p));
+			if (prices.length === 0) return;
+			const minP = Math.min(...prices);
+			const maxP = Math.max(...prices);
+
+			// only adjust if current range would filter out all results or not include the returned prices
+			const [curMin, curMax] = priceRange;
+			const needsExpand = (minP < curMin) || (maxP > curMax);
+			if (needsExpand) {
+				// small padding and clamp
+				const pad = Math.max(20000, Math.floor((maxP - minP) * 0.1));
+				const newMin = Math.max(0, Math.min(minP - pad, curMin));
+				const newMax = Math.max(curMax, maxP + pad);
+				setPriceRange([newMin, newMax]);
+				console.log('Adjusted priceRange to include server prices', { newMin, newMax, minP, maxP });
+			}
+		} catch (e) {
+			console.warn('priceRange adjust failed', e);
+		}
+	}, [fetchedBuses]);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -153,7 +411,7 @@ export default function XeDuLich() {
         if (type.includes('Ghế ngồi')) return <Armchair className="h-4 w-4" />;
         return <Bus className="h-4 w-4" />;
     };
-
+   
     const getAmenityIcon = (amenity: string) => {
         switch (amenity) {
             case 'wifi': return <Wifi className="h-4 w-4" />;
@@ -216,18 +474,37 @@ export default function XeDuLich() {
     };
 
     const routeBuses = selectedRoute ? generateRouteBuses() : [];
-    const allBuses = selectedRoute ? [...routeBuses, ...sampleBuses] : sampleBuses;
+    // nếu server trả dữ liệu dùng nó, ngược lại fallback về sampleBuses / generated
+    const sourceBuses = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0)
+        ? fetchedBuses
+        : (selectedRoute ? [...routeBuses, ...sampleBuses] : sampleBuses);
 
-    const filteredBuses = allBuses.filter(bus => {
+    const filteredBuses = sourceBuses.filter(bus => {
         const matchesPrice = bus.price >= priceRange[0] && bus.price <= priceRange[1];
         const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.includes(bus.company);
         const matchesType = selectedTypes.length === 0 || selectedTypes.includes(bus.type);
 
-        // If route is selected, prioritize matching routes
-        if (selectedRoute) {
-            const matchesRoute = bus.route === `${selectedRoute.from} - ${selectedRoute.to}`;
-            return matchesPrice && matchesCompany && matchesType && matchesRoute;
-        }
+        // If route is selected, try several heuristics rather than strict string equality:
+		// - match exact display route
+		// - match if route string contains the provided values
+		// - match routeFrom.routeTo codes (useful when query uses numeric codes like from=1&to=56)
+		if (selectedRoute) {
+			const fromVal = String(selectedRoute.from || '').trim();
+			const toVal = String(selectedRoute.to || '').trim();
+			const displayRoute = `${selectedRoute.from} - ${selectedRoute.to}`;
+
+			const matchesRoute =
+				// exact display text (legacy)
+				(bus.route === displayRoute) ||
+				// substring match in route description
+				(!!bus.route && fromVal && bus.route.includes(fromVal)) ||
+				(!!bus.route && toVal && bus.route.includes(toVal)) ||
+				// structured match against normalized fields
+				(!!bus.routeFrom && fromVal && String(bus.routeFrom.code || bus.routeFrom.city || bus.routeFrom.name).includes(fromVal)) ||
+				(!!bus.routeTo && toVal && String(bus.routeTo.code || bus.routeTo.city || bus.routeTo.name).includes(toVal));
+
+			return matchesPrice && matchesCompany && matchesType && matchesRoute;
+		}
 
         return matchesPrice && matchesCompany && matchesType;
     });
@@ -253,11 +530,34 @@ export default function XeDuLich() {
         }
     });
 
-    const handleSearch = () => {
+    // handleSearch now accepts optional payload from SearchTabs { type, from, to, departure, price }
+    const handleSearch = (payload?: { type?: string, from?: string, to?: string, departure?: string, price?: string }) => {
+        console.log('handleSearch called with payload:', payload);
         setHasSearched(true);
         setShowPromotions(false);
         setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 2000);
+
+        // prefer payload values when provided (SearchTabs likely passes these)
+        const from = payload?.from ?? selectedRoute?.from ?? '';
+        const to = payload?.to ?? selectedRoute?.to ?? '';
+        const departure = payload?.departure ?? selectedDate ?? '';
+
+        // if payload provided, update selectedRoute / selectedDate so other UI reflects user input
+        if (payload?.from || payload?.to) {
+            setSelectedRoute({
+                from: payload?.from ?? selectedRoute?.from ?? '',
+                to: payload?.to ?? selectedRoute?.to ?? '',
+                price: payload?.price ?? selectedRoute?.price
+            });
+        }
+        if (payload?.departure) {
+            setSelectedDate(payload.departure);
+        }
+
+        console.log('handleSearch will call fetchBuses with', { from, to, departure });
+        fetchBuses(from, to, departure).finally(() => {
+            setTimeout(() => setIsLoading(false), 200);
+        });
     };
 
     const handleRouteSelect = (from: string, to: string, price?: string) => {
@@ -265,14 +565,18 @@ export default function XeDuLich() {
         setHasSearched(true);
         setShowPromotions(false);
         setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 2000);
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        setSelectedDate(tomorrow.toISOString().split('T')[0]);
+        const dateStr = tomorrow.toISOString().split('T')[0];
+        setSelectedDate(dateStr);
+        // gọi API ngay sau khi đặt ngày
+        fetchBuses(from, to, dateStr).finally(() => setIsLoading(false));
     };
 
     const busTypes = [...new Set(sampleBuses.map(bus => bus.type))];
 
+    // optional small UI debug flag
+    const dataSourceLabel = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0) ? `Server (${fetchedBuses.length})` : 'Fallback sample';
 
     const [copied, setCopied] = useState<{[code:string]: boolean}>({});
 
@@ -724,9 +1028,12 @@ export default function XeDuLich() {
                                         <Filter className="h-4 w-4 mr-2" />
                                         Bộ lọc
                                     </Button>
-                                    <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        Tìm thấy {sortedBuses.length} chuyến xe
-                                    </p>
+                                    <div>
+                                        <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                                            Tìm thấy {sortedBuses.length} chuyến xe
+                                        </p>
+                                        <p className="text-xs text-[hsl(var(--muted-foreground))]">Nguồn dữ liệu: {dataSourceLabel}</p>
+                                    </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Label htmlFor="sort" className="text-sm">Sắp xếp:</Label>
@@ -758,7 +1065,7 @@ export default function XeDuLich() {
                                 getAmenityIcon={getAmenityIcon}
                             />
 
-                            {sortedBuses.length === 0 && (
+                            {/* {sortedBuses.length === 0 && (
                                 <Card className="text-center py-12">
                                     <CardContent>
                                         <Bus className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
@@ -769,7 +1076,7 @@ export default function XeDuLich() {
                                         <Button variant="outline">Điều chỉnh tìm kiếm</Button>
                                     </CardContent>
                                 </Card>
-                            )}
+                            )} */}
                         </div>
                     </div>
                 </div>
