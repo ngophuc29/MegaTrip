@@ -1,6 +1,6 @@
 "use client"
-import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Layout from '../../components/Layout';
 import { Button } from '../../components/ui/button';
@@ -60,7 +60,8 @@ const tourDetails = {
     duration: '3 ngày 2 đêm',
     maxGroup: 35,
     priceFrom: 3990000,
-    originalPrice: 4990000,
+    // originalPrice sẽ được tính ngay sau khi object tạo (nếu BE không cung cấp)
+    originalPrice: undefined,
     rating: 4.8,
     reviews: 245,
     description: `Tour Đà Nẵng - Hội An - Bà Nà Hills 3N2Đ là hành trình khám phá vẻ đẹp miền Trung Việt Nam với những điểm đến nổi tiếng nhất. Bạn sẽ được trải nghiệm Cầu Vàng Bà Nà Hills - kỳ quan mới của thế giới, khám phá phố cổ Hội An - di sản văn hóa thế giới, thưởng thức ẩm thực đặc sắc và tắm biển tại bãi biển Mỹ Khê xinh đẹp.`,
@@ -117,9 +118,9 @@ const tourDetails = {
                 'Trải nghiệm cáp treo dài nhất thế giới',
                 'Check-in khách sạn, nghỉ ngơi',
             ],
-            meals: ['Trưa', 'Tối'],
+            meals: ['Sáng', 'Trưa', 'Tối'],
             accommodation: 'Khách sạn 4* Đà Nẵng',
-            transport: 'Máy bay + Xe du lịch',
+            transport: 'Xe du lịch',
         },
         {
             day: 2,
@@ -148,7 +149,7 @@ const tourDetails = {
             ],
             meals: ['Sáng', 'Trưa'],
             accommodation: 'Không',
-            transport: 'Xe du lịch + Máy bay',
+            transport: 'Xe du lịch',
         },
     ],
     pricing: {
@@ -160,12 +161,21 @@ const tourDetails = {
     policies: {
         cancellation: {
             'Trước 15 ngày': '20% tổng tiền tour',
-            'Trước 7-14 ngày': '50% tổng tiền tour',
-            'Trước 3-6 ngày': '75% tổng tiền tour',
-            'Trong vòng 2 ngày': '100% tổng tiền tour',
+            '7-14 ngày': '50% tổng tiền tour',
+            '3-6 ngày': '75% tổng tiền tour',
+            'Trong 2 ngày': '100% tổng tiền tour',
         },
-        children: 'Trẻ em dưới 2 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). Trẻ em 2-11 tuổi: 80% giá tour người lớn.',
-        documents: 'CCCD/CMND còn hạn ít nhất 6 tháng. Trẻ em dưới 14 tuổi cần giấy khai sinh.',
+        children: 'Dưới 2 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). 2-11 tuổi: 80% giá tour người lớn.',
+        documents: 'CCCD/CMND còn hạn ít nhất 6 tháng. Trẻ em dưới 14 tuổi: Giấy khai sinh.',
+        megatrip: `Megatrip hủy trước 3 ngày do không đủ số lượng hành khách: Hoàn tiền 100%. Hoàn trả phần còn lại trong 14 ngày làm việc (trừ cuối tuần, lễ Tết). Đến trễ hoặc tự ý rời tour: mất 100%.`,
+        reschedule: {
+            rules: {
+                'Từ 5 ngày trước': 'Không phí.',
+                '3 ngày trước': '30% giá trị tour.',
+                '2 ngày trước': '50% giá trị tour.',
+            },
+            notes: 'Chịu chi phí chênh lệch (nếu có). Chỉ chuyển 1 lần, phải tham gia trong 60 ngày. Không áp dụng lễ/Tết. Chuyển cho người khác: miễn phí (trừ vé máy bay theo hãng). Bảo lưu khoản thanh toán: 6 tháng; sau đó từ bỏ, không hoàn.'
+        }
     },
     reviews: {
         overall: 4.8,
@@ -236,10 +246,176 @@ const tourDetails = {
         ]
     }
 };
+// helper: compute reasonable original price (suggested) based on base price
+function computeSuggestedOriginal(basePrice: number | undefined) {
+    if (!basePrice || Number.isNaN(basePrice)) return undefined;
+    // tiered markup: nhỏ -> lớn hơn, cao -> ít markup
+    const price = Number(basePrice);
+    let multiplier = price < 1_000_000 ? 1.25 : price < 5_000_000 ? 1.15 : 1.10;
+    // round to nearest 100k for nicer display
+    const suggested = Math.round(price * multiplier / 100000) * 100000;
+    return suggested;
+}
+// simple helper to strip HTML
+function stripHtml(html = '') {
+    return (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+}
 
 export default function ChiTietTour() {
     const router = useRouter();
     const { id } = useParams();
+
+    const [dbLoaded, setDbLoaded] = useState(false); // dùng để re-render sau khi merge dữ liệu từ BE
+
+    // Helper: convert possible DB date formats to ISO YYYY-MM-DD
+    const toIsoDate = (d: any) => {
+        if (!d) return null;
+        const raw = d.$date ?? d;
+        const dt = new Date(raw);
+        if (isNaN(dt.getTime())) return null;
+        return dt.toISOString().split('T')[0];
+    };
+
+    // Map server tour doc -> client tour shape (partial, only fields we need)
+    function mapDbTourToClient(db: any) {
+        if (!db) return {};
+        const images = Array.isArray(db.images) && db.images.length
+            ? db.images.map((img: any) => (typeof img === 'string' ? { url: img, title: '', type: 'image' } : { url: img.url || img, title: img.title || '', type: img.type || 'image' }))
+            : tourDetails.images;
+
+        const startDates = Array.isArray(db.startDates) ? db.startDates : (db.startDates || []);
+        const availableDates = startDates.map((sd: any) => {
+            const date = toIsoDate(sd);
+            return {
+                date,
+                available: (sd.available ?? sd.seats ?? 20),
+                price: db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom,
+                status: (sd.available === 0 || sd.seats === 0) ? 'soldout' : (sd.available <= 5 || sd.seats <= 5 ? 'limited' : 'available')
+            };
+        });
+        // derive meals based on start time of first startDate (use local hour)
+        const getMealsForHour = (hour: number | null) => {
+            if (hour === null || hour === undefined) return null;
+            if (hour < 7) return ['Sáng', 'Trưa', 'Tối'];
+            if (hour >= 7 && hour < 12) return ['Trưa', 'Tối'];
+            if (hour >= 12 && hour < 18) return ['Tối'];
+            return [];
+        };
+        let mealsByStart: string[] | null = null;
+        if (startDates && startDates.length) {
+            try {
+                const raw = startDates[0].$date ?? startDates[0];
+                const dt = new Date(raw);
+                // use local hour so timezone-aware decision (Vietnam UTC+7 example)
+                const hour = isNaN(dt.getTime()) ? null : dt.getHours();
+                mealsByStart = getMealsForHour(hour);
+            } catch (e) {
+                mealsByStart = null;
+            }
+        }
+        // services list normalization + try extract accommodation from services
+        const servicesList = Array.isArray(db.services) ? db.services : (db.services ? [db.services] : []);
+        const servicesLower = servicesList.map(s => String(s).toLowerCase());
+        const svcHotelIdx = servicesLower.findIndex(s => s.includes('khách sạn') || s.includes('khach san') || s.includes('hotel'));
+        const svcResortIdx = servicesLower.findIndex(s => s.includes('resort'));
+        const serviceAccommodation = svcHotelIdx !== -1 ? servicesList[svcHotelIdx] : (svcResortIdx !== -1 ? servicesList[svcResortIdx] : null);
+
+        // itinerary: ensure each day has meals, accommodation, transport (fallback to tour-level fields)
+        // const rawItinerary = db.itinerary && Array.isArray(db.itinerary) ? db.itinerary : tourDetails.itinerary;
+        // const itinerary = rawItinerary.map((it: any) => ({
+        //     day: it.day ?? it.dayNumber ?? 0,
+        //     title: it.title || it.name || '',
+        //     activities: it.activities || it.activitiesList || it.schedule || [],
+        //     // LẤY description từ BE (có thể là HTML) và strip HTML trước khi dùng
+        //     description: stripHtml(it.description || it.address || ''),
+        //     meals: it.meals || (db.meals ? (Array.isArray(db.meals) ? db.meals : [db.meals]) : []),
+        //     accommodation: it.accommodation || db.hotel || db.accommodation || 'Không',
+        //     transport: it.transport || db.transport || 'Xe du lịch'
+        // }));
+        const rawItinerary = db.itinerary && Array.isArray(db.itinerary) ? db.itinerary : tourDetails.itinerary;
+        const itinerary = rawItinerary.map((it: any, idx: number) => {
+            const fallbackDay = tourDetails.itinerary?.[idx] || {};
+            const mealsFromDb = db.meals ? (Array.isArray(db.meals) ? db.meals : [db.meals]) : null;
+            return {
+                day: it.day ?? it.dayNumber ?? 0,
+                title: it.title || it.name || '',
+                activities: it.activities || it.activitiesList || it.schedule || [],
+                // LẤY description từ BE (có thể là HTML) và strip HTML trước khi dùng
+                description: stripHtml(it.description || it.address || ''),
+                // ưu tiên meals ở item, rồi meals ở tour-level, rồi sample tourDetails tương ứng ngày,
+                // nếu vẫn không có thì suy ra từ giờ khởi hành (mealsByStart)
+                meals: it.meals ?? mealsFromDb ?? fallbackDay.meals ?? mealsByStart ?? [],
+                // accommodation: ưu tiên item, sau đó tìm trong services (khách sạn > resort), rồi db fields, rồi sample day
+                accommodation: it.accommodation ?? serviceAccommodation ?? db.hotel ?? db.accommodation ?? fallbackDay.accommodation ?? 'Không',
+                transport: it.transport ?? db.transport ?? fallbackDay.transport ?? 'Xe du lịch'
+            };
+        });
+        return {
+            id: db._id?.$oid ?? db._id ?? db.id ?? tourDetails.id,
+            name: db.name || tourDetails.name,
+            departure: db.departureFrom || db.startLocation?.address || db.departure || tourDetails.departure,
+            destinations: db.destinations || db.destination ? (Array.isArray(db.destinations) ? db.destinations : [db.destination || db.destinations]) : tourDetails.destinations,
+            duration: typeof db.duration === 'number' ? `${db.duration} ngày ${Math.max(0, db.duration - 1)} đêm` : db.duration || tourDetails.duration,
+            maxGroup: db.maxGroupSize ?? db.maxGroup ?? tourDetails.maxGroup,
+            priceFrom: db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom,
+            // originalPrice: db.originalPrice ?? tourDetails.originalPrice,
+            // nếu BE không cung cấp originalPrice thì gợi ý dựa trên priceFrom/adultPrice
+            originalPrice: db.originalPrice ?? computeSuggestedOriginal(db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom) ?? tourDetails.originalPrice,
+            rating: db.ratingsAverage ?? db.rating ?? tourDetails.rating,
+            reviews: db.ratingsQuantity ?? tourDetails.reviews,
+            description: db.description || tourDetails.description,
+            images,
+            includes: db.includes || db.services || tourDetails.includes,
+            excludes: db.excludes || tourDetails.excludes,
+            highlights: db.highlights || tourDetails.highlights,
+            attractions: db.attractions || tourDetails.attractions,
+            availableDates: availableDates.length ? availableDates : tourDetails.availableDates,
+            itinerary,
+            pricing: {
+                adult: db.adultPrice ?? tourDetails.pricing.adult,
+                child: db.childPrice ?? tourDetails.pricing.child,
+                infant: db.infantPrice ?? tourDetails.pricing.infant,
+                singleSupplement: db.singleSupplement ?? tourDetails.pricing.singleSupplement,
+            },
+            // keep policies & reviews from sample for now (BE will provide later)
+            policies: db.policies ?? tourDetails.policies,
+            reviews: db.reviews ?? tourDetails.reviews,
+        };
+    }
+
+    useEffect(() => {
+        let mounted = true;
+        if (!id) return;
+        async function fetchBySlug() {
+            try {
+                const res = await fetch(`http://localhost:8080/api/tours/slug/${id}`);
+                if (!res.ok) {
+                    console.warn('Tour by slug fetch failed', res.status);
+                    return;
+                }
+                const json = await res.json();
+                const db = json.data ?? json.tour ?? json; // tolerate different BE shapes
+                if (!db) return;
+
+                const mapped = mapDbTourToClient(db);
+
+                // Merge mapped into sample tourDetails but preserve policies & reviews from sample if BE not ready
+                const keepPolicies = tourDetails.policies;
+                const keepReviews = tourDetails.reviews;
+                Object.assign(tourDetails, mapped);
+                // ensure policies/reviews kept when BE doesn't provide
+                tourDetails.policies = db.policies ? mapped.policies : keepPolicies;
+                tourDetails.reviews = db.reviews ? mapped.reviews : keepReviews;
+
+                if (mounted) setDbLoaded(true); // trigger re-render
+            } catch (err) {
+                console.error('Fetch tour by slug error', err);
+            }
+        }
+        fetchBySlug();
+        return () => { mounted = false; };
+    }, [id]);
+
     const [selectedDate, setSelectedDate] = useState<Date>();
     const [participants, setParticipants] = useState({
         adults: 1,
@@ -297,16 +473,31 @@ export default function ChiTietTour() {
     };
 
     const updateSingleRooms = (increment: boolean) => {
-        setSingleRooms(prev => Math.max(0, prev + (increment ? 1 : -1)));
+        // setSingleRooms(prev => Math.max(0, prev + (increment ? 1 : -1)));
+        setSingleRooms(prev => {
+            const maxRooms = Math.max(1, participants.adults); // đảm bảo >=1
+            const next = prev + (increment ? 1 : -1);
+            return Math.max(0, Math.min(next, maxRooms));
+        });
     };
 
     const calculateTotal = () => {
-        const adultTotal = participants.adults * tourDetails.pricing.adult;
-        const childTotal = participants.children * tourDetails.pricing.child;
-        const infantTotal = participants.infants * tourDetails.pricing.infant;
+        const unitPrices = getUnitPrices();
+        const adultTotal = participants.adults * unitPrices.adult;
+        const childTotal = participants.children * unitPrices.child;
+        const infantTotal = participants.infants * unitPrices.infant;
         const singleSupplementTotal = singleRooms * tourDetails.pricing.singleSupplement;
-
         return adultTotal + childTotal + infantTotal + singleSupplementTotal;
+    };
+
+    // return unit prices (adult uses selected date price if available)
+    const getUnitPrices = () => {
+        const sel = getSelectedDateInfo();
+        return {
+            adult: sel?.price ?? tourDetails.pricing.adult,
+            child: tourDetails.pricing.child,
+            infant: tourDetails.pricing.infant,
+        };
     };
 
     const getSelectedDateInfo = () => {
@@ -353,7 +544,7 @@ export default function ChiTietTour() {
                                         onClick={() => { setModalImageIndex(activeImage); setShowImageModal(true); }}
                                     />
                                     {/* Tour Info Overlay */}
-                                 
+
                                     {/* Sale badge, like, share, gallery button giữ nguyên */}
                                     <div className="absolute top-4 left-4">
                                         <Badge variant="destructive">Sale 20%</Badge>
@@ -406,7 +597,7 @@ export default function ChiTietTour() {
                                             onClick={() => setShowAllImages(true)}
                                             className="flex-shrink-0 w-16 h-16 rounded bg-gray-100 flex items-center justify-center text-xs"
                                         >
-                                            +{tourDetails.images.length - 5}
+                                            {tourDetails.images.length - 5}
                                         </button>
                                     )}
                                 </div>
@@ -416,19 +607,23 @@ export default function ChiTietTour() {
                             <div className="p-6">
                                 <h1 className="text-2xl lg:text-3xl font-bold mb-3">{tourDetails.name}</h1>
 
-                                <div className="space-y-3 mb-4">
+                                <div className="space-y-3 mb-2">
                                     <div className="flex items-center gap-2 text-muted-foreground">
                                         <MapPin className="h-4 w-4" />
-                                        <span>Khởi hành từ {tourDetails.departure}</span>
+                                        <span>Khởi hành từ  {tourDetails.departure} -  {tourDetails.destinations.map((destination, index) => (
+                                            <span key={index}>
+                                                {destination}
+                                            </span>
+                                        ))}</span>
                                     </div>
                                     <div className="flex items-center gap-2 text-muted-foreground">
                                         <Timer className="h-4 w-4" />
                                         <span>{tourDetails.duration}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                    {/* <div className="flex items-center gap-2 text-muted-foreground">
                                         <Users className="h-4 w-4" />
                                         <span>Tối đa {tourDetails.maxGroup} khách</span>
-                                    </div>
+                                    </div> */}
                                 </div>
 
                                 <div className="flex items-center gap-3 mb-4">
@@ -447,7 +642,7 @@ export default function ChiTietTour() {
                                     )}
                                     <div className="flex gap-2 text-2xl lg:text-3xl font-bold text-[hsl(var(--primary))]">
                                         Từ {formatPrice(tourDetails.priceFrom)}
-                                       
+
                                     </div>
                                     <div className="text-sm text-muted-foreground">Giá cho 1 người lớn</div>
                                 </div>
@@ -516,7 +711,7 @@ export default function ChiTietTour() {
                                 <Separator />
 
                                 <div>
-                                    <h3 className="text-lg font-semibold mb-3">Điểm nổi bật</h3>
+                                    <h3 className="text-lg font-semibold mb-3">Điểm nổi bật (fake data)</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {tourDetails.highlights.map((highlight, index) => (
                                             <div key={index} className="flex items-center gap-2">
@@ -529,7 +724,8 @@ export default function ChiTietTour() {
 
                                 <Separator />
 
-                                <div>
+                                {/* Chưa xử lý */}
+                                {/* <div>
                                     <h3 className="text-lg font-semibold mb-3">Điểm đến</h3>
                                     <div className="flex flex-wrap gap-2">
                                         {tourDetails.destinations.map((destination, index) => (
@@ -538,7 +734,7 @@ export default function ChiTietTour() {
                                             </Badge>
                                         ))}
                                     </div>
-                                </div>
+                                </div> */}
                             </CardContent>
                         </Card>
 
@@ -561,6 +757,11 @@ export default function ChiTietTour() {
                                             </AccordionTrigger>
                                             <AccordionContent>
                                                 <div className="space-y-4">
+                                                    {day.description && (
+                                                        <div className="text-sm text-muted-foreground leading-relaxed">
+                                                            {day.description}
+                                                        </div>
+                                                    )}
                                                     <div>
                                                         <h4 className="font-medium mb-2">Hoạt động</h4>
                                                         <ul className="space-y-1">
@@ -598,7 +799,7 @@ export default function ChiTietTour() {
                         {/* Attractions */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Các điểm tham quan</CardTitle>
+                                <CardTitle>Các điểm tham quan (fake data chua có db)</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {tourDetails.attractions.map((attraction, index) => (
@@ -662,6 +863,7 @@ export default function ChiTietTour() {
                                 <CardTitle>Chính sách tour</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
+                                {/* Cancellation rules */}
                                 <div>
                                     <h3 className="text-lg font-semibold mb-3">Chính sách hủy tour</h3>
                                     <div className="space-y-2">
@@ -673,6 +875,32 @@ export default function ChiTietTour() {
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* Megatrip specific cancellation */}
+                                {tourDetails.policies.megatrip && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-3">Megatrip hủy do không đủ khách</h3>
+                                        <p className="text-sm text-muted-foreground">{tourDetails.policies.megatrip}</p>
+                                    </div>
+                                )}
+
+                                {/* Reschedule / đổi lịch */}
+                                {tourDetails.policies.reschedule && (
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-3">Chính sách đổi lịch (chuyển tour)</h3>
+                                        <div className="space-y-2">
+                                            {Object.entries(tourDetails.policies.reschedule.rules).map(([k, v]) => (
+                                                <div key={k} className="flex justify-between p-2 bg-[hsl(var(--muted))] rounded">
+                                                    <span className="text-sm">{k}</span>
+                                                    <span className="text-sm font-medium">{v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {tourDetails.policies.reschedule.notes && (
+                                            <p className="text-sm text-muted-foreground mt-2">{tourDetails.policies.reschedule.notes}</p>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div>
                                     <h3 className="text-lg font-semibold mb-3">Trẻ em</h3>
@@ -689,7 +917,7 @@ export default function ChiTietTour() {
                         {/* Reviews */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Đánh giá từ khách hàng</CardTitle>
+                                <CardTitle>Đánh giá từ khách hàng (Fake data)</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 {/* Rating Overview */}
@@ -891,8 +1119,8 @@ export default function ChiTietTour() {
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 {/* Date Selection */}
-                                <div>
-                                    <Label className="text-base font-medium mb-3 block">Chọn ngày khởi hành</Label>
+                                <div >
+                                    <Label className="text-base font-medium block mb-2">Chọn ngày khởi hành</Label>
                                     {/* Không cho click mở popover nữa, chỉ hiển thị ngày đã chọn */}
                                     <div className={cn(
                                         "w-full justify-start text-left font-normal flex items-center border rounded-md px-3 py-2 h-10 bg-white",
@@ -906,7 +1134,7 @@ export default function ChiTietTour() {
                                         )}
                                     </div>
                                     {selectedDate && getSelectedDateInfo() && (
-                                        <div className="mt-2 p-2 bg-[hsl(var(--success))/0.1] rounded text-sm">
+                                        <div className="  p-2 bg-[hsl(var(--success))/0.1] rounded text-sm">
                                             <div className="flex justify-between">
                                                 <span>Còn {getSelectedDateInfo()?.available} chỗ</span>
                                                 <span className="font-medium">{formatPrice(getSelectedDateInfo()?.price || 0)}</span>
@@ -998,7 +1226,11 @@ export default function ChiTietTour() {
 
                                 {/* Single Room Supplement */}
                                 <div>
-                                    <Label className="text-base font-medium mb-3 block">Phụ thu phòng đơn</Label>
+                                    <Label className="text-base font-medium   block">Phụ thu phòng đơn</Label>
+                                    <div className="text-xs text-muted-foreground mb-2 text-shadow-gray-200">
+                                        <i>
+                                            Phụ thu phòng đơn dành cho khách đi một mình hoặc có nhu cầu sử dụng phòng đơn. Số phòng đơn ≤ số người lớn.
+                                        </i>                                    </div>
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <div className="font-medium">Số phòng đơn</div>
@@ -1018,6 +1250,7 @@ export default function ChiTietTour() {
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={() => updateSingleRooms(true)}
+                                                disabled={singleRooms >= Math.max(1, participants.adults)}
                                             >
                                                 <Plus className="h-4 w-4" />
                                             </Button>
@@ -1029,24 +1262,33 @@ export default function ChiTietTour() {
 
                                 {/* Pricing Breakdown */}
                                 <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <span>Người lớn ({participants.adults})</span>
-                                        <span>{formatPrice(participants.adults * tourDetails.pricing.adult)}</span>
-                                    </div>
+                                    {(() => {
+                                        const unit = getUnitPrices();
+                                        return (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span>Người lớn ({participants.adults} × {formatPrice(unit.adult)})</span>
+                                                    <span>{formatPrice(participants.adults * unit.adult)}</span>
+                                                </div>
 
-                                    {participants.children > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Trẻ em ({participants.children})</span>
-                                            <span>{formatPrice(participants.children * tourDetails.pricing.child)}</span>
-                                        </div>
-                                    )}
+                                                {participants.children > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Trẻ em ({participants.children} × {formatPrice(unit.child)})</span>
+                                                        <span>{formatPrice(participants.children * unit.child)}</span>
+                                                    </div>
+                                                )}
 
-                                    {participants.infants > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Em bé ({participants.infants})</span>
-                                            <span>{formatPrice(participants.infants * tourDetails.pricing.infant)}</span>
-                                        </div>
-                                    )}
+                                                {participants.infants > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Em bé ({participants.infants} × {formatPrice(unit.infant)})</span>
+                                                        <span>{formatPrice(participants.infants * unit.infant)}</span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+
+
 
                                     {singleRooms > 0 && (
                                         <div className="flex justify-between">
@@ -1082,37 +1324,52 @@ export default function ChiTietTour() {
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="space-y-2 pt-4">
+                                <div className="space-y-2 ">
                                     <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
                                         if (!selectedDate) return;
                                         const selectedDateInfo = getSelectedDateInfo();
-                                        const basePrice = (participants.adults * tourDetails.pricing.adult) + (participants.children * tourDetails.pricing.child) + (participants.infants * tourDetails.pricing.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
+                                        const unit = getUnitPrices();
+                                        const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
                                         const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
                                         const addOns = 0; // tour chưa có dịch vụ thêm
                                         const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
                                         const total = basePrice + taxes + addOns - discount;
-                                        const params = new URLSearchParams({
-                                            type: 'tour',
-                                            route: tourDetails.name,
-                                            date: selectedDateInfo?.date || '',
-                                            time: '',
-                                            basePrice: basePrice.toString(),
-                                            taxes: taxes.toString(),
-                                            addOns: addOns.toString(),
-                                            discount: discount.toString(),
-                                            total: total.toString(),
-                                            adults: participants.adults.toString(),
-                                            children: participants.children.toString(),
-                                            infants: participants.infants.toString(),
-                                        });
+
+                                        // breakdown per passenger type
+                                        const passengers: any[] = [];
+                                        if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
+                                        if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
+                                        if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
+
+                                        const params = new URLSearchParams();
+                                        params.set('type', 'tour');
+                                        params.set('route', tourDetails.name);
+                                        params.set('date', selectedDateInfo?.date || '');
+                                        params.set('time', '');
+                                        params.set('basePrice', String(basePrice));
+                                        params.set('taxes', String(taxes));
+                                        params.set('addOns', String(addOns));
+                                        params.set('discount', String(discount));
+                                        params.set('total', String(total));
+                                        params.set('adults', String(participants.adults));
+                                        params.set('children', String(participants.children));
+                                        params.set('infants', String(participants.infants));
+                                        // additional requested fields
+                                        params.set('unitAdult', String(unit.adult));
+                                        params.set('unitChild', String(unit.child));
+                                        params.set('unitInfant', String(unit.infant));
+                                        params.set('singleRooms', String(singleRooms));
+                                        params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
+                                        params.set('breakdown', JSON.stringify(passengers));
+
                                         router.push(`/thanh-toan?${params.toString()}`);
                                     }}>
                                         Đặt tour ngay
                                     </Button>
-                                    <Button variant="outline" className="w-full" disabled={!selectedDate}>
+                                    {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         Thêm vào giỏ hàng
-                                    </Button>
+                                    </Button> */}
                                 </div>
 
                                 {/* Contact */}

@@ -104,7 +104,8 @@ const getBookingData = (searchParams: URLSearchParams) => {
     const type = searchParams.get('type');
     if (type) {
         if (type === 'tour') {
-            return {
+            // build base object
+            const base = {
                 type: 'tour',
                 details: {
                     route: searchParams.get('route') || '',
@@ -119,6 +120,50 @@ const getBookingData = (searchParams: URLSearchParams) => {
                     total: Number(searchParams.get('total')) || 0,
                 }
             };
+
+            // parse extra fields sent from chi-tiet page
+            const unitAdult = Number(searchParams.get('unitAdult')) || undefined;
+            const unitChild = Number(searchParams.get('unitChild')) || undefined;
+            const unitInfant = Number(searchParams.get('unitInfant')) || undefined;
+            const singleRooms = Number(searchParams.get('singleRooms')) || 0;
+            const singleSupplement = Number(searchParams.get('singleSupplement')) || 0;
+            const breakdownRaw = searchParams.get('breakdown');
+
+            // attach per-pax pricing if present
+            if (unitAdult || unitChild || unitInfant) {
+                base.pricing.perPax = {
+                    adultUnit: unitAdult ?? 0,
+                    childUnit: unitChild ?? 0,
+                    infantUnit: unitInfant ?? 0,
+                };
+            }
+
+            // attach single-room info
+            base.pricing.singleRooms = singleRooms;
+            base.pricing.singleSupplement = singleSupplement;
+
+            // try parse breakdown JSON (passengers array)
+            if (breakdownRaw) {
+                try {
+                    const parsed = JSON.parse(breakdownRaw);
+                    if (Array.isArray(parsed)) {
+                        base.pricing.breakdown = parsed;
+                        // derive counts if not provided elsewhere
+                        const counts = { adults: 0, children: 0, infants: 0 };
+                        parsed.forEach((p: any) => {
+                            if (p.type === 'adult') counts.adults += Number(p.qty || 0);
+                            if (p.type === 'child') counts.children += Number(p.qty || 0);
+                            if (p.type === 'infant') counts.infants += Number(p.qty || 0);
+                        });
+                        if (!base.passengers) base.passengers = { counts };
+                        else base.passengers.counts = { ...base.passengers.counts, ...counts };
+                    }
+                } catch (e) {
+                    // ignore invalid JSON
+                }
+            }
+
+            return base;
         }
         if (type === 'bus') {
             return {
@@ -259,22 +304,48 @@ export default function ThanhToan() {
     const normalizedPricing = (() => {
         if (!bookingData) return {};
         const p = bookingData.pricing ?? bookingData.pricingEstimate ?? bookingData.price ?? {};
-        // ensure addOns is array and addOnsTotal/seats are available for summary rendering
-        const addOnsArr = Array.isArray(p.addOns) ? p.addOns : (p.addOns ? [p.addOns] : []);
-        const addOnsTotal = Number(p.addOnsTotal ?? p.addOnsAmount ?? (addOnsArr.reduce((s: number, a: any) => {
+        // normalize addOns array
+        let addOnsArr = Array.isArray(p.addOns) ? [...p.addOns] : (p.addOns ? [p.addOns] : []);
+
+        // If single-room info provided (from chi-tiet page), make it an add-on so it appears in services list
+        const singleRooms = Number(p.singleRooms ?? 0);
+        const singleSupplement = Number(p.singleSupplement ?? 0);
+        if (singleRooms > 0 && singleSupplement > 0) {
+            // only add if not already present to avoid duplicate counting
+            const already = addOnsArr.some(a =>
+                (a.source === 'singleRoom') ||
+                (String(a.name).toLowerCase().includes('phụ thu phòng đơn') && Number(a.total ?? a.unitPrice ?? a.price ?? 0) === singleRooms * singleSupplement)
+            );
+            if (!already) {
+                addOnsArr.push({
+                    name: 'Phụ thu phòng đơn',
+                    qty: singleRooms,
+                    unitPrice: singleSupplement,
+                    total: singleRooms * singleSupplement,
+                    source: 'singleRoom',
+                });
+            }
+        }
+
+        // compute addOnsTotal: prefer computed sum when item list exists (prevents double-counting when explicit total already includes items)
+        const addOnsComputed = addOnsArr.reduce((s: number, a: any) => {
             const unit = Number(a?.unitPrice ?? a?.price ?? 0);
             const qty = Number(a?.qty ?? 1);
             const total = Number(a?.total ?? (unit * qty) ?? 0);
             return s + (Number.isFinite(total) ? total : 0);
-        }, 0)));
+        }, 0);
+        const addOnsExplicit = Number(p.addOnsTotal ?? p.addOnsAmount ?? 0);
+        const addOnsTotal = addOnsArr.length > 0 ? addOnsComputed : addOnsExplicit;
+
         const seatsArr = Array.isArray(p.seats) ? p.seats : (p.seats ? [p.seats] : []);
+        const seatsTotal = seatsArr.reduce((s: number, sitem: any) => s + (Number(sitem?.price ?? 0)), 0);
         const total = Number(p.total ?? p.estimatedTotal ?? p.estimatedTotalAmount ?? p.offerTotal ?? p.total ?? 0);
         return {
             ...p,
             addOns: addOnsArr,
             addOnsTotal,
             seats: seatsArr,
-            seatsTotal: Number(p.seatsTotal ?? seatsArr.reduce((s: number, sitem: any) => s + (Number(sitem?.price ?? 0)), 0)),
+            seatsTotal: Number(p.seatsTotal ?? seatsTotal),
             total,
         };
     })();
@@ -1283,10 +1354,7 @@ export default function ThanhToan() {
                                                 <span>Giờ khởi hành:</span>
                                                 <span>{normalizedDetails.time ?? '---'}</span>
                                             </div>
-                                            <div className="flex justify-between">
-                                                <span>Hành khách:</span>
-                                                <span>{passengers.length} người</span>
-                                            </div>
+
                                         </div>
                                     </div>
                                 )}
@@ -1295,6 +1363,108 @@ export default function ThanhToan() {
                                 {/* Pricing: hỗ trợ nhiều shape của payload -> lấy trường phù hợp nhất từ payload (ghi nhận tất cả) */}
                                 {mounted ? (() => {
                                     const p = normalizedPricing || {};
+                                    if (bookingType === 'tour') {
+                                        // derive counts: prefer bookingData.passengers.counts -> pricing.breakdown -> local passengers
+                                        const counts = bookingData?.passengers?.counts ?? (() => {
+                                            const bd = p.breakdown ?? bookingData?.pricing?.breakdown;
+                                            if (Array.isArray(bd)) {
+                                                return bd.reduce((acc: any, it: any) => {
+                                                    if (it.type === 'adult') acc.adults += Number(it.qty || 0);
+                                                    if (it.type === 'child') acc.children += Number(it.qty || 0);
+                                                    if (it.type === 'infant') acc.infants += Number(it.qty || 0);
+                                                    return acc;
+                                                }, { adults: 0, children: 0, infants: 0 });
+                                            }
+                                            // fallback to local passengers array
+                                            return passengers.reduce((acc: any, it: any) => {
+                                                if (it.type === 'adult') acc.adults += 1;
+                                                if (it.type === 'child') acc.children += 1;
+                                                if (it.type === 'infant') acc.infants += 1;
+                                                return acc;
+                                            }, { adults: 0, children: 0, infants: 0 });
+                                        })();
+
+                                        const unitAdult = Number(p.perPax?.adultUnit ?? p.adultUnit ?? p.unitAdult ?? bookingData?.pricing?.unitAdult ?? 0);
+                                        const unitChild = Number(p.perPax?.childUnit ?? p.childUnit ?? p.unitChild ?? bookingData?.pricing?.unitChild ?? 0);
+                                        const unitInfant = Number(p.perPax?.infantUnit ?? p.infantUnit ?? p.unitInfant ?? bookingData?.pricing?.unitInfant ?? 0);
+
+                                        const adultTotal = counts.adults * unitAdult;
+                                        const childTotal = counts.children * unitChild;
+                                        const infantTotal = counts.infants * unitInfant;
+                                        const seatsTotal = Number(p.seatsTotal ?? 0);
+
+                                        const addOnsArr = Array.isArray(p.addOns) ? p.addOns : [];
+                                        // normalizedPricing.addOnsTotal already avoids double counting; use it directly
+                                        const addOnsTotal = Number(p.addOnsTotal ?? 0);
+
+                                        // taxes: prefer explicit, otherwise compute demo 8% on fares
+                                        const taxes = Number(p.taxes ?? p.taxesTotal ?? Math.round((adultTotal + childTotal + infantTotal) * 0.08));
+                                        const discount = Number(p.discount ?? 0);
+                                        const computedTotal = adultTotal + childTotal + infantTotal + addOnsTotal + seatsTotal + taxes - discount;
+
+                                        return (
+                                            <>
+                                                <div className="mb-2 text-sm">
+                                                    <div className="flex justify-between"><span>Hành khách</span><span>{counts.adults + counts.children + counts.infants} người</span></div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {counts.adults > 0 && <span>Người lớn: {counts.adults} </span>}
+                                                        {counts.children > 0 && <span>• Trẻ em: {counts.children} </span>}
+                                                        {counts.infants > 0 && <span>• Em bé: {counts.infants}</span>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-2 space-y-2 text-sm">
+                                                    {counts.adults > 0 && <div className="flex justify-between"><span>Người lớn ({counts.adults} × {formatPrice(unitAdult)})</span><span>{formatPrice(adultTotal)}</span></div>}
+                                                    {counts.children > 0 && <div className="flex justify-between"><span>Trẻ em ({counts.children} × {formatPrice(unitChild)})</span><span>{formatPrice(childTotal)}</span></div>}
+                                                    {counts.infants > 0 && <div className="flex justify-between"><span>Em bé ({counts.infants} × {formatPrice(unitInfant)})</span><span>{formatPrice(infantTotal)}</span></div>}
+                                                </div>
+
+                                                <Separator />
+
+                                                <div
+                                                    className="flex items-center justify-between text-sm cursor-pointer mt-2"
+                                                    onClick={() => setShowAddonsDetails(prev => !prev)}
+                                                >
+                                                    <div className='font-semibold text-base'> Tổng tiền dịch vụ </div>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(addOnsTotal)}</span>
+                                                        <ChevronDown className={`h-4 w-4 transition-transform ${showAddonsDetails ? 'rotate-180' : ''}`} />
+                                                    </div>
+                                                </div >
+
+                                                {showAddonsDetails && (
+                                                    <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                        {addOnsArr.length > 0 ? (
+                                                            <div className="space-y-2">
+                                                                {addOnsArr.map((a: any, idx: number) => (
+                                                                    <div key={idx} className="flex justify-between">
+                                                                        <div>{a.name}{a.qty && a.qty > 1 ? ` ×${a.qty}` : ''}</div>
+                                                                        <div>{formatPrice(Number(a.total ?? (Number(a.qty ?? 1) * Number(a.unitPrice ?? a.price ?? 0))))}</div>
+                                                                    </div>
+                                                                ))}
+                                                                <div className="flex justify-between font-medium pt-2 border-t">
+                                                                    <div>Tổng dịch vụ</div>
+                                                                    <div>{formatPrice(addOnsTotal)}</div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-muted-foreground">Không có thông tin dịch vụ thêm</div>
+                                                        )}
+                                                    </div>
+                                                )
+                                                }
+
+                                                <div className="flex justify-between text-sm mt-2"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
+                                                <div className="flex justify-between text-sm text-green-600"><span>Giảm giá</span><span>{formatPrice(discount)}</span></div>
+
+                                                <Separator />
+                                                <div className="flex justify-between font-bold text-lg">
+                                                    <span>Tổng cộng</span>
+                                                    <span className="text-primary">{formatPrice(Math.round(computedTotal))}</span>
+                                                </div>
+                                            </>
+                                        );
+                                    }
                                     const flights = bookingData?.flights ?? {};
                                     const outbound = flights.outbound ?? null;
                                     const inbound = flights.inbound ?? null;
@@ -1523,7 +1693,7 @@ export default function ThanhToan() {
                                             >
                                                 <div className="flex items-center gap-2">
                                                     <span className='font-semibold text-base'>Tổng giá vé</span>
-                                                    
+
                                                 </div>
                                                 <div className="flex items-center gap-4">
                                                     <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(grandTotal)}</span>
@@ -1555,7 +1725,7 @@ export default function ThanhToan() {
                                                 </div>
                                             )}
 
-                                           
+
 
                                             <div className="flex justify-between text-sm text-green-600">
                                                 <span>Giảm giá</span>

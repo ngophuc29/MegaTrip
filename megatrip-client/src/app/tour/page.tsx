@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import SearchTabs from '../components/SearchTabs';
@@ -40,6 +40,16 @@ const tourCategories = [
     { name: 'Thành phố', icon: Building, count: 28 },
     { name: 'Văn hóa', icon: Camera, count: 22 },
 ];
+// -- MAPPING HELPERS: convert DB document -> FE list shape
+function stripHtml(html: string) {
+    return (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+}
+function toIsoDate(obj: any) {
+    if (!obj) return null;
+    const d = obj.$date ?? obj;
+    const date = new Date(d);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+}
 
 const sampleTours = [
     {
@@ -192,6 +202,47 @@ function FilterSidebarSkeleton() {
         </Card>
     );
 }
+function mapDbTourToList(db: any) {
+    const id = db._id?.$oid ?? db._id ?? String(Math.random());
+    const images = Array.isArray(db.images) && db.images.length ? db.images : ['/placeholder.svg'];
+    const availableDates = (db.startDates || []).map((d: any) => ({
+        date: toIsoDate(d),
+        price: db.adultPrice ?? 0,
+        available: 20,
+        status: 'available'
+    }));
+
+    const durationStr =
+        typeof db.duration === 'number'
+            ? `${db.duration} ngày ${db.duration > 1 ? `${db.duration - 1} đêm` : 'đêm'}`
+            : (db.duration ?? '');
+
+    return {
+        id,
+        name: db.name,
+        slug: db.slug,
+        departure: db.departureFrom || db.startLocation?.address || '',
+        destinations: db.destination ? [db.destination] : (db.destinations || []),
+        duration: durationStr,
+        maxGroup: db.maxGroupSize ?? 0,
+        priceFrom: db.adultPrice ?? 0,
+        rating: db.ratingsAverage ?? 0,
+        reviews: db.ratingsQuantity ?? 0,
+        images,
+        includes: db.services || [],
+        highlights: db.highlights || [],
+        availableDates,
+        category: db.category || '',
+        badge: db.badge || '',
+        badgeColor: db.badgeColor || 'default',
+        featured: !!db.featured,
+        transport: db.transport || '',
+        hotel: db.hotel || '',
+        meals: db.meals || '',
+    };
+}
+
+
 
 export default function Tour() {
     const [showFilters, setShowFilters] = useState(true);
@@ -223,52 +274,34 @@ export default function Tour() {
     };
 
     // Generate additional tours for selected destination
-    const generateDestinationTours = () => {
-        if (!selectedTour) return [];
+    // state for API tours
+    const [apiTours, setApiTours] = useState<any[]>([]);
 
-        const basePrice = selectedTour.price ? parseInt(selectedTour.price.replace(/[^\d]/g, '')) : 3990000;
-
-        return [
-            {
-                ...sampleTours[0],
-                id: 999,
-                name: `${selectedTour.destination} Premium 3N2Đ`,
-                priceFrom: basePrice,
-                originalPrice: basePrice + 500000,
-                rating: 4.9,
-                reviews: 89,
-                badge: 'Được chọn',
-                badgeColor: 'default' as const,
-                featured: true,
-            },
-            {
-                ...sampleTours[0],
-                id: 998,
-                name: `${selectedTour.destination} Comfort 4N3Đ`,
-                priceFrom: basePrice + 600000,
-                rating: 4.7,
-                reviews: 156,
-                duration: '4 ngày 3 đêm',
-                badge: 'Hot',
-                badgeColor: 'destructive' as const,
-            },
-            {
-                ...sampleTours[0],
-                id: 997,
-                name: `${selectedTour.destination} Budget 2N1Đ`,
-                priceFrom: basePrice - 800000,
-                rating: 4.5,
-                reviews: 203,
-                duration: '2 ngày 1 đêm',
-                badge: 'Giá tốt',
-                badgeColor: 'secondary' as const,
+    useEffect(() => {
+        let mounted = true;
+        async function fetchTours() {
+            try {
+                setIsLoading(true);
+                const res = await fetch('http://localhost:8080/api/tours');
+                const json = await res.json();
+                const data = Array.isArray(json.data) ? json.data : (json.data || []);
+                const mapped = data.map(mapDbTourToList);
+                if (mounted) setApiTours(mapped);
+            } catch (e) {
+                console.error('Fetch tours error', e);
+            } finally {
+                if (mounted) setIsLoading(false);
             }
-        ];
-    };
+        }
+        fetchTours();
+        return () => { mounted = false; };
+    }, []);
 
+    // const destinationTours = selectedTour ? generateDestinationTours() : [];
+    // const allTours = selectedTour ? [...destinationTours, ...sampleTours] : sampleTours;
     const destinationTours = selectedTour ? generateDestinationTours() : [];
-    const allTours = selectedTour ? [...destinationTours, ...sampleTours] : sampleTours;
-
+    const baseTours = apiTours.length ? apiTours : sampleTours; // use API when available
+    const allTours = selectedTour ? [...destinationTours, ...baseTours] : baseTours;
     const filteredTours = allTours.filter(tour => {
         const matchesPrice = tour.priceFrom >= priceRange[0] && tour.priceFrom <= priceRange[1];
         const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tour.category);
@@ -384,7 +417,7 @@ export default function Tour() {
             </section>
 
             {/* Vouchers & Promotions Section */}
-            <section className={`py-8 bg-gray-50 ${hasSearched && !showPromotions ? 'hidden' : ''}`}>
+            <section className={`py - 8 bg - gray - 50 ${hasSearched && !showPromotions ? 'hidden' : ''} `}>
                 <div className="container">
                     {/* Vouchers */}
                     <div className="mb-8">
@@ -590,10 +623,10 @@ export default function Tour() {
                                     <div
                                         key={dateStr}
                                         onClick={() => setSelectedDate(dateStr)}
-                                        className={`flex-shrink-0 p-3 rounded-lg cursor-pointer transition-colors min-w-[140px] text-center ${selectedDate === dateStr
-                                            ? 'bg-green-600 text-white'
-                                            : 'bg-white hover:bg-green-100'
-                                            }`}
+                                        className={`flex - shrink - 0 p - 3 rounded - lg cursor - pointer transition - colors min - w - [140px] text - center ${selectedDate === dateStr
+                                                ? 'bg-green-600 text-white'
+                                                : 'bg-white hover:bg-green-100'
+                                            } `}
                                     >
                                         <div className="text-sm font-medium">Tuần {dayMonth}</div>
                                         <div className="text-xs mt-1">{price}</div>
@@ -639,7 +672,7 @@ export default function Tour() {
                 <div className="container">
                     <div className="flex flex-col lg:flex-row gap-6">
                         {/* Filters Sidebar */}
-                        <div className={`lg:w-80 ${showFilters ? 'block' : 'hidden lg:block'}`}>
+                        <div className={`lg: w - 80 ${showFilters ? 'block' : 'hidden lg:block'} `}>
                             {isLoading ? <FilterSidebarSkeleton /> : (
                                 <Card className="sticky top-20 bg-[hsl(var(--card))] border border-[hsl(var(--muted))]">
                                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
@@ -805,18 +838,7 @@ export default function Tour() {
                                 formatPrice={formatPrice}
                             />
 
-                            {sortedTours.length === 0 && (
-                                <Card className="text-center py-12">
-                                    <CardContent>
-                                        <Map className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
-                                        <h3 className="text-lg font-medium mb-2">Không tìm thấy tour phù hợp</h3>
-                                        <p className="text-[hsl(var(--muted-foreground))] mb-4">
-                                            Vui lòng thử điều chỉnh bộ lọc hoặc thay đổi điều kiện tìm kiếm
-                                        </p>
-                                        <Button variant="outline">Điều chỉnh tìm kiếm</Button>
-                                    </CardContent>
-                                </Card>
-                            )}
+                            
                         </div>
                     </div>
                 </div>
