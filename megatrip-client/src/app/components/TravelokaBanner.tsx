@@ -310,10 +310,13 @@ export default function TravelokaBanner() {
       router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (activeTab === 'tours') {
       const departure = fromDate ? fromDate.toISOString().split('T')[0] : '';
+      // map selected province code -> name (fallback to raw value)
+      const fromName = provinces.find(p => String(p.code) === (tourFrom || ''))?.name || tourFrom || '';
+      const toName = provinces.find(p => String(p.code) === (tourTo || ''))?.name || tourTo || '';
       // include passenger breakdown and total so SearchTabs can prefill correctly
       const qs = new URLSearchParams({
-        from: tourFrom || '',
-        to: tourTo || '',
+        from: fromName || '',
+        to: toName || '',
         departure,
         adults: String(passengerCounts.adults || 1),
         children: String(passengerCounts.children || 0),

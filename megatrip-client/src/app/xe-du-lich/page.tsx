@@ -72,7 +72,7 @@ const sampleBuses = [
         duration: '7h 00m',
         distance: '308km',
         price: 280000,
-        
+
         seats: 45,
         availableSeats: 12,
         amenities: ['wifi', 'water', 'toilet'],
@@ -218,7 +218,9 @@ export default function XeDuLich() {
             // page & pageSize defaults (client listing)
             params.append('page', '1');
             params.append('pageSize', '50');
-            const url = `${API_BASE}/api/client/buses?${params.toString()}`;
+            // only add query string when there are meaningful params (avoid trailing '?')
+            const qs = params.toString();
+            const url = qs ? `${API_BASE}/api/client/buses?${qs}` : `${API_BASE}/api/client/buses`;
 
             // Log the outgoing request for debugging
             console.log('fetchBuses -> requesting', { url, from, to, departure });
@@ -257,8 +259,8 @@ export default function XeDuLich() {
                     }
                 };
 
-                const routeFromName = b.routeFrom?.city || b.routeFrom?.name || String(b.routeFrom?.code || '') ;
-                const routeToName = b.routeTo?.city || b.routeTo?.name || String(b.routeTo?.code || '') ;
+                const routeFromName = b.routeFrom?.city || b.routeFrom?.name || String(b.routeFrom?.code || '');
+                const routeToName = b.routeTo?.city || b.routeTo?.name || String(b.routeTo?.code || '');
 
                 // parse numeric fields that might be wrapped by mongo extjson
                 const priceNum = parseNumber(b.price ?? b.pricePerSeat ?? b.price_total);
@@ -268,7 +270,7 @@ export default function XeDuLich() {
                 // amenities normalization
                 const amenitiesArr = Array.isArray(b.amenities)
                     ? b.amenities
-                    : (typeof b.amenities === 'string' ? b.amenities.split(',').map((s:string)=>s.trim()).filter(Boolean) : (b.amenity_list || []));
+                    : (typeof b.amenities === 'string' ? b.amenities.split(',').map((s: string) => s.trim()).filter(Boolean) : (b.amenity_list || []));
 
                 return {
                     // id used as key in UI
@@ -310,7 +312,7 @@ export default function XeDuLich() {
             // Adjust client priceRange immediately so newly-fetched buses aren't filtered out on first render.
             try {
                 if (Array.isArray(normalized) && normalized.length > 0) {
-                    const prices = normalized.map((x:any) => Number(x.price || 0)).filter(p => Number.isFinite(p) && p > 0);
+                    const prices = normalized.map((x: any) => Number(x.price || 0)).filter(p => Number.isFinite(p) && p > 0);
                     if (prices.length > 0) {
                         const minP = Math.min(...prices);
                         const maxP = Math.max(...prices);
@@ -332,7 +334,7 @@ export default function XeDuLich() {
             // Log response summary so we can see if there's data
             console.log('fetchBuses -> normalized response', {
                 totalReturned: normalized.length,
-                sample: normalized.length ? normalized.slice(0,3) : []
+                sample: normalized.length ? normalized.slice(0, 3) : []
             });
             if (normalized.length === 0) {
                 console.warn('fetchBuses -> empty list returned from server, full response:', json);
@@ -375,30 +377,42 @@ export default function XeDuLich() {
     }, []);
 
     // If server returns buses outside current priceRange, expand the range so results are visible.
-	useEffect(() => {
-		if (!Array.isArray(fetchedBuses) || fetchedBuses.length === 0) return;
-		try {
-			const prices = fetchedBuses.map(b => Number(b.price || 0)).filter(p => Number.isFinite(p));
-			if (prices.length === 0) return;
-			const minP = Math.min(...prices);
-			const maxP = Math.max(...prices);
+    useEffect(() => {
+        if (!Array.isArray(fetchedBuses) || fetchedBuses.length === 0) return;
+        try {
+            const prices = fetchedBuses.map(b => Number(b.price || 0)).filter(p => Number.isFinite(p));
+            if (prices.length === 0) return;
+            const minP = Math.min(...prices);
+            const maxP = Math.max(...prices);
 
-			// only adjust if current range would filter out all results or not include the returned prices
-			const [curMin, curMax] = priceRange;
-			const needsExpand = (minP < curMin) || (maxP > curMax);
-			if (needsExpand) {
-				// small padding and clamp
-				const pad = Math.max(20000, Math.floor((maxP - minP) * 0.1));
-				const newMin = Math.max(0, Math.min(minP - pad, curMin));
-				const newMax = Math.max(curMax, maxP + pad);
-				setPriceRange([newMin, newMax]);
-				console.log('Adjusted priceRange to include server prices', { newMin, newMax, minP, maxP });
-			}
-		} catch (e) {
-			console.warn('priceRange adjust failed', e);
-		}
-	}, [fetchedBuses]);
-
+            // only adjust if current range would filter out all results or not include the returned prices
+            const [curMin, curMax] = priceRange;
+            const needsExpand = (minP < curMin) || (maxP > curMax);
+            if (needsExpand) {
+                // small padding and clamp
+                const pad = Math.max(20000, Math.floor((maxP - minP) * 0.1));
+                const newMin = Math.max(0, Math.min(minP - pad, curMin));
+                const newMax = Math.max(curMax, maxP + pad);
+                setPriceRange([newMin, newMax]);
+                console.log('Adjusted priceRange to include server prices', { newMin, newMax, minP, maxP });
+            }
+        } catch (e) {
+            console.warn('priceRange adjust failed', e);
+        }
+    }, [fetchedBuses]);
+    useEffect(() => {
+        try {
+            if (typeof window === 'undefined') return;
+            const params = new URLSearchParams(window.location.search);
+            const hasQuery = params.has('from') || params.has('to') || params.has('departure') || params.has('date') || params.has('departureDate');
+            if (!hasQuery) {
+                // fetch default listing (no filters) so page shows server data on initial load
+                fetchBuses().catch(err => console.warn('initial fetchBuses failed', err));
+            }
+        } catch (e) {
+            console.warn('initial fetch (no-params) failed', e);
+        }
+    }, []);
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -411,7 +425,7 @@ export default function XeDuLich() {
         if (type.includes('Ghế ngồi')) return <Armchair className="h-4 w-4" />;
         return <Bus className="h-4 w-4" />;
     };
-   
+
     const getAmenityIcon = (amenity: string) => {
         switch (amenity) {
             case 'wifi': return <Wifi className="h-4 w-4" />;
@@ -485,26 +499,26 @@ export default function XeDuLich() {
         const matchesType = selectedTypes.length === 0 || selectedTypes.includes(bus.type);
 
         // If route is selected, try several heuristics rather than strict string equality:
-		// - match exact display route
-		// - match if route string contains the provided values
-		// - match routeFrom.routeTo codes (useful when query uses numeric codes like from=1&to=56)
-		if (selectedRoute) {
-			const fromVal = String(selectedRoute.from || '').trim();
-			const toVal = String(selectedRoute.to || '').trim();
-			const displayRoute = `${selectedRoute.from} - ${selectedRoute.to}`;
+        // - match exact display route
+        // - match if route string contains the provided values
+        // - match routeFrom.routeTo codes (useful when query uses numeric codes like from=1&to=56)
+        if (selectedRoute) {
+            const fromVal = String(selectedRoute.from || '').trim();
+            const toVal = String(selectedRoute.to || '').trim();
+            const displayRoute = `${selectedRoute.from} - ${selectedRoute.to}`;
 
-			const matchesRoute =
-				// exact display text (legacy)
-				(bus.route === displayRoute) ||
-				// substring match in route description
-				(!!bus.route && fromVal && bus.route.includes(fromVal)) ||
-				(!!bus.route && toVal && bus.route.includes(toVal)) ||
-				// structured match against normalized fields
-				(!!bus.routeFrom && fromVal && String(bus.routeFrom.code || bus.routeFrom.city || bus.routeFrom.name).includes(fromVal)) ||
-				(!!bus.routeTo && toVal && String(bus.routeTo.code || bus.routeTo.city || bus.routeTo.name).includes(toVal));
+            const matchesRoute =
+                // exact display text (legacy)
+                (bus.route === displayRoute) ||
+                // substring match in route description
+                (!!bus.route && fromVal && bus.route.includes(fromVal)) ||
+                (!!bus.route && toVal && bus.route.includes(toVal)) ||
+                // structured match against normalized fields
+                (!!bus.routeFrom && fromVal && String(bus.routeFrom.code || bus.routeFrom.city || bus.routeFrom.name).includes(fromVal)) ||
+                (!!bus.routeTo && toVal && String(bus.routeTo.code || bus.routeTo.city || bus.routeTo.name).includes(toVal));
 
-			return matchesPrice && matchesCompany && matchesType && matchesRoute;
-		}
+            return matchesPrice && matchesCompany && matchesType && matchesRoute;
+        }
 
         return matchesPrice && matchesCompany && matchesType;
     });
@@ -578,12 +592,12 @@ export default function XeDuLich() {
     // optional small UI debug flag
     const dataSourceLabel = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0) ? `Server (${fetchedBuses.length})` : 'Fallback sample';
 
-    const [copied, setCopied] = useState<{[code:string]: boolean}>({});
+    const [copied, setCopied] = useState<{ [code: string]: boolean }>({});
 
-    const handleCopy = (code:string) => {
+    const handleCopy = (code: string) => {
         navigator.clipboard.writeText(code).then(() => {
-            setCopied(prev => ({...prev, [code]: true}));
-            setTimeout(() => setCopied(prev => ({...prev, [code]: false})), 2000);
+            setCopied(prev => ({ ...prev, [code]: true }));
+            setTimeout(() => setCopied(prev => ({ ...prev, [code]: false })), 2000);
         });
     };
 
@@ -616,7 +630,7 @@ export default function XeDuLich() {
             <div className="relative min-h-[480px]" style={{ backgroundImage: 'url(./banner-xe-ve.jpg)', backgroundSize: 'cover', backgroundPosition: 'center' }}>
 
                 <div className="container">
-                 
+
                     <div className="absolute inset-x-0 top-[calc(100%/1.2)] -translate-y-1/2">
                         <div className="w-full max-w-6xl mx-auto" style={{
                             background: 'linear-gradient(90deg, rgba(0,17,30,0.6) 0%, rgba(0,0,0,0) 100%)',
@@ -641,7 +655,7 @@ export default function XeDuLich() {
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-bold">🎫 Voucher & Mã giảm giá</h2>
                             <Button variant="outline" size="sm" asChild>
-                                <Link prefetch={false}  href="/khuyen-mai">Xem tất cả</Link>
+                                <Link prefetch={false} href="/khuyen-mai">Xem tất cả</Link>
                             </Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1063,6 +1077,7 @@ export default function XeDuLich() {
                                 formatPrice={formatPrice}
                                 getTypeIcon={getTypeIcon}
                                 getAmenityIcon={getAmenityIcon}
+                                selectedDate={selectedDate}
                             />
 
                             {/* {sortedBuses.length === 0 && (

@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import SearchTabs from '../components/SearchTabs';
@@ -245,6 +246,7 @@ function mapDbTourToList(db: any) {
 
 
 export default function Tour() {
+    const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 6000000]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -282,7 +284,12 @@ export default function Tour() {
         async function fetchTours() {
             try {
                 setIsLoading(true);
-                const res = await fetch('http://localhost:8080/api/tours');
+                // forward query params (from/to/departure etc.) to backend
+                const base = 'http://localhost:8080/api/tours';
+                const qs = searchParams ? String(searchParams.toString()) : '';
+                const url = qs ? `${base}?${qs}` : base;
+                console.log('[Tour.page] fetching', url);
+                const res = await fetch(url);
                 const json = await res.json();
                 const data = Array.isArray(json.data) ? json.data : (json.data || []);
                 const mapped = data.map(mapDbTourToList);
@@ -624,8 +631,8 @@ export default function Tour() {
                                         key={dateStr}
                                         onClick={() => setSelectedDate(dateStr)}
                                         className={`flex - shrink - 0 p - 3 rounded - lg cursor - pointer transition - colors min - w - [140px] text - center ${selectedDate === dateStr
-                                                ? 'bg-green-600 text-white'
-                                                : 'bg-white hover:bg-green-100'
+                                            ? 'bg-green-600 text-white'
+                                            : 'bg-white hover:bg-green-100'
                                             } `}
                                     >
                                         <div className="text-sm font-medium">Tuần {dayMonth}</div>
@@ -838,7 +845,7 @@ export default function Tour() {
                                 formatPrice={formatPrice}
                             />
 
-                            
+
                         </div>
                     </div>
                 </div>

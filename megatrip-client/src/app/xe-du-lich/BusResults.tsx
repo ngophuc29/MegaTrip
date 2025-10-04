@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Separator } from '../components/ui/separator';
 import { Bus, ArrowRight, Star, ChevronUp, ChevronDown, MapPin } from 'lucide-react';
 import Link from 'next/link';
+import { JSX } from 'react';
 
 function BusSkeleton() {
   return (
@@ -30,6 +31,16 @@ function BusSkeleton() {
     </Card>
   );
 }
+interface BusResultsProps {
+  isLoading: boolean;
+  sortedBuses: any[];
+  showDetails: number | null;
+  setShowDetails: (id: number | null) => void;
+  formatPrice: (p: number) => string;
+  getTypeIcon: (t: string) => JSX.Element;
+  getAmenityIcon: (a: string) => JSX.Element | string;
+  selectedDate?: string; // YYYY-MM-DD from parent (optional)
+}
 
 export default function BusResults({
   isLoading,
@@ -37,9 +48,8 @@ export default function BusResults({
   showDetails,
   setShowDetails,
   formatPrice,
-  getTypeIcon,
-  getAmenityIcon
-}) {
+  getTypeIcon, getAmenityIcon, selectedDate
+}: BusResultsProps) {
   return (
     <div className="space-y-4">
       {isLoading ? (
@@ -130,7 +140,10 @@ export default function BusResults({
                     </div>
                     <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
                       <Button className="w-full lg:w-auto" asChild>
-                        <Link prefetch={false} href={`/xe-du-lich/${bus.id}`}>
+                        <Link
+                          prefetch={false}
+                          href={`/xe-du-lich/${bus.id}${(selectedDate || bus.date) ? `?date=${encodeURIComponent(selectedDate || bus.date)}` : ''}`}
+                        >
                           Chọn chuyến xe
                         </Link>
                       </Button>

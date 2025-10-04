@@ -166,12 +166,43 @@ const getBookingData = (searchParams: URLSearchParams) => {
             return base;
         }
         if (type === 'bus') {
+            // parse extra bus-specific params (safe JSON parse)
+            const busId = searchParams.get('busId') || '';
+            const busNumber = searchParams.get('busNumber') || '';
+            const company = searchParams.get('company') || '';
+            const selectedPickup = searchParams.get('selectedPickup') || '';
+            const selectedDropoff = searchParams.get('selectedDropoff') || '';
+            const departureDateIso = searchParams.get('departureDateIso') || '';
+            const selectedIndex = searchParams.get('selectedIndex') || '';
+            const currency = searchParams.get('currency') || 'VND';
+
+            const seatsRaw = searchParams.get('seats') || '';
+            const seats = seatsRaw ? seatsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+            let passengerInfo = null;
+            try { passengerInfo = JSON.parse(searchParams.get('passengerInfo') || 'null'); } catch { passengerInfo = null; }
+            let passengersArr: any[] = [];
+            try { const p = searchParams.get('passengers'); passengersArr = p ? JSON.parse(p) : []; } catch { passengersArr = []; }
+
             return {
                 type: 'bus',
+                meta: {
+                    busId,
+                    busNumber,
+                    company,
+                    departureDateIso,
+                    selectedIndex,
+                    currency,
+                },
                 details: {
                     route: searchParams.get('route') || '',
                     date: searchParams.get('date') || '',
                     time: searchParams.get('time') || '',
+                    selectedPickup,
+                    selectedDropoff,
+                    seats,
+                    passengerInfo,
+                    passengers: passengersArr,
                 },
                 pricing: {
                     basePrice: Number(searchParams.get('basePrice')) || 0,
@@ -372,6 +403,12 @@ export default function ThanhToan() {
     const [needInvoice, setNeedInvoice] = useState(false);
     const [agreeTerms, setAgreeTerms] = useState(false);
 
+    // New promo code UI state
+    const [promoCode, setPromoCode] = useState('');
+    const [discountAmount, setDiscountAmount] = useState(0); // in VND
+    const [promoMessage, setPromoMessage] = useState<string | null>(null);
+    const [applyingPromo, setApplyingPromo] = useState(false);
+
     // New: toggle states for showing details
     const [showFareDetails, setShowFareDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
     const [showAddonsDetails, setShowAddonsDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
@@ -381,6 +418,8 @@ export default function ThanhToan() {
         phone: '',
         fullName: '',
     });
+    // shuttle pickup for bus flow (điểm đón trung chuyển nếu ko lấy từ bến)
+    const [shuttlePickup, setShuttlePickup] = useState<string>('');
 
     // Validation errors
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -444,6 +483,52 @@ export default function ThanhToan() {
         }).format(price);
     };
 
+    // Promo handlers: simple client-side mapping for demo purposes
+    const applyPromo = () => {
+        setApplyingPromo(true);
+        try {
+            const code = (promoCode || '').trim().toUpperCase();
+            if (!code) {
+                setPromoMessage('Vui lòng nhập mã giảm giá.');
+                setApplyingPromo(false);
+                return;
+            }
+
+            // determine base total to compute percentage discounts
+            const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
+            const base = Math.max(0, payloadTotal);
+
+            let discount = 0;
+            if (code === 'TOUR500') {
+                discount = Math.min(500000, base); // fixed 500k off
+            } else if (code === 'FAMILY25') {
+                discount = Math.round(base * 0.25); // 25% off
+            } else if (code === 'WEEKEND30') {
+                discount = Math.round(base * 0.30); // 30% off
+            } else {
+                setPromoMessage('Mã không hợp lệ hoặc đã hết hạn.');
+                setDiscountAmount(0);
+                setApplyingPromo(false);
+                return;
+            }
+
+            setDiscountAmount(discount);
+            setPromoMessage(`Áp dụng mã ${code}: -${formatPrice(discount)}`);
+        } catch (err) {
+            console.error('applyPromo error', err);
+            setPromoMessage('Lỗi khi áp dụng mã.');
+            setDiscountAmount(0);
+        } finally {
+            setApplyingPromo(false);
+        }
+    };
+
+    const removePromo = () => {
+        setPromoCode('');
+        setDiscountAmount(0);
+        setPromoMessage(null);
+    };
+
     const handleNextStep = () => {
         if (currentStep === 1) {
             if (!validateStep(1)) return;
@@ -494,11 +579,19 @@ export default function ThanhToan() {
                 window.localStorage.setItem('participants', JSON.stringify(passengers));
 
                 // persist booking payload to sessionStorage under bookingKey (preserve full payload)
+                // merge shuttlePickup into bookingData.details for persistence
+                const payloadToSave = {
+                    ...(bookingData || {}),
+                    details: {
+                        ...((bookingData && bookingData.details) || {}),
+                        selectedPickup: shuttlePickup || ((bookingData && bookingData.details && bookingData.details.selectedPickup) || '')
+                    }
+                };
                 if (bookingKey) {
-                    sessionStorage.setItem(bookingKey, JSON.stringify(bookingData));
+                    sessionStorage.setItem(bookingKey, JSON.stringify(payloadToSave));
                 } else {
                     const newKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-                    sessionStorage.setItem(newKey, JSON.stringify(bookingData));
+                    sessionStorage.setItem(newKey, JSON.stringify(payloadToSave));
                     setBookingKey(newKey);
                     // update URL to include bookingKey for bookmarking/share flow
                     try {
@@ -507,6 +600,8 @@ export default function ThanhToan() {
                         window.history.replaceState({}, '', url.toString());
                     } catch { /* ignore */ }
                 }
+                // update local state so summary and subsequent flows see shuttlePickup
+                setBookingData(payloadToSave);
             }
         } catch (e) {
             console.warn('Could not persist booking payload', e);
@@ -669,6 +764,32 @@ export default function ThanhToan() {
     useEffect(() => {
         try {
             if (!bookingData) return;
+
+            // Support bus flow: bookingData.details may contain passengerInfo / passengers (sent from chi-tiet)
+            const details = bookingData.details ?? bookingData;
+            if (details?.passengerInfo) {
+                const pi = details.passengerInfo;
+                setContactInfo(prev => ({
+                    fullName: prev.fullName || (pi.name || ''),
+                    email: pi.email || prev.email,
+                    phone: pi.phone || prev.phone
+                }));
+                if (Array.isArray(details.passengers) && details.passengers.length > 0) {
+                    setPassengers(details.passengers.map((x: any) => ({
+                        type: x.type ?? 'adult',
+                        title: x.title ?? 'Mr',
+                        firstName: x.firstName ?? x.name ?? '',
+                        lastName: x.lastName ?? '',
+                        dateOfBirth: x.dateOfBirth ?? '',
+                        nationality: x.nationality ?? 'VN',
+                        idNumber: x.idNumber ?? '',
+                        idType: x.idType ?? 'cccd'
+                    })));
+                }
+                // prefill shuttle pickup if provided from chi-tiet page
+                if (pi.shuttlePickup) setShuttlePickup(pi.shuttlePickup);
+            }
+
             const bp = bookingData.passengers ?? bookingData.passenger ?? null;
             if (!bp) return;
 
@@ -682,6 +803,8 @@ export default function ThanhToan() {
                     email: contactFromBooking.email ?? prev.email,
                     phone: contactFromBooking.phone ?? prev.phone
                 }));
+                // bookingData.contactFromBooking may contain shuttle pickup (legacy)
+                if ((contactFromBooking as any).shuttlePickup) setShuttlePickup((contactFromBooking as any).shuttlePickup);
             } else if (lead) {
                 // if there's a lead but no explicit contactInfo, populate fullName
                 setContactInfo(prev => ({ ...prev, fullName: `${lead?.title ? lead.title + ' ' : ''}${lead?.firstName ?? ''} ${lead?.lastName ?? ''}`.trim() }));
@@ -849,6 +972,19 @@ export default function ThanhToan() {
                                                 <p className="text-red-500 text-xs mt-1">{errors['contact.email']}</p>
                                             )}
                                         </div>
+                                        {/* Shuttle pickup (bus only) */}
+                                        {mounted && bookingType === 'bus' && (
+                                            <div className="md:col-span-2">
+                                                <Label htmlFor="shuttlePickup">Điểm đón trung chuyển (nếu xa bến)</Label>
+                                                <Input
+                                                    id="shuttlePickup"
+                                                    value={shuttlePickup}
+                                                    onChange={(e) => setShuttlePickup(e.target.value)}
+                                                    placeholder="Ví dụ: Số nhà, tên đường, khu vực (tùy chọn)"
+                                                />
+                                                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Nếu bạn muốn xe trung chuyển đón ở địa chỉ riêng, nhập ở đây.</p>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
 
@@ -1696,8 +1832,21 @@ export default function ThanhToan() {
 
                                                 </div>
                                                 <div className="flex items-center gap-4">
-                                                    <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(grandTotal)}</span>
-                                                    <ChevronDown className={`h-4 w-4 transition-transform ${showTotalFareDetails ? 'rotate-180' : ''}`} />
+                                                    {/* compute displayed totals and subtract discountAmount */}
+                                                    {(() => {
+                                                        const p = normalizedPricing || {};
+                                                        const payloadTotal = Number(p.total ?? p.estimatedTotal ?? p.offerTotal ?? 0);
+                                                        // fallback to grandTotal computed earlier if available
+                                                        const computedGrand = Number(grandTotal ?? payloadTotal ?? 0);
+                                                        const baseTotal = Math.round(computedGrand);
+                                                        const finalTotal = Math.max(0, baseTotal - (discountAmount || 0));
+                                                        return (
+                                                            <>
+                                                                <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(finalTotal)}</span>
+                                                                <ChevronDown className={`h-4 w-4 transition-transform ${showTotalFareDetails ? 'rotate-180' : ''}`} />
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
 
@@ -1719,7 +1868,7 @@ export default function ThanhToan() {
                                                         )}
                                                         <div className="flex justify-between font-medium pt-2 border-t">
                                                             <div>Tổng giá vé</div>
-                                                            <div>{formatPrice(grandTotal)}</div>
+                                                            <div>{formatPrice(Math.max(0, Math.round(Number(grandTotal || p.estimatedTotal || 0)) - (discountAmount || 0)))}</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1742,6 +1891,35 @@ export default function ThanhToan() {
                                 })() : (
                                     <div className="text-sm text-muted-foreground">Đang tải tóm tắt đơn hàng...</div>
                                 )}
+                                <Separator />
+
+                                {/* Promo Code input - ADDED */}
+                                <div className="pt-2 pb-2">
+                                    <label className="text-sm font-medium block mb-2">Mã giảm giá</label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Nhập mã (ví dụ: TOUR500, FAMILY25)"
+                                            value={promoCode}
+                                            onChange={(e) => setPromoCode(e.target.value)}
+                                            className="flex-1"
+                                        />
+                                        {discountAmount > 0 ? (
+                                            <Button variant="ghost" onClick={removePromo} className="whitespace-nowrap">
+                                                Xóa
+                                            </Button>
+                                        ) : (
+                                            <Button onClick={applyPromo} disabled={applyingPromo || !promoCode}>
+                                                {applyingPromo ? 'Đang áp dụng...' : 'Áp dụng'}
+                                            </Button>
+                                        )}
+                                    </div>
+                                    {promoMessage && (
+                                        <div className={`mt-2 text-sm ${discountAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {promoMessage}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <Separator />
                                 {/* Security Info */}
                                 <div className="space-y-3">

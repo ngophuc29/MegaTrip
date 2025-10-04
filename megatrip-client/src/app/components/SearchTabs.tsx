@@ -45,7 +45,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   const [busDeparture, setBusDeparture] = useState<Date>(new Date());
   const [tourDeparture, setTourDeparture] = useState<Date>(new Date());
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
-  const [provinces, setProvinces] = useState<{code:string, name:string}[]>([]);
+  const [provinces, setProvinces] = useState<{ code: string, name: string }[]>([]);
   const [airports, setAirports] = useState<any[]>([]);
   // travel class for flights (Amadeus values)
   const [travelClass, setTravelClass] = useState<'ECONOMY' | 'PREMIUM_ECONOMY' | 'BUSINESS' | 'FIRST'>('ECONOMY');
@@ -58,7 +58,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   const [tourTo, setTourTo] = useState<string>('');
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // load airports for flight selects (only)
   useEffect(() => {
     fetch('/airport.json')
@@ -78,7 +78,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
 
 
 
-  
+
 
   useEffect(() => {
     fetch('/provinces.json')
@@ -128,6 +128,21 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     return key;
   };
 
+  // map incoming province name (or code) -> province.code so Select value matches options
+  const mapProvinceInputToCode = (val?: string | null) => {
+    if (!val) return '';
+    const v = String(val).trim();
+    if (!v) return '';
+    if (provinces && provinces.length > 0) {
+      const exact = provinces.find(p => String(p.name).toLowerCase() === v.toLowerCase());
+      if (exact) return String(exact.code);
+      const partial = provinces.find(p => String(p.name).toLowerCase().includes(v.toLowerCase()));
+      if (partial) return String(partial.code);
+    }
+    // if value already looks like a numeric code, return as-is
+    if (/^\d+$/.test(v)) return v;
+    return v;
+  };
   // If airports load after we already set flightFrom/flightTo from query (and query used IATA),
   // remap them to ICAO so the Select shows correct selection.
   useEffect(() => {
@@ -183,20 +198,22 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     const adultsVal = hasAdultsParam ? parseInt(params['adults'] || '0', 10) : undefined;
     const childrenVal = hasChildrenParam ? parseInt(params['children'] || '0', 10) : undefined;
     const infantsVal = hasInfantsParam ? parseInt(params['infants'] || '0', 10) : undefined;
-   
+
     // Fill from/to for all relevant controls so redirect always pre-fills UI.
     // Resolve incoming code (IATA or ICAO) to ICAO for Select value.
     if (from !== undefined && from !== null && from !== '') {
       const resolvedFrom = resolveAirportIcao(String(from));
       setFlightFrom(resolvedFrom);
       setBusFrom(String(from));
-      setTourFrom(String(from));
+      // setTourFrom(String(from));
+      setTourFrom(mapProvinceInputToCode(String(from)));
     }
     if (to !== undefined && to !== null && to !== '') {
       const resolvedTo = resolveAirportIcao(String(to));
       setFlightTo(resolvedTo);
       setBusTo(String(to));
-      setTourTo(String(to));
+      // setTourTo(String(to));
+      setTourTo(mapProvinceInputToCode(String(to)));
     }
 
     // Dates
@@ -278,7 +295,12 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       return normalizePassengers({ adults, children, infants });
     });
   };
-
+  useEffect(() => {
+      if (!provinces || provinces.length === 0) return;
+      
+      setTourFrom(prev => mapProvinceInputToCode(prev));
+      setTourTo(prev => mapProvinceInputToCode(prev));
+    }, [provinces]);
   const totalPassengers = passengers.adults + passengers.children + passengers.infants;
 
   // Hàm chuyển route và truyền query
@@ -309,7 +331,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         children: String(children),
         infants: String(infants),
         travelClass: travelClass,
-        includedAirlineCodes:'VN',
+        includedAirlineCodes: 'VN',
         nonStop: 'true',
         currencyCode: 'VND',
         max: String(3)
@@ -355,20 +377,33 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       if (typeof onSearch === 'function') onSearch(payload);
       router.push(`/xe-du-lich?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
     } else if (type === 'tour') {
+      // const payload = {
+      //   type: 'tour',
+      //   from: tourFrom,
+      //   to: tourTo,
+      //   departure: tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''
+      // };
+      // console.log('Search clicked:', payload);
+      // if (typeof onSearch === 'function') onSearch(payload);
+      // router.push(`/tour?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
+      // send province names for tour searches (keep bus/flight unchanged)
+      const departure = tourDeparture ? tourDeparture.toISOString().split('T')[0] : '';
+      const fromName = provinces.find(p => String(p.code) === tourFrom)?.name || tourFrom || '';
+      const toName = provinces.find(p => String(p.code) === tourTo)?.name || tourTo || '';
       const payload = {
         type: 'tour',
-        from: tourFrom,
-        to: tourTo,
-        departure: tourDeparture ? tourDeparture.toISOString().split('T')[0] : ''
+        from: fromName,
+        to: toName,
+        departure
       };
       console.log('Search clicked:', payload);
       if (typeof onSearch === 'function') onSearch(payload);
-      router.push(`/tour?from=${payload.from}&to=${payload.to}&departure=${payload.departure}`);
+      router.push(`/tour?from=${encodeURIComponent(fromName)}&to=${encodeURIComponent(toName)}&departure=${departure}`);
     }
   };
 
   // Default return date = today + 2 days (formatted YYYY-MM-DD)
-  
+
 
   return (
     <div className="w-full max-w-6xl mx-auto">
@@ -396,7 +431,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
             <div className="bg-white rounded-lg  p-6 shadow-sm">
               {/* Flight Type */}
               <div className="flex items-center space-x-4 mb-4">
-                
+
                 <Label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="radio"
