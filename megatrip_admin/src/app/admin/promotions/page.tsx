@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Tag, Plus, Edit, Eye, Trash2, Percent, DollarSign, Users, Calendar, RefreshCw, TrendingUp, Copy, CheckCircle, XCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -33,21 +33,11 @@ interface Promotion {
     active: boolean;
     createdAt: string;
     updatedAt: string;
+    // added for display
+    requireCode?: boolean;
+    autoApply?: boolean;
 }
-
-interface PromotionFormData {
-    code: string;
-    title: string;
-    description: string;
-    type: "percent" | "fixed";
-    value: number;
-    minSpend: number;
-    maxUses: number;
-    appliesTo: string[];
-    validFrom: string;
-    validTo: string;
-    active: boolean;
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 
 interface PromotionFilters {
     status: string;
@@ -60,179 +50,6 @@ const applyToOptions = [
     { value: "flights", label: "Vé máy bay" },
     { value: "buses", label: "Vé xe khách" },
     { value: "all", label: "Tất cả dịch vụ" },
-];
-
-const mockPromotions: Promotion[] = [
-    {
-        id: "promo_001",
-        code: "SUMMER2025",
-        title: "Giảm giá mùa hè",
-        description: "Giảm 20% cho tất cả tour du lịch mùa hè",
-        type: "percent",
-        value: 20,
-        minSpend: 5000000,
-        maxUses: 100,
-        usedCount: 45,
-        appliesTo: ["tours", "flights"],
-        validFrom: "2025-06-01T00:00:00.000Z",
-        validTo: "2025-08-31T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-05-20T10:00:00.000Z",
-        updatedAt: "2025-06-01T00:00:00.000Z",
-    },
-    {
-        id: "promo_002",
-        code: "FLIGHT100K",
-        title: "Giảm giá vé máy bay",
-        description: "Giảm 100,000 VNĐ cho vé máy bay nội địa",
-        type: "fixed",
-        value: 100000,
-        minSpend: 1000000,
-        maxUses: 200,
-        usedCount: 180,
-        appliesTo: ["flights"],
-        validFrom: "2025-09-01T00:00:00.000Z",
-        validTo: "2025-09-30T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-08-25T09:00:00.000Z",
-        updatedAt: "2025-09-01T00:00:00.000Z",
-    },
-    {
-        id: "promo_003",
-        code: "WINTER10",
-        title: "Khuyến mãi mùa đông",
-        description: "Giảm 10% cho tour du lịch mùa đông",
-        type: "percent",
-        value: 10,
-        minSpend: 3000000,
-        maxUses: 50,
-        usedCount: 50,
-        appliesTo: ["tours"],
-        validFrom: "2025-12-01T00:00:00.000Z",
-        validTo: "2026-01-31T23:59:59.000Z",
-        active: false,
-        createdAt: "2025-11-15T08:00:00.000Z",
-        updatedAt: "2025-11-15T08:00:00.000Z",
-    },
-    {
-        id: "promo_004",
-        code: "BUSPROMO",
-        title: "Ưu đãi vé xe khách",
-        description: "Giảm 50,000 VNĐ cho vé xe khách",
-        type: "fixed",
-        value: 50000,
-        minSpend: 200000,
-        maxUses: 0,
-        usedCount: 75,
-        appliesTo: ["buses"],
-        validFrom: "2025-09-10T00:00:00.000Z",
-        validTo: "2025-10-10T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-09-01T12:00:00.000Z",
-        updatedAt: "2025-09-10T00:00:00.000Z",
-    },
-    {
-        id: "promo_005",
-        code: "ALLSERVICES",
-        title: "Giảm giá tất cả dịch vụ",
-        description: "Giảm 15% cho mọi dịch vụ",
-        type: "percent",
-        value: 15,
-        minSpend: 2000000,
-        maxUses: 0,
-        usedCount: 120,
-        appliesTo: ["tours", "flights", "buses"],
-        validFrom: "2025-07-01T00:00:00.000Z",
-        validTo: "2025-09-15T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-06-20T15:00:00.000Z",
-        updatedAt: "2025-07-01T00:00:00.000Z",
-    },
-    {
-        id: "promo_006",
-        code: "TRAVEL200K",
-        title: "Giảm giá lớn",
-        description: "Giảm 200,000 VNĐ cho đơn hàng từ 5 triệu",
-        type: "fixed",
-        value: 200000,
-        minSpend: 5000000,
-        maxUses: 150,
-        usedCount: 90,
-        appliesTo: ["tours", "flights"],
-        validFrom: "2025-08-01T00:00:00.000Z",
-        validTo: "2025-10-31T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-07-25T14:00:00.000Z",
-        updatedAt: "2025-08-01T00:00:00.000Z",
-    },
-    {
-        id: "promo_007",
-        code: "FESTIVAL5",
-        title: "Khuyến mãi lễ hội",
-        description: "Giảm 5% cho tất cả dịch vụ",
-        type: "percent",
-        value: 5,
-        minSpend: 1000000,
-        maxUses: 0,
-        usedCount: 200,
-        appliesTo: ["all"],
-        validFrom: "2025-12-20T00:00:00.000Z",
-        validTo: "2026-01-05T23:59:59.000Z",
-        active: false,
-        createdAt: "2025-12-10T10:00:00.000Z",
-        updatedAt: "2025-12-10T10:00:00.000Z",
-    },
-    {
-        id: "promo_008",
-        code: "FLYHALF",
-        title: "Giảm giá vé máy bay",
-        description: "Giảm 50% cho vé máy bay quốc tế",
-        type: "percent",
-        value: 50,
-        minSpend: 10000000,
-        maxUses: 20,
-        usedCount: 15,
-        appliesTo: ["flights"],
-        validFrom: "2025-11-01T00:00:00.000Z",
-        validTo: "2025-12-31T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-10-20T09:00:00.000Z",
-        updatedAt: "2025-11-01T00:00:00.000Z",
-    },
-    {
-        id: "promo_009",
-        code: "TOUR50K",
-        title: "Ưu đãi tour du lịch",
-        description: "Giảm 50,000 VNĐ cho tour nội địa",
-        type: "fixed",
-        value: 50000,
-        minSpend: 1000000,
-        maxUses: 100,
-        usedCount: 80,
-        appliesTo: ["tours"],
-        validFrom: "2025-09-05T00:00:00.000Z",
-        validTo: "2025-09-20T23:59:59.000Z",
-        active: false,
-        createdAt: "2025-08-30T11:00:00.000Z",
-        updatedAt: "2025-09-05T00:00:00.000Z",
-    },
-    {
-        id: "promo_010",
-        code: "BIGSALE2025",
-        title: "Siêu khuyến mãi",
-        description: "Giảm 30% cho tất cả dịch vụ",
-        type: "percent",
-        value: 30,
-        minSpend: 3000000,
-        maxUses: 0,
-        usedCount: 150,
-        appliesTo: ["all"],
-        validFrom: "2025-10-01T00:00:00.000Z",
-        validTo: "2025-11-30T23:59:59.000Z",
-        active: true,
-        createdAt: "2025-09-25T16:00:00.000Z",
-        updatedAt: "2025-10-01T00:00:00.000Z",
-    },
 ];
 
 export default function Promotions() {
@@ -261,6 +78,8 @@ export default function Promotions() {
         validFrom: "",
         validTo: "",
         active: true,
+        requireCode: true, // default: require code
+        autoApply: false,  // default: no auto-apply
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);
@@ -273,189 +92,210 @@ export default function Promotions() {
         pageSize: 10,
     });
 
-    // Fetch promotions with mock data
+    // Fetch promotions with server API
+    const mapServerPromotion = (item: any): Promotion => ({
+	// handle both _id (mongo) or id
+	id: item._id || item.id || String(item.code || Math.random()),
+	code: item.code || "",
+	title: item.title || "",
+	description: item.description || "",
+	type: item.type === "fixed" ? "fixed" : "percent",
+	value: item.value || 0,
+	minSpend: item.minSpend || 0,
+	maxUses: item.maxUses || 0,
+	usedCount: item.usedCount || 0,
+	appliesTo: Array.isArray(item.appliesTo) ? item.appliesTo : (item.appliesTo ? [item.appliesTo] : []),
+	validFrom: item.validFrom ? new Date(item.validFrom).toISOString() : "",
+	validTo: item.validTo ? new Date(item.validTo).toISOString() : "",
+	active: !!item.active,
+	createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
+	updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString(),
+	// map the new flags from server (fallback to defaults)
+	requireCode: typeof item.requireCode !== "undefined" ? !!item.requireCode : true,
+	autoApply: typeof item.autoApply !== "undefined" ? !!item.autoApply : false,
+    });
+
     const { data: promotionsData, isLoading, error, refetch } = useQuery({
-        queryKey: ['promotions', pagination.current, pagination.pageSize, searchQuery, filters],
-        queryFn: async () => {
-            const filteredPromotions = mockPromotions.filter((promotion) => {
-                const matchesSearch =
-                    promotion.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    promotion.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    promotion.description.toLowerCase().includes(searchQuery.toLowerCase());
+	queryKey: ['promotions', pagination.current, pagination.pageSize, searchQuery, filters],
+	queryFn: async () => {
+		const params = new URLSearchParams();
+		params.set('page', String(pagination.current));
+		params.set('pageSize', String(pagination.pageSize));
+		if (searchQuery) params.set('search', searchQuery);
+		if (filters.status) params.set('status', filters.status);
+		if (filters.type) params.set('type', filters.type);
+		if (filters.appliesTo) params.set('appliesTo', filters.appliesTo);
 
-                const status = getPromotionStatus(promotion).status;
-                const matchesStatus =
-                    filters.status === "all" ||
-                    (filters.status === "active" && status === "active") ||
-                    (filters.status === "inactive" && status === "inactive") ||
-                    (filters.status === "expired" && status === "expired") ||
-                    (filters.status === "used_up" && status === "used_up");
-
-                const matchesType = filters.type === "all" || promotion.type === filters.type;
-                const matchesAppliesTo =
-                    filters.appliesTo === "all" ||
-                    (filters.appliesTo === "all" && promotion.appliesTo.includes("all")) ||
-                    promotion.appliesTo.includes(filters.appliesTo);
-
-                return matchesSearch && matchesStatus && matchesType && matchesAppliesTo;
-            });
-
-            const start = (pagination.current - 1) * pagination.pageSize;
-            const end = start + pagination.pageSize;
-            const paginatedPromotions = filteredPromotions.slice(start, end);
-
-            return {
-                data: paginatedPromotions,
-                pagination: {
-                    total: filteredPromotions.length,
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                },
-            };
-        },
+		const res = await fetch(`${API_BASE}/api/promotions?${params.toString()}`, { method: 'GET' });
+		if (!res.ok) {
+			const txt = await res.text();
+			throw new Error(`Failed to fetch promotions: ${res.status} ${txt}`);
+		}
+		const json = await res.json();
+		const data = Array.isArray(json.data) ? json.data.map(mapServerPromotion) : [];
+		return {
+			data,
+			pagination: {
+				total: json.pagination?.total || data.length,
+				current: json.pagination?.current || pagination.current,
+				pageSize: json.pagination?.pageSize || pagination.pageSize,
+			},
+		};
+	},
+	keepPreviousData: true,
     });
 
-    // Create promotion mutation
+    // Create promotion mutation -> POST /api/promotions
     const createPromotionMutation = useMutation({
-        mutationFn: async (data: PromotionFormData) => {
-            const newId = `promo_${Date.now()}`;
-            const newPromotion: Promotion = {
-                ...data,
-                id: newId,
-                usedCount: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-            };
-            mockPromotions.push(newPromotion);
-            return newPromotion;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            setModalOpen(false);
-            resetForm();
-            toast({
-                title: "Tạo khuyến mãi thành công",
-                description: "Chương trình khuyến mãi mới đã được tạo",
-            });
-        },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi tạo khuyến mãi",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+	mutationFn: async (data: PromotionFormData) => {
+		const payload = {
+			...data,
+			// ensure ISO strings for dates
+			validFrom: data.validFrom ? new Date(data.validFrom).toISOString() : undefined,
+			validTo: data.validTo ? new Date(data.validTo).toISOString() : undefined,
+		};
+		const res = await fetch(`${API_BASE}/api/promotions`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({ error: 'Unknown' }));
+			throw new Error(err.error || err.details || 'Create failed');
+		}
+		const created = await res.json();
+		return mapServerPromotion(created);
+	},
+	onSuccess: () => {
+		queryClient.invalidateQueries({ queryKey: ['promotions'] });
+         // ensure immediate refresh of the active query
+            refetch().catch(() => {});
+		setModalOpen(false);
+		resetForm();
+		toast({
+			title: "Tạo khuyến mãi thành công",
+			description: "Chương trình khuyến mãi mới đã được tạo",
+		});
+	},
+	onError: (error: any) => {
+		toast({
+			title: "Lỗi khi tạo khuyến mãi",
+			description: String(error?.message || error),
+			variant: "destructive",
+		});
+	},
     });
 
-    // Update promotion mutation
+    // Update promotion mutation -> PUT /api/promotions/:id
     const updatePromotionMutation = useMutation({
-        mutationFn: async ({ id, data }: { id: string; data: Partial<PromotionFormData> }) => {
-            const index = mockPromotions.findIndex((promo) => promo.id === id);
-            if (index === -1) throw new Error("Promotion not found");
+	mutationFn: async ({ id, data }: { id: string; data: Partial<PromotionFormData> }) => {
+		const payload: any = { ...data };
+		if (payload.validFrom) payload.validFrom = new Date(payload.validFrom).toISOString();
+		if (payload.validTo) payload.validTo = new Date(payload.validTo).toISOString();
 
-            mockPromotions[index] = {
-                ...mockPromotions[index],
-                ...data,
-                updatedAt: new Date().toISOString(),
-            };
-            return mockPromotions[index];
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            setModalOpen(false);
-            resetForm();
-            toast({
-                title: "Cập nhật khuyến mãi thành công",
-                description: "Thông tin khuyến mãi đã được cập nhật",
-            });
-        },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi cập nhật khuyến mãi",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+		const res = await fetch(`${API_BASE}/api/promotions/${id}`, {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({ error: 'Unknown' }));
+			throw new Error(err.error || err.details || 'Update failed');
+		}
+		const updated = await res.json();
+		return mapServerPromotion(updated);
+	},
+	onSuccess: () => {
+		queryClient.invalidateQueries({ queryKey: ['promotions'] });
+          refetch().catch(() => {});
+		setModalOpen(false);
+		resetForm();
+		toast({
+			title: "Cập nhật khuyến mãi thành công",
+			description: "Thông tin khuyến mãi đã được cập nhật",
+		});
+	},
+	onError: (error: any) => {
+		toast({
+			title: "Lỗi khi cập nhật khuyến mãi",
+			description: String(error?.message || error),
+			variant: "destructive",
+		});
+	},
     });
 
-    // Delete promotion mutation
+    // Delete promotion mutation -> DELETE /api/promotions/:id
     const deletePromotionMutation = useMutation({
-        mutationFn: async (id: string) => {
-            const index = mockPromotions.findIndex((promo) => promo.id === id);
-            if (index === -1) throw new Error("Promotion not found");
-
-            const deletedPromotion = mockPromotions.splice(index, 1)[0];
-            return deletedPromotion;
-        },
-        onSuccess: (_, promotionId) => {
-            queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            setDeleteModalOpen(false);
-            setPromotionToDelete(null);
-
-            const promotion = promotionsData?.data?.find((p: Promotion) => p.id === promotionId);
-            toast({
-                title: "Đã xóa khuyến mãi",
-                description: `Khuyến mãi ${promotion?.code} đã được xóa thành công`,
-                action: (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            toast({
-                                title: "Khôi phục thành công",
-                                description: "Khuyến mãi đã được khôi phục",
-                            });
-                        }}
-                    >
-                        Hoàn tác
-                    </Button>
-                ),
-            });
-        },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi xóa khuyến mãi",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+	mutationFn: async (id: string) => {
+		const res = await fetch(`${API_BASE}/api/promotions/${id}`, { method: 'DELETE' });
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({ error: 'Unknown' }));
+			throw new Error(err.error || err.details || 'Delete failed');
+		}
+		return id;
+	},
+	onSuccess: (_, promotionId) => {
+		queryClient.invalidateQueries({ queryKey: ['promotions'] });
+           refetch().catch(() => {});
+		setDeleteModalOpen(false);
+		setPromotionToDelete(null);
+		toast({
+			title: "Đã xóa khuyến mãi",
+			description: `Khuyến mãi đã được xóa thành công`,
+			action: (
+				<Button
+					variant="outline"
+					size="sm"
+					onClick={async () => {
+						// no automatic undo on server; just show toast
+						toast({ title: "Hoàn tác", description: "Không có rollback tự động" });
+					}}
+				>
+					Hoàn tác
+				</Button>
+			),
+		});
+	},
+	onError: (error: any) => {
+		toast({
+			title: "Lỗi khi xóa khuyến mãi",
+			description: String(error?.message || error),
+			variant: "destructive",
+		});
+	},
     });
 
-    // Bulk operations mutation
+    // Bulk operations mutation -> POST /api/promotions/bulk
     const bulkActionMutation = useMutation({
-        mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            ids.forEach((id) => {
-                const index = mockPromotions.findIndex((promo) => promo.id === id);
-                if (index === -1) throw new Error(`Promotion ${id} not found`);
-
-                if (action === "activate") {
-                    mockPromotions[index].active = true;
-                    mockPromotions[index].updatedAt = new Date().toISOString();
-                } else if (action === "deactivate") {
-                    mockPromotions[index].active = false;
-                    mockPromotions[index].updatedAt = new Date().toISOString();
-                } else if (action === "delete") {
-                    mockPromotions.splice(index, 1);
-                }
-            });
-            return { action, ids };
-        },
-        onSuccess: (_, { action, ids }) => {
-            queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            setSelectedPromotions([]);
-            const actionText = action === "activate" ? "kích hoạt" : action === "deactivate" ? "tắt" : "xóa";
-            toast({
-                title: `Thực hiện thành công`,
-                description: `Đã ${actionText} ${ids.length} khuyến mãi`,
-            });
-        },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi thực hiện thao tác",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+	mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
+		const res = await fetch(`${API_BASE}/api/promotions/bulk`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ action, ids }),
+		});
+		if (!res.ok) {
+			const err = await res.json().catch(() => ({ error: 'Unknown' }));
+			throw new Error(err.error || err.details || 'Bulk action failed');
+		}
+		return { action, ids };
+	},
+	onSuccess: (_, { action, ids }) => {
+		queryClient.invalidateQueries({ queryKey: ['promotions'] });
+            refetch().catch(() => {});
+		setSelectedPromotions([]);
+        const actionText = action === "activate" ? "kích hoạt" : action === "deactivate" ? "tắt" : "xóa";
+		toast({
+			title: `Thực hiện thành công`,
+			description: `Đã ${actionText} ${ids.length} khuyến mãi`,
+		});
+	},
+	onError: (error: any) => {
+		toast({
+			title: "Lỗi khi thực hiện thao tác",
+			description: String(error?.message || error),
+			variant: "destructive",
+		});
+	},
     });
 
     const promotions = promotionsData?.data || [];
@@ -465,10 +305,14 @@ export default function Promotions() {
     const validateForm = (data: PromotionFormData): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        if (!data.code.trim()) {
-            errors.code = "Bạn phải nhập mã khuyến mãi";
-        } else if (!/^[A-Z0-9]{3,20}$/.test(data.code)) {
-            errors.code = "Mã khuyến mãi chỉ chứa chữ hoa và số, từ 3-20 ký tự";
+        // New rule: exactly two modes — autoApply OR requireCode.
+        // If autoApply is off, code is required.
+        if (!data.autoApply) {
+            if (!data.code || !data.code.trim()) {
+                errors.code = "Bạn phải nhập mã khuyến mãi";
+            } else if (!/^[A-Z0-9]{3,20}$/.test(data.code)) {
+                errors.code = "Mã khuyến mãi chỉ chứa chữ hoa và số, từ 3-20 ký tự";
+            }
         }
 
         if (!data.title.trim()) {
@@ -503,7 +347,7 @@ export default function Promotions() {
             errors.validTo = "Ngày kết thúc phải sau ngày bắt đầu";
         }
 
-        if (data.appliesTo.length === 0) {
+        if (!data.appliesTo || data.appliesTo.length === 0) {
             errors.appliesTo = "Bạn phải chọn ít nhất một dịch vụ áp dụng";
         }
 
@@ -523,6 +367,8 @@ export default function Promotions() {
             validFrom: "",
             validTo: "",
             active: true,
+            requireCode: true,
+            autoApply: false,
         });
         setFormErrors({});
         setIsFormDirty(false);
@@ -569,6 +415,21 @@ export default function Promotions() {
                     <div className="text-sm text-gray-500">{record.title}</div>
                 </div>
             ),
+        },
+
+        // new column: Loại hình (RequireCode / Auto-apply / Optional)
+        {
+            key: "mode",
+            title: "Loại hình",
+            render: (_, record: Promotion) => {
+                if (record.autoApply) {
+                    return <Badge className="bg-blue-100 text-blue-800">Auto-apply</Badge>;
+                }
+                if (record.requireCode) {
+                    return <Badge className="bg-indigo-100 text-indigo-800">Yêu cầu mã</Badge>;
+                }
+                return <Badge className="bg-gray-100 text-gray-800">Mã tuỳ chọn</Badge>;
+            },
         },
         {
             key: "type",
@@ -698,6 +559,9 @@ export default function Promotions() {
             validFrom: promotion.validFrom.slice(0, 16),
             validTo: promotion.validTo.slice(0, 16),
             active: promotion.active,
+            // defaults when editing an existing promotion (no stored flags) - keep requireCode true, autoApply false
+            requireCode: true,
+            autoApply: false,
         });
         setModalMode("edit");
         setModalOpen(true);
@@ -729,6 +593,8 @@ export default function Promotions() {
             validFrom: "",
             validTo: "",
             active: false,
+            requireCode: true,
+            autoApply: false,
         });
         setModalMode("create");
         setModalOpen(true);
@@ -937,14 +803,26 @@ export default function Promotions() {
                                 value={formData.code}
                                 onChange={(e) => handleFormChange("code", e.target.value.toUpperCase())}
                                 placeholder="SUMMER2024"
+                                disabled={!!formData.autoApply} // disabled when auto-apply
                                 className={`font-mono ${formErrors.code ? "border-red-500" : ""}`}
                             />
-                            <Button type="button" variant="outline" onClick={generateCode} className="px-3">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={generateCode}
+                                className="px-3"
+                                disabled={!!formData.autoApply}
+                            >
                                 Tạo mã
                             </Button>
                         </div>
-                        {formErrors.code && <p className="text-sm text-red-500 mt-1">{formErrors.code}</p>}
+                        {formData.autoApply ? (
+                            <p className="text-sm text-gray-500 mt-1">Mã được áp dụng tự động (không cần nhập mã).</p>
+                        ) : (
+                            formErrors.code && <p className="text-sm text-red-500 mt-1">{formErrors.code}</p>
+                        )}
                     </div>
+
                     <div>
                         <Label htmlFor="title">Tiêu đề *</Label>
                         <Input
@@ -955,6 +833,58 @@ export default function Promotions() {
                             className={formErrors.title ? "border-red-500" : ""}
                         />
                         {formErrors.title && <p className="text-sm text-red-500 mt-1">{formErrors.title}</p>}
+                    </div>
+                </div>
+
+                {/* New toggles: Require code / Auto-apply */}
+                <div className="space-y-2">
+                    <div className="flex items-center space-x-6">
+                        <div className="flex items-center space-x-2">
+                            <Switch
+                                id="requireCode"
+                                checked={!!formData.requireCode}
+                                onCheckedChange={(checked) => {
+                                    // enforce exclusive modes: toggling off will turn the other on
+                                    if (checked) {
+                                        handleFormChange("requireCode", true);
+                                        handleFormChange("autoApply", false);
+                                    } else {
+                                        handleFormChange("requireCode", false);
+                                        handleFormChange("autoApply", true);
+                                        handleFormChange("code", ""); // clear code when switching mode
+                                    }
+                                }}
+                            />
+                            <Label htmlFor="requireCode">Yêu cầu nhập mã</Label>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                            <Switch
+                                id="autoApply"
+                                checked={!!formData.autoApply}
+                                onCheckedChange={(checked) => {
+                                    // enforce exclusive modes: toggling off will turn the other on
+                                    if (checked) {
+                                        handleFormChange("autoApply", true);
+                                        handleFormChange("requireCode", false);
+                                        handleFormChange("code", "");
+                                    } else {
+                                        handleFormChange("autoApply", false);
+                                        handleFormChange("requireCode", true);
+                                    }
+                                }}
+                            />
+                            <Label htmlFor="autoApply">Auto-apply (tự động áp dụng)</Label>
+                        </div>
+                    </div>
+
+                    {/* helper text for two modes */}
+                    <div className="text-sm text-gray-500">
+                        {formData.autoApply ? (
+                            <p>Auto-apply đang bật — khuyến mãi được áp dụng tự động (mã không cần nhập).</p>
+                        ) : (
+                            <p>Yêu cầu nhập mã đang bật — người dùng phải nhập mã để nhận khuyến mãi.</p>
+                        )}
                     </div>
                 </div>
 
