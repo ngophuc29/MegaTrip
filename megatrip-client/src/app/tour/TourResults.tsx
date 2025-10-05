@@ -35,6 +35,22 @@ export default function TourResults({
   toggleFavorite,
   formatPrice
 }) {
+  // Save a viewed tour identifier (slug or id) to localStorage (most-recent-first, max 10)
+  const saveRecentTour = (tour: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = 'recentTours';
+      const raw = localStorage.getItem(key);
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const id = tour.slug ?? String(tour.id ?? '');
+      if (!id) return;
+      const filtered = list.filter(x => x !== id);
+      filtered.unshift(id);
+      localStorage.setItem(key, JSON.stringify(filtered.slice(0, 10)));
+    } catch (e) {
+      // ignore
+    }
+  };
   return (
     <div className="space-y-4">
       {isLoading ? (
@@ -159,7 +175,9 @@ export default function TourResults({
                       </div>
                       <div className="text-right space-y-1">
                         <Button size="sm" asChild>
-                          <Link prefetch={false} href={`/tour/${tour.slug}`}>
+                          <Link prefetch={false} href={`/tour/${tour.slug}`}
+                            onClick={() => saveRecentTour(tour)}
+                          >
                             Xem chi tiết
                           </Link>
                         </Button>

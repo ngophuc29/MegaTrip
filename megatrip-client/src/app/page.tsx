@@ -24,6 +24,7 @@ import {
   MapPin,
   Timer,
 } from 'lucide-react';
+import TourResults from './tour/TourResults';
 
 const banners = [
   {
@@ -252,7 +253,45 @@ const latestNews = [
 
 export default function Index() {
   const [currentBanner, setCurrentBanner] = useState(0);
+  // recently viewed tours state
+  const [recentTours, setRecentTours] = useState<any[]>([]);
+  const [favorites, setFavorites] = useState<any[]>([]);
 
+  const formatPrice = (price: number) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+
+  const toggleFavorite = (id: any) => {
+    setFavorites(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
+  };
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = localStorage.getItem('recentTours');
+    if (!raw) return;
+    let ids: string[] = [];
+    try {
+      ids = JSON.parse(raw);
+    } catch (e) { ids = []; }
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    ids = ids.slice(0, 6);
+
+    // fetch each slug/id from backend; tolerate different response shapes
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:8080/api/tours/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slugs: ids })
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        // json.data is ordered array (some elements may be null)
+        const data = Array.isArray(json.data) ? json.data : [];
+        setRecentTours(data); // keep raw DB-like objects, map later
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentBanner((prev) => (prev + 1) % banners.length);
@@ -260,6 +299,36 @@ export default function Index() {
     return () => clearInterval(timer);
   }, []);
 
+  // map batch API shape -> TourResults expected list item shape
+  const mappedRecent = recentTours.map((db: any, i: number) => {
+    if (!db) return null;
+    const id = db._id?.$oid ?? db._id ?? db.id ?? (db.slug ?? `recent-${i}`);
+    const images = Array.isArray(db.images) && db.images.length ? db.images : (db.image ? [db.image] : ['/placeholder.svg']);
+    const startDates = Array.isArray(db.startDates) ? db.startDates : (Array.isArray(db.availableDates) ? db.availableDates : []);
+    const availableDates = startDates.slice(0, 30).map((d: any) => (typeof d === 'string' ? d : (d.date || d.$date || d)));
+    const durationStr = typeof db.duration === 'number' ? `${db.duration} ngày ${db.duration > 1 ? `${db.duration - 1} đêm` : 'đêm'}` : (db.duration ?? '');
+    return {
+      id,
+      slug: db.slug ?? id,
+      name: db.name ?? 'Tour',
+      departure: db.departureFrom ?? db.startLocation?.address ?? db.departure ?? '',
+      duration: durationStr,
+      priceFrom: Number(db.adultPrice ?? db.priceFrom ?? 0),
+      originalPrice: Number(db.originalPrice ?? db.listPrice ?? 0) || undefined,
+      images,
+      availableDates: availableDates,
+      highlights: db.highlights || [],
+      includes: db.services || db.includes || [],
+      transport: db.transport || '',
+      hotel: db.hotel || '',
+      meals: db.meals || '',
+      maxGroup: db.maxGroupSize ?? db.maxGroup ?? 0,
+      rating: db.ratingsAverage ?? db.rating ?? 0,
+      reviews: db.ratingsQuantity ?? db.reviews ?? 0,
+      badge: db.badge ?? '',
+      badgeColor: db.badgeColor ?? 'default',
+    };
+  }).filter(Boolean);
   return (
     <>
       {/* Traveloka-style Banner */}
@@ -273,7 +342,7 @@ export default function Index() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {quickCategories.map((category) => (
-              <Link prefetch={false} 
+              <Link prefetch={false}
                 key={category.title}
                 href={category.link}
                 className="group block"
@@ -299,7 +368,7 @@ export default function Index() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl lg:text-3xl font-bold">Ưu đãi & Khuyến mãi Hot</h2>
             <Button variant="outline" asChild>
-              <Link prefetch={false}  href="/khuyen-mai">
+              <Link prefetch={false} href="/khuyen-mai">
                 Xem tất cả
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Link>
@@ -340,7 +409,7 @@ export default function Index() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl lg:text-3xl font-bold">Tour nổi bật</h2>
             <Button variant="outline" asChild>
-              <Link prefetch={false}  href="/tour">
+              <Link prefetch={false} href="/tour">
                 Xem tất cả
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Link>
@@ -388,6 +457,29 @@ export default function Index() {
               </Card>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Tour du lịch bạn đã xem gần đây */}
+      <section className="py-12 lg:py-16 bg-white">
+        <div className="container">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl lg:text-3xl font-bold">Tour bạn đã xem gần đây</h2>
+            <Button variant="outline" size="sm" onClick={() => { localStorage.removeItem('recentTours'); setRecentTours([]); }}>
+              Xóa
+            </Button>
+          </div>
+          {mappedRecent.length ? (
+            <TourResults
+              isLoading={false}
+              sortedTours={mappedRecent}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              formatPrice={formatPrice}
+            />
+          ) : (
+            <div className="text-[hsl(var(--muted-foreground))]">Chưa có tour nào được xem gần đây.</div>
+          )}
         </div>
       </section>
 
@@ -462,11 +554,11 @@ export default function Index() {
           <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {whyChooseUs.map((item, index) => (
               <div key={index} className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{background: 'hsl(var(--primary))/0.1', color: 'hsl(var(--primary))'}}>
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ background: 'hsl(var(--primary))/0.1', color: 'hsl(var(--primary))' }}>
                   <item.icon className="h-8 w-8" />
                 </div>
                 <h3 className="font-semibold mb-2">{item.title}</h3>
-                <p className="text-sm" style={{color: 'hsl(var(--muted-foreground))'}}>{item.description}</p>
+                <p className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>{item.description}</p>
               </div>
             ))}
           </div>
@@ -479,7 +571,7 @@ export default function Index() {
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-2xl lg:text-3xl font-bold">Tin tức & Blog</h2>
             <Button variant="outline" asChild>
-              <Link prefetch={false}  href="/tin-tuc">
+              <Link prefetch={false} href="/tin-tuc">
                 Xem tất cả
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Link>
@@ -511,6 +603,6 @@ export default function Index() {
         </div>
       </section>
     </>
-     
+
   );
 }
