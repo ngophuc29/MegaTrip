@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 
 // Khai báo mảng phương thức thanh toán
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 const paymentMethods = [
     {
         id: 'credit_card',
@@ -422,6 +423,143 @@ export default function ThanhToan() {
     const [promoMessage, setPromoMessage] = useState<string | null>(null);
     const [applyingPromo, setApplyingPromo] = useState(false);
 
+    // Auto-apply states
+    const [appliedPromoAuto, setAppliedPromoAuto] = useState<any | null>(null); // promo user accepted
+    const [appliedPromoSource, setAppliedPromoSource] = useState<'auto' | 'manual' | null>(null);
+    const [appliedPromoCandidate, setAppliedPromoCandidate] = useState<any | null>(null); // best autoApply candidate for current cart
+    const [appliedPromoCandidateDiscount, setAppliedPromoCandidateDiscount] = useState<number>(0);
+    // control suggestion visibility (allow user to "close" and reopen)
+    const [showPromoSuggestion, setShowPromoSuggestion] = useState<boolean>(true);
+    // info shown after user accepts an auto-applied promo (persistent message)
+    const [autoAppliedInfo, setAutoAppliedInfo] = useState<{ code?: string | null; title?: string; saved: number } | null>(null);
+    // multiple-candidates support (FE)
+    const [appliedPromoCandidates, setAppliedPromoCandidates] = useState<{ promo: any; discount: number }[]>([]);
+    const [showPromoModal, setShowPromoModal] = useState(false);
+    const [selectedCandidateIndex, setSelectedCandidateIndex] = useState<number | null>(null);
+
+    // compute stacked application: fixed first, then percent on remaining
+    const computeStackedForList = (items: { promo: any; discount?: number }[], baseAmount: number) => {
+        let remaining = baseAmount;
+        let total = 0;
+        const applied: any[] = [];
+        // fixed first
+        for (const it of items.filter(x => x.promo.type === 'fixed')) {
+            const p = it.promo;
+            let d = Math.min(Number(p.value || 0), remaining);
+            if (p.maxDiscount && p.maxDiscount > 0) d = Math.min(d, p.maxDiscount);
+            if (d <= 0) continue;
+            remaining -= d;
+            total += d;
+            applied.push({ promo: p, discount: d });
+        }
+        // percent next
+        for (const it of items.filter(x => x.promo.type === 'percent')) {
+            const p = it.promo;
+            let d = Math.floor(remaining * (Number(p.value || 0) / 100));
+            if (p.maxDiscount && p.maxDiscount > 0) d = Math.min(d, p.maxDiscount);
+            d = Math.min(d, remaining);
+            if (d <= 0) continue;
+            remaining -= d;
+            total += d;
+            applied.push({ promo: p, discount: d });
+        }
+        return { total, applied };
+    };
+    const computeDiscountForPromo = (promo: any, eligibleAmount: number) => {
+        if (!promo) return 0;
+        const minSpend = Number(promo.minSpend || 0);
+        if (eligibleAmount < minSpend) return 0;
+        let discount = 0;
+        if (promo.type === 'percent') {
+            discount = Math.floor(eligibleAmount * (Number(promo.value || 0) / 100));
+        } else {
+            discount = Number(promo.value || 0);
+        }
+        discount = Math.max(0, Math.min(discount, eligibleAmount));
+        if (typeof promo.maxDiscount === 'number' && promo.maxDiscount > 0) discount = Math.min(discount, promo.maxDiscount);
+        return discount;
+    };
+
+    // Auto-apply effect: find autoApply promo candidates (single best or multiple)
+    useEffect(() => {
+        // don't suggest auto-apply if user typed a manual code or already accepted an auto promo
+        if ((promoCode && promoCode.trim().length > 0) || appliedPromoAuto) {
+            setAppliedPromoCandidate(null);
+            setAppliedPromoCandidateDiscount(0);
+            setAppliedPromoCandidates([]);
+            setShowPromoModal(false);
+            return;
+        }
+
+        let cancelled = false;
+        (async () => {
+            try {
+                const serviceMap: Record<string, string> = { flight: 'flights', bus: 'buses', tour: 'tours' };
+                const serviceType = serviceMap[bookingType] || 'all';
+                const amount = Number(normalizedPricing?.total ?? 0);
+                if (!amount || amount <= 0) {
+                    setAppliedPromoCandidate(null);
+                    setAppliedPromoCandidateDiscount(0);
+                    setAppliedPromoCandidates([]);
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                params.set('status', 'active');
+                params.set('pageSize', '200');
+                params.set('appliesTo', serviceType);
+                const res = await fetch(`${API_BASE}/api/promotions?${params.toString()}`);
+                if (!res.ok) return;
+                const json = await res.json();
+                const list = Array.isArray(json.data) ? json.data : [];
+
+                const candidates = list.filter((p: any) =>
+                    p.autoApply === true &&
+                    p.isActiveNow === true &&
+                    !p.isExpired &&
+                    !p.isUsedUp &&
+                    (Array.isArray(p.appliesTo) ? (p.appliesTo.includes('all') || p.appliesTo.includes(serviceType)) : true)
+                );
+
+                const evaluated = candidates
+                    .map(p => {
+                        const eligibleAmount = amount;
+                        const d = computeDiscountForPromo(p, eligibleAmount);
+                        return { promo: p, discount: Math.round(d) };
+                    })
+                    .filter(e => e.discount > 0)
+                    .sort((a, b) => (b.discount - a.discount)); // sort desc so index 0 is best
+
+                if (!cancelled) {
+                    if (evaluated.length === 0) {
+                        setAppliedPromoCandidates([]);
+                        setAppliedPromoCandidate(null);
+                        setAppliedPromoCandidateDiscount(0);
+                        if (!promoCode) setPromoMessage(null);
+                    } else if (evaluated.length === 1) {
+                        // single candidate -> keep old banner flow
+                        setAppliedPromoCandidates([]);
+                        setAppliedPromoCandidate(evaluated[0].promo);
+                        setAppliedPromoCandidateDiscount(evaluated[0].discount);
+                        setShowPromoSuggestion(true);
+                        setPromoMessage(`Đơn hàng của bạn thỏa điều kiện khuyến mãi: ${evaluated[0].promo.title || evaluated[0].promo.code || 'Khuyến mãi tự động'} — bạn có muốn áp dụng?`);
+                    } else {
+                        // multiple candidates -> keep best as banner suggestion AND expose full list for modal
+                        setAppliedPromoCandidates(evaluated);
+                        // keep best candidate visible in banner so user still sees a suggested code
+                        setAppliedPromoCandidate(evaluated[0].promo);
+                        setAppliedPromoCandidateDiscount(evaluated[0].discount);
+                        setShowPromoSuggestion(true);
+                        setPromoMessage(`Đơn hàng của bạn thỏa nhiều khuyến mãi tự động — chọn mã bạn muốn áp dụng.`);
+                        // do NOT auto-open modal; show "Chọn mã khác" button on banner
+                    }
+                }
+            } catch (err) {
+                // ignore
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [normalizedPricing?.total, bookingType, promoCode, appliedPromoAuto]);
     // New: toggle states for showing details
     const [showFareDetails, setShowFareDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
     const [showAddonsDetails, setShowAddonsDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
@@ -497,39 +635,104 @@ export default function ThanhToan() {
     };
 
     // Promo handlers: simple client-side mapping for demo purposes
-    const applyPromo = () => {
+    // Promo handlers: validate code on server, compute discount and update UI total
+    const applyPromo = async () => {
         setApplyingPromo(true);
+        setPromoMessage(null);
         try {
             const code = (promoCode || '').trim().toUpperCase();
+            if (appliedPromoCandidate && !code) {
+                // nothing to do: user clicked empty apply; bail
+                setApplyingPromo(false);
+                return;
+            }
+            // if user is applying manual code, drop auto suggestion
+            if (code) {
+                setAppliedPromoCandidate(null);
+            }
             if (!code) {
                 setPromoMessage('Vui lòng nhập mã giảm giá.');
                 setApplyingPromo(false);
                 return;
             }
 
-            // determine base total to compute percentage discounts
             const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
-            const base = Math.max(0, payloadTotal);
+            const serviceMap: Record<string, string> = { flight: 'flights', bus: 'buses', tour: 'tours' };
+            const serviceType = serviceMap[bookingType] || 'all';
 
-            let discount = 0;
-            if (code === 'TOUR500') {
-                discount = Math.min(500000, base); // fixed 500k off
-            } else if (code === 'FAMILY25') {
-                discount = Math.round(base * 0.25); // 25% off
-            } else if (code === 'WEEKEND30') {
-                discount = Math.round(base * 0.30); // 30% off
-            } else {
-                setPromoMessage('Mã không hợp lệ hoặc đã hết hạn.');
+
+            try {
+                // fetch promotion by code (server supports GET /api/promotions/:id where id can be code)
+                const probeRes = await fetch(`${API_BASE}/api/promotions/${encodeURIComponent(code)}`);
+                if (probeRes.ok) {
+                    const promoFound = await probeRes.json().catch(() => null);
+                    if (promoFound) {
+                        const applies = Array.isArray(promoFound.appliesTo) ? promoFound.appliesTo : [];
+                        if (!(applies.includes('all') || applies.includes(serviceType))) {
+                            setPromoMessage('Mã không áp dụng cho dịch vụ này.');
+                            setApplyingPromo(false);
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {
+                // ignore probe errors and continue to validate (server will still enforce)
+            }
+
+            const res = await fetch(`${API_BASE}/api/promotions/validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code, serviceType, amount: payloadTotal }),
+            });
+            const json = await res.json().catch(() => ({ ok: false, error: 'invalid_response' }));
+
+            if (!res.ok || !json.ok) {
+                // map server error to user-friendly message
+                const errCode = json.error || 'server_error';
+                let msg = 'Mã không hợp lệ hoặc lỗi server.';
+                if (errCode === 'promo_not_found') msg = 'Mã không tồn tại.';
+                else if (errCode === 'promo_inactive' || errCode === 'promo_not_started') msg = 'Mã chưa hoạt động.';
+                else if (errCode === 'promo_expired') msg = 'Mã đã hết hạn.';
+                else if (errCode === 'promo_used_up') msg = 'Mã đã hết lượt sử dụng.';
+                else if (errCode === 'not_applicable_service') msg = 'Mã không áp dụng cho dịch vụ này.';
+                else if (errCode === 'min_spend_not_met') {
+                    const need = Number(json.requiredMinSpend || 0);
+                    msg = `Cần đơn tối thiểu ${formatPrice(need)} để dùng mã.`;
+                }
+                setPromoMessage(msg);
                 setDiscountAmount(0);
                 setApplyingPromo(false);
                 return;
             }
 
-            setDiscountAmount(discount);
-            setPromoMessage(`Áp dụng mã ${code}: -${formatPrice(discount)}`);
+            // success: server returns discount, newTotal, eligibleAmount
+            const discount = Number(json.discount || 0);
+            const newTotal = Number(json.newTotal || Math.max(0, payloadTotal - discount));
+
+            setDiscountAmount(Math.round(discount));
+            setPromoMessage(`Áp dụng mã ${code}: -${formatPrice(Math.round(discount))}`);
+            // Persist applied promo in UI similar to auto-apply so banner appears
+            try {
+                const promoObj = json.promo ?? { code, title: json.title ?? code, type: json.type ?? 'fixed', value: json.value ?? discount };
+                setAppliedPromoAuto({ ...promoObj, appliedDiscount: Math.round(discount) });
+                setAppliedPromoSource('manual');
+                setAutoAppliedInfo({ code: promoObj.code ?? code, title: promoObj.title ?? code, saved: Math.round(discount) });
+                // lock promoCode to the applied code (keeps UI consistent)
+                setPromoCode(code);
+
+                // console log for debugging
+                console.log(`Áp dụng mã thủ công: ${code} — Tiết kiệm ${formatPrice(Math.round(discount))}`, {
+                    code,
+                    discount: Math.round(discount),
+                    newTotal,
+                    response: json,
+                });
+            } catch (e) {
+                // ignore logging errors
+            }
         } catch (err) {
             console.error('applyPromo error', err);
-            setPromoMessage('Lỗi khi áp dụng mã.');
+            setPromoMessage('Lỗi khi kết nối server. Vui lòng thử lại.');
             setDiscountAmount(0);
         } finally {
             setApplyingPromo(false);
@@ -537,6 +740,18 @@ export default function ThanhToan() {
     };
 
     const removePromo = () => {
+        // if an auto promo was accepted, remove it; otherwise clear manual promo
+        if (appliedPromoAuto) {
+            setAppliedPromoAuto(null);
+            setAppliedPromoCandidate(null);
+            setAppliedPromoCandidateDiscount(0);
+            setDiscountAmount(0);
+            setPromoMessage(null);
+            setPromoCode('');
+            setAutoAppliedInfo(null); // clear persistent applied info
+            setAppliedPromoSource(null);
+            return;
+        }
         setPromoCode('');
         setDiscountAmount(0);
         setPromoMessage(null);
@@ -1596,8 +1811,10 @@ export default function ThanhToan() {
                                                 )}
 
                                                 <div className="flex justify-between text-sm mt-2"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
-                                                <div className="flex justify-between text-sm text-green-600"><span>Giảm giá</span><span>{formatPrice(discount)}</span></div>
-                                                {/* Fare subtotal (tổng giá vé trước thuế & dịch vụ) */}
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Giảm giá</span>
+                                                    <span>{formatPrice(Number(discountAmount || discount || 0))}</span>
+                                                </div>                                                {/* Fare subtotal (tổng giá vé trước thuế & dịch vụ) */}
                                                 <div className="flex justify-between font-medium mt-2">
                                                     <span>Tổng giá vé</span>
                                                     <span>{formatPrice(adultTotal + childTotal + infantTotal)}</span>
@@ -1605,7 +1822,7 @@ export default function ThanhToan() {
                                                 <Separator />
                                                 <div className="flex justify-between font-bold text-lg">
                                                     <span>Tổng cộng</span>
-                                                    <span className="text-primary">{formatPrice(Math.round(computedTotal))}</span>
+                                                    <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(computedTotal) - (discountAmount || 0))))}</span>
                                                 </div>
                                             </>
                                         );
@@ -1702,12 +1919,15 @@ export default function ThanhToan() {
                                                 }
 
                                                 <div className="flex justify-between text-sm mt-2"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
-                                                <div className="flex justify-between text-sm text-green-600"><span>Giảm giá</span><span>{formatPrice(discount)}</span></div>
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Giảm giá</span>
+                                                    <span>{formatPrice(Number(discountAmount || discount || 0))}</span>
+                                                </div>
 
                                                 <Separator />
                                                 <div className="flex justify-between font-bold text-lg">
                                                     <span>Tổng cộng</span>
-                                                    <span className="text-primary">{formatPrice(Math.round(computedTotal))}</span>
+                                                    <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(computedTotal) - (discountAmount || 0))))}</span>
                                                 </div>
                                             </>
                                         );
@@ -1989,13 +2209,13 @@ export default function ThanhToan() {
 
                                             <div className="flex justify-between text-sm text-green-600">
                                                 <span>Giảm giá</span>
-                                                <span>{formatPrice(Number(p.discount ?? 0))}</span>
+                                                <span>{formatPrice(Number(discountAmount || Number(p.discount || 0)))}</span>
                                             </div>
 
                                             <Separator />
                                             <div className="flex justify-between font-bold text-lg">
                                                 <span>Tổng cộng</span>
-                                                <span className="text-primary">{formatPrice(Math.round(Number(grandTotal || p.estimatedTotal || 0)))}</span>
+                                                <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(grandTotal || p.estimatedTotal || 0) - (discountAmount || 0))))}</span>
                                             </div>
                                         </>
                                     );
@@ -2003,18 +2223,182 @@ export default function ThanhToan() {
                                     <div className="text-sm text-muted-foreground">Đang tải tóm tắt đơn hàng...</div>
                                 )}
                                 <Separator />
-
+                                {autoAppliedInfo && (
+                                    <div className="mt-3 p-3 bg-green-50 border border-green-100 rounded-md text-sm flex items-center justify-between">
+                                        <div>
+                                            <div className="font-medium">
+                                                {appliedPromoSource === 'manual'
+                                                    ? 'Bạn đã sử dụng khuyến mãi từ việc nhập mã'
+                                                    : 'Bạn đã sử dụng khuyến mãi tự động'}
+                                            </div>
+                                            <div className="text-xs text-green-700">
+                                                {autoAppliedInfo.code ? `Mã: ${autoAppliedInfo.code}` : (autoAppliedInfo.title ?? 'Khuyến mãi')} — Tiết kiệm {formatPrice(autoAppliedInfo.saved)}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                // allow user to remove the applied auto promo
+                                                removePromo();
+                                            }}>Bỏ</Button>
+                                        </div>
+                                    </div>
+                                )}
                                 {/* Promo Code input - ADDED */}
                                 <div className="pt-2 pb-2">
+                                    {/* Suggestion headline placed above the banner */}
+                                    {appliedPromoCandidate && !appliedPromoAuto && !promoCode && (
+                                        <div className="mb-2 text-sm text-muted-foreground">
+                                            Đơn hàng của bạn thỏa điều kiện khuyến mãi: <span className="font-medium text-[hsl(var(--primary))]">{appliedPromoCandidate.title || appliedPromoCandidate.code || 'Khuyến mãi tự động'}</span> — bạn có muốn áp dụng?
+                                        </div>
+                                    )}
+                                    {/* Auto-apply suggestion banner (respect showPromoSuggestion toggle) */}
+                                    {appliedPromoCandidate && !appliedPromoAuto && !promoCode && showPromoSuggestion && (
+                                        <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm ">
+                                            <div className='mb-3'>
+                                                <div className="font-medium">Khuyến mãi tự động khả dụng</div>
+                                                <div className="text-xs text-muted-foreground">
+                                                    {appliedPromoCandidate.title || appliedPromoCandidate.code || 'Khuyến mãi'} — {appliedPromoCandidateDiscount > 0 ? `Tiết kiệm ${formatPrice(appliedPromoCandidateDiscount)}` : ''}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2 flex-nowrap">
+                                                    <Button size="sm" className="whitespace-nowrap" onClick={() => {
+                                                        // accept auto promo
+                                                        setAppliedPromoAuto({ ...appliedPromoCandidate, appliedDiscount: appliedPromoCandidateDiscount });
+                                                        setDiscountAmount(appliedPromoCandidateDiscount);
+                                                        const saved = Math.round(appliedPromoCandidateDiscount || 0);
+                                                        const promoLabel = appliedPromoCandidate.title || appliedPromoCandidate.code || 'Khuyến mãi tự động';
+                                                        const codeVal = appliedPromoCandidate.code ? String(appliedPromoCandidate.code) : null;
+                                                        setAutoAppliedInfo({ code: codeVal, title: appliedPromoCandidate.title, saved });
+                                                        setPromoMessage(`Đã áp dụng khuyến mãi tự động: ${promoLabel} — Tiết kiệm ${formatPrice(saved)}`);
+                                                        setPromoCode(codeVal ?? '');
+                                                        setShowPromoSuggestion(false);
+                                                        console.log(`Đã áp dụng khuyến mãi tự động: ${promoLabel}${codeVal ? ` (mã ${codeVal})` : ''} — Tiết kiệm ${formatPrice(saved)}`);
+                                                    }}>
+                                                        Áp dụng
+                                                    </Button>
+                                                    {/* new: open modal to choose other auto promos when multiple candidates available */}
+                                                    {appliedPromoCandidates.length > 0 && (
+                                                        <Button variant="outline" size="sm" className="whitespace-nowrap" onClick={() => { setShowPromoModal(true); }}>
+                                                            Chọn mã khác
+                                                        </Button>
+                                                    )}
+                                                    <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => {
+                                                        setShowPromoSuggestion(false);
+                                                        setPromoMessage(null);
+                                                    }}>
+                                                        Đóng
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Modal for choosing other auto-apply promos */}
+                                    {showPromoModal && appliedPromoCandidates.length > 0 && (
+                                        <div className="fixed inset-0 z-50 flex items-center justify-center">
+                                            <div className="absolute inset-0 bg-black opacity-40" onClick={() => { setShowPromoModal(false); setSelectedCandidateIndex(null); }} />
+                                            <div className="bg-white rounded-lg shadow-lg max-w-xl w-full p-4 z-10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <h3 className="text-lg font-medium">Chọn khuyến mãi tự động</h3>
+                                                    <Button variant="ghost" size="sm" onClick={() => { setShowPromoModal(false); setSelectedCandidateIndex(null); }}>Đóng</Button>
+                                                </div>
+                                                <div className="space-y-3 max-h-72 overflow-auto">
+                                                    {appliedPromoCandidates.map((c: any, idx: number) => {
+                                                        const p = c.promo;
+                                                        return (
+                                                            <div key={p._id || idx} className="p-3 border rounded-md flex items-center justify-between">
+                                                                <div>
+                                                                    <div className="font-medium">{p.title || p.code || 'Khuyến mãi'}</div>
+                                                                    <div className="text-xs text-muted-foreground">{p.code ? `Mã: ${p.code}` : (p.type === 'percent' ? `${p.value}%` : formatPrice(p.value))}</div>
+                                                                    <div className="text-sm text-green-600 mt-1">Tiết kiệm {formatPrice(c.discount)}</div>
+                                                                </div>
+                                                                <div className="flex flex-col items-end gap-2">
+                                                                    <input
+                                                                        type="radio"
+                                                                        name="promoPick"
+                                                                        checked={selectedCandidateIndex === idx}
+                                                                        onChange={() => { setSelectedCandidateIndex(idx); }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="mt-3 p-3 border rounded-md bg-gray-50">
+                                                    {(() => {
+                                                        const pick = selectedCandidateIndex != null ? appliedPromoCandidates[selectedCandidateIndex] : null;
+                                                        if (!pick) return <div className="text-sm text-muted-foreground">Chọn khuyến mãi để xem tiết kiệm.</div>;
+                                                        return (
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="text-sm">Tiết kiệm nếu áp dụng</div>
+                                                                <div className="font-medium text-[hsl(var(--primary))]">{formatPrice(Math.round(pick.discount))}</div>
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                                <div className="mt-4 flex justify-end gap-2">
+                                                    <Button variant="outline" onClick={() => { setShowPromoModal(false); setSelectedCandidateIndex(null); }}>Hủy</Button>
+                                                    <Button onClick={() => {
+                                                        if (selectedCandidateIndex == null) return;
+                                                        const pick = appliedPromoCandidates[selectedCandidateIndex];
+                                                        if (!pick) return;
+                                                        const p = pick.promo;
+                                                        const saved = Math.round(pick.discount || 0);
+                                                        // apply single promo
+                                                        setAppliedPromoAuto({ ...p, appliedDiscount: saved });
+                                                        setDiscountAmount(saved);
+                                                        setAutoAppliedInfo({ code: p.code ?? null, title: p.title ?? p.code ?? 'Khuyến mãi', saved });
+                                                        setPromoMessage(`Đã áp dụng khuyến mãi: ${p.title || p.code || 'Khuyến mãi'} — Tiết kiệm ${formatPrice(saved)}`);
+                                                        setShowPromoModal(false);
+                                                        setSelectedCandidateIndex(null);
+                                                        // lock manual entry if promo has code
+                                                        if (p.code) setPromoCode(String(p.code));
+                                                    }}>
+                                                        Áp dụng đã chọn
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!showPromoSuggestion && appliedPromoCandidate && !appliedPromoAuto && !promoCode && (
+                                        <div className="mb-3">
+                                            <Button variant="ghost" size="sm" onClick={() => {
+                                                setShowPromoSuggestion(true);
+                                                setPromoMessage(`Đơn hàng của bạn thỏa điều kiện khuyến mãi: ${appliedPromoCandidate.title || appliedPromoCandidate.code || 'Khuyến mãi tự động'} — bạn có muốn áp dụng?`);
+                                            }}>
+                                                Mở lại khuyến mãi tự động
+                                            </Button>
+                                        </div>
+                                    )}
+
                                     <label className="text-sm font-medium block mb-2">Mã giảm giá</label>
                                     <div className="flex gap-2">
                                         <Input
                                             placeholder="Nhập mã (ví dụ: TOUR500, FAMILY25)"
                                             value={promoCode}
-                                            onChange={(e) => setPromoCode(e.target.value)}
+                                            onChange={(e) => {
+                                                // typing manual code should remove auto applied promo / suggestion
+                                                setPromoCode(e.target.value);
+                                                if (appliedPromoAuto) {
+                                                    setAppliedPromoAuto(null);
+                                                    setDiscountAmount(0);
+                                                    setAppliedPromoSource(null);
+                                                }
+                                                if (appliedPromoCandidate) {
+                                                    setAppliedPromoCandidate(null);
+                                                    setAppliedPromoCandidateDiscount(0);
+                                                }
+                                            }}
                                             className="flex-1"
+                                            disabled={!!appliedPromoAuto}
                                         />
-                                        {discountAmount > 0 ? (
+                                        {appliedPromoAuto ? (
+                                            // label depends on how the promo was applied
+                                            <Button variant="ghost" onClick={removePromo} className="whitespace-nowrap">
+                                                {appliedPromoSource === 'manual' ? 'Hủy áp dụng' : 'Bỏ mã tự động'}
+                                            </Button>
+                                        ) : discountAmount > 0 ? (
                                             <Button variant="ghost" onClick={removePromo} className="whitespace-nowrap">
                                                 Xóa
                                             </Button>
@@ -2024,6 +2408,11 @@ export default function ThanhToan() {
                                             </Button>
                                         )}
                                     </div>
+                                    {/* {promoMessage && (
+                                        <div className={`mt-2 text-sm ${discountAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                            {promoMessage}
+                                        </div>
+                                    )} */}
                                     {promoMessage && (
                                         <div className={`mt-2 text-sm ${discountAmount > 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {promoMessage}

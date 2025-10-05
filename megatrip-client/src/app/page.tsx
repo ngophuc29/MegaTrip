@@ -161,7 +161,7 @@ const popularFlights = [
     price: 'từ 1.790.000₫',
     cities: 'Hà Nội → TP.HCM',
   },
-  
+
   {
     route: 'HAN - DAD',
     airline: 'Bamboo Airways',
@@ -256,7 +256,54 @@ export default function Index() {
   // recently viewed tours state
   const [recentTours, setRecentTours] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
+  // fetch promotions from API and pick one per service type (flights, buses, tours)
+  const [remotePromotions, setRemotePromotions] = useState<any[]>([]);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const handleCopyCode = async (code?: string | null) => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(code);
+      setTimeout(() => setCopiedCode(null), 1000);
+    } catch (err) {
+      // ignore
+    }
+  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:7700/api/promotions?pageSize=50&status=active');
+        if (!res.ok) return;
+        const json = await res.json();
+        setRemotePromotions(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        // ignore fetch errors for now
+      }
+    })();
+  }, []);
 
+  // pick one promo per service type BUT only promos that require a code (requireCode === true)
+  const promotionsToShow = (() => {
+    const types = ['flights', 'buses', 'tours'];
+    const picked: any[] = [];
+    // only consider promos that are active/usable AND require a code
+    const usableWithCode = (p: any) => !!p && p.isActiveNow && !p.isExpired && !p.isUsedUp && p.requireCode === true;
+    +
+      types.forEach((type) => {
+        // prefer promo that explicitly lists the type and requires a code
+        const explicit = remotePromotions.find((p) =>
+          Array.isArray(p.appliesTo) && p.appliesTo.includes(type) && usableWithCode(p)
+        );
+        if (explicit) { picked.push(explicit); return; }
+        // fallback to global 'all' promo that requires a code
+        const global = remotePromotions.find((p) =>
+          Array.isArray(p.appliesTo) && p.appliesTo.includes('all') && usableWithCode(p)
+        );
+        if (global) picked.push(global);
+        // if neither found, do not include this type
+      });
+    return picked;
+  })();
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
 
@@ -375,33 +422,41 @@ export default function Index() {
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {promotions.map((promo) => (
-              <Card key={promo.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="destructive" className="text-lg font-bold">
-                      -{promo.discount}
-                    </Badge>
-                    <Badge variant="outline">
-                      Hết hạn: {promo.validUntil}
-                    </Badge>
-                  </div>
-                  <CardTitle className="text-lg">{promo.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground mb-3">{promo.description}</p>
-                  <div className="flex items-center justify-between">
-                    <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono">
-                      {promo.code}
-                    </code>
-                    <Button size="sm" variant="destructive">Sử dụng ngay</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+            {promotionsToShow.map((p: any, idx: number) => {
+              const discount = p.type === 'percent' ? `${p.value}%` : new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p.value);
+              const validUntil = p.validTo ? new Date(p.validTo).toLocaleDateString('vi-VN') : '-';
+              const code = p.code || (p.requireCode ? '-' : 'Tự động');
+              return (
+                <Card key={p._id || idx} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="destructive" className="text-lg font-bold">-{discount}</Badge>
+                      <Badge variant="outline">Hết hạn: {validUntil}</Badge>
+                    </div>
+                    <CardTitle className="text-lg">{p.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground mb-3">{p.description}</p>
+                    <div className="flex items-center justify-between">
+                      <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono">{code}</code>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleCopyCode(p.code)}
+                        disabled={!p.code || copiedCode === p.code}
+                      >
+                        {copiedCode === p.code ? 'Đang lấy mã...' : 'Lấy mã ngay'}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
+
+
 
       {/* Featured Tours */}
       <section className="py-12 lg:py-16">
