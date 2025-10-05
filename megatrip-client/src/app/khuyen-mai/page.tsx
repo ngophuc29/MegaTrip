@@ -1,5 +1,5 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -27,7 +27,7 @@ import {
     Tag,
     AlertCircle,
 } from 'lucide-react';
-
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 const promotionCategories = [
     { id: 'all', name: 'Tất cả', count: 24 },
     { id: 'flight', name: 'Vé máy bay', count: 8, icon: Plane },
@@ -175,6 +175,9 @@ const voucherCodes = [
 
 export default function KhuyenMai() {
     const [activeCategory, setActiveCategory] = useState('all');
+    const [promotions, setPromotions] = useState<any[]>([]);
+    const [loadingPromos, setLoadingPromos] = useState(false);
+    const [promoError, setPromoError] = useState<string | null>(null);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('newest');
@@ -195,7 +198,70 @@ export default function KhuyenMai() {
             currency: 'VND',
         }).format(price);
     };
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                setLoadingPromos(true);
+                const params = new URLSearchParams();
+                params.set('status', 'active');
+                params.set('pageSize', '1000');
+                const res = await fetch(`${API_BASE}/api/promotions?${params.toString()}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const json = await res.json();
+                const list = Array.isArray(json.data) ? json.data : [];
+                const fmt = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' });
 
+                const mapped = list.map((p: any, idx: number) => {
+                    // map server promo -> local voucher shape used in this component
+                    // normalize appliesTo values (handle plural forms from API)
+                    const rawApplies = Array.isArray(p.appliesTo) && p.appliesTo.length ? p.appliesTo[0] : (p.appliesTo || 'all');
+                    const normalize = (v: string) => {
+                        if (!v) return 'all';
+                        const s = String(v).toLowerCase();
+                        if (s === 'buses' || s === 'bus') return 'bus';
+                        if (s === 'tours' || s === 'tour') return 'tour';
+                        if (s === 'flights' || s === 'flight') return 'flight';
+                        if (s === 'all' || s === 'any') return 'all';
+                        return s;
+                    };
+                    const category = normalize(rawApplies);
+                    const validToIso = p.validTo || p.expiresAt || p.expireAt || p.to || p.endDate || null;
+                    const validTo = validToIso ? (() => {
+                        const d = new Date(validToIso);
+                        const dd = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                        return dd;
+                    })() : (p.validTo || '');
+
+                    return {
+                        id: p._id ?? p.id ?? `promo_${idx}`,
+                        code: p.code ?? '',
+                        title: p.title ?? p.name ?? p.code ?? '',
+                        description: p.description ?? '',
+                        discount: p.type === 'percent' ? `${p.value}%` : (p.value ? fmt.format(Number(p.value)) : ''),
+                        type: p.type ?? 'fixed',
+                        category: category,
+                        validTo: validTo,
+                        minOrder: Number(p.minSpend ?? p.minOrder ?? 0),
+                        maxDiscount: Number(p.maxDiscount ?? p.value ?? 0),
+                        usageLimit: Number(p.maxUses ?? p.usageLimit ?? 0),
+                        usageCount: Number(p.usedCount ?? p.usageCount ?? 0),
+                        terms: p.terms ?? p.description ?? '',
+                    };
+                });
+
+                if (!cancelled) {
+                    setPromotions(mapped);
+                    setPromoError(null);
+                }
+            } catch (err: any) {
+                if (!cancelled) setPromoError(String(err?.message ?? err));
+            } finally {
+                if (!cancelled) setLoadingPromos(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
     const getDaysLeft = (validTo: string) => {
         const today = new Date();
         const endDate = new Date(validTo.split('/').reverse().join('-'));
@@ -204,12 +270,22 @@ export default function KhuyenMai() {
         return diffDays;
     };
 
-    const filteredVouchers = voucherCodes.filter(voucher => {
-        const matchesCategory = activeCategory === 'all' || voucher.category === activeCategory;
-        const matchesSearch = voucher.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            voucher.code.toLowerCase().includes(searchTerm.toLowerCase());
+    // use fetched promotions when available, otherwise fallback to static voucherCodes
+    const sourceVouchers = promotions.length ? promotions : voucherCodes;
+    const filteredVouchers = sourceVouchers.filter(voucher => {
+        const matchesCategory = activeCategory === 'all' || (voucher.category ?? 'all') === activeCategory;
+        const matchesSearch = (voucher.title || '').toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (voucher.code || '').toString().toLowerCase().includes(searchTerm.toLowerCase());
         return matchesCategory && matchesSearch;
     });
+
+    // derive counts for tabs
+    const counts = {
+        all: sourceVouchers.length,
+        flight: sourceVouchers.filter(v => (v.category ?? 'all') === 'flight').length,
+        bus: sourceVouchers.filter(v => (v.category ?? 'all') === 'bus').length,
+        tour: sourceVouchers.filter(v => (v.category ?? 'all') === 'tour').length,
+    };
 
     const sortedVouchers = [...filteredVouchers].sort((a, b) => {
         switch (sortBy) {
@@ -229,6 +305,8 @@ export default function KhuyenMai() {
 
     return (
         <>
+            {loadingPromos && <div className="container text-sm text-muted-foreground py-2">Đang tải khuyến mãi...</div>}
+            {promoError && <div className="container text-sm text-red-600 py-2">Lỗi tải khuyến mãi: {promoError}</div>}
             {/* Hero Section */}
             <section className="bg-gradient-to-br from-red-50 to-orange-50 py-12">
                 <div className="container">
@@ -265,7 +343,7 @@ export default function KhuyenMai() {
                                         <span>📅 {promo.validFrom} - {promo.validTo}</span>
                                     </div>
                                     <Button className="w-full" size="sm" asChild>
-                                        <Link prefetch={false}  href="/khuyen-mai">
+                                        <Link prefetch={false} href="/khuyen-mai">
                                             Xem chi tiết
                                         </Link>
                                     </Button>
@@ -310,7 +388,7 @@ export default function KhuyenMai() {
                             {promotionCategories.map((category) => (
                                 <TabsTrigger key={category.id} value={category.id} className="flex items-center gap-2">
                                     {category.icon && <category.icon className="h-4 w-4" />}
-                                    {category.name} ({category.count})
+                                    {category.name} ({counts[category.id] ?? 0})
                                 </TabsTrigger>
                             ))}
                         </TabsList>
@@ -340,7 +418,10 @@ export default function KhuyenMai() {
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-2xl font-bold" style={{ color: 'hsl(var(--destructive))' }}>
-                                                    {voucher.type === 'percent' ? `-${voucher.discount}` : `-${voucher.discount}`}
+                                                    {voucher.type === 'percent'
+                                                        ? `-${voucher.discount}` // e.g. -20%
+                                                        : `-${formatPrice(voucher.maxDiscount ?? 0)}` // fixed amount
+                                                    }
                                                 </div>
                                             </div>
                                         </div>
@@ -349,32 +430,46 @@ export default function KhuyenMai() {
                                     <CardContent>
                                         {/* Voucher Code */}
                                         <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                                            <div className="flex items-center justify-between">
+                                            {voucher.code ? (
+                                                <>
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <Label className="text-xs text-muted-foreground">Mã giảm giá</Label>
+                                                            <div className="font-mono font-bold text-lg text-primary">
+                                                                {voucher.code}
+                                                            </div>
+                                                        </div>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => copyToClipboard(voucher.code)}
+                                                            className="shrink-0"
+                                                        >
+                                                            {copiedCode === voucher.code ? (
+                                                                <>
+                                                                    <Check className="h-4 w-4 mr-1" />
+                                                                    Đã sao chép
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <Copy className="h-4 w-4 mr-1" />
+                                                                    Sao chép
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground mt-2">
+                                                        Sao chép mã này để dán vào ô mã giảm giá khi thanh toán nhé.
+                                                    </p>
+                                                </>
+                                            ) : (
                                                 <div>
-                                                    <Label className="text-xs text-muted-foreground">Mã giảm giá</Label>
-                                                    <div className="font-mono font-bold text-lg text-primary">
-                                                        {voucher.code}
+                                                    {/* <Label className="text-xs text-muted-foreground">Áp dụng tự động</Label> */}
+                                                    <div className="text-sm font-medium">
+                                                        Khuyến mãi này sẽ được hiển thị khi thanh toán giá trị đơn hàng ≥ {formatPrice(voucher.minOrder)}.
                                                     </div>
                                                 </div>
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => copyToClipboard(voucher.code)}
-                                                    className="shrink-0"
-                                                >
-                                                    {copiedCode === voucher.code ? (
-                                                        <>
-                                                            <Check className="h-4 w-4 mr-1" />
-                                                            Đã sao chép
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <Copy className="h-4 w-4 mr-1" />
-                                                            Sao chép
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            </div>
+                                            )}
                                         </div>
 
                                         {/* Usage Progress */}
@@ -398,10 +493,22 @@ export default function KhuyenMai() {
                                                 <span className="font-medium">{formatPrice(voucher.minOrder)}</span>
                                             </div>
                                             {voucher.maxDiscount && (
-                                                <div className="flex items-center justify-between">
-                                                    <span>Giảm tối đa:</span>
-                                                    <span className="font-medium">{formatPrice(voucher.maxDiscount)}</span>
-                                                </div>
+                                                <>
+                                                    {/* show discount label depending on type */}
+                                                    {voucher.type === 'fixed' ? (
+                                                        // fixed: show max fixed discount in VND
+                                                        <div className="flex items-center justify-between">
+                                                            <span>Giảm tối đa:</span>
+                                                            <span className="font-medium">{formatPrice(voucher.maxDiscount ?? 0)}</span>
+                                                        </div>
+                                                    ) : (
+                                                        // percent: show percent value
+                                                        <div className="flex items-center justify-between">
+                                                            <span>Giảm:</span>
+                                                            <span className="font-medium">{voucher.discount}</span>
+                                                        </div>
+                                                    )}
+                                                </>
                                             )}
                                             <div className="flex items-center justify-between">
                                                 <span>Hết hạn:</span>
@@ -448,10 +555,10 @@ export default function KhuyenMai() {
                         </Card>
                     )}
                 </div>
-            </section>
+            </section >
 
             {/* Tips Section */}
-            <section className="py-12 bg-gray-50">
+            <section className="py-12 bg-gray-50" >
                 <div className="container">
                     <h2 className="text-2xl font-bold text-center mb-8">Mẹo tiết kiệm khi đặt dịch vụ</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
