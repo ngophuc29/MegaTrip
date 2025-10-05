@@ -263,7 +263,11 @@ export default function XeDuLich() {
                 const routeToName = b.routeTo?.city || b.routeTo?.name || String(b.routeTo?.code || '');
 
                 // parse numeric fields that might be wrapped by mongo extjson
-                const priceNum = parseNumber(b.price ?? b.pricePerSeat ?? b.price_total);
+                // Prefer explicit adultPrice/childPrice from server. Fallback to legacy price when needed.
+                const adultPriceNum = parseNumber(b.adultPrice ?? b.price ?? b.pricePerSeat ?? b.price_total);
+                const childPriceNum = parseNumber(b.childPrice ?? Math.round(adultPriceNum * 0.75));
+                const infantPriceNum = parseNumber(b.infantPrice ?? Math.round(adultPriceNum * 0.2));
+                const priceNum = adultPriceNum; // keep legacy "price" meaning = adultPrice
                 const seatsTotal = parseNumber(b.seatsTotal ?? b.seats ?? b.totalSeats);
                 const seatsAvailable = parseNumber(b.seatsAvailable ?? b.availableSeats ?? b.seats_free);
 
@@ -291,6 +295,11 @@ export default function XeDuLich() {
                     },
                     duration: b.duration || '',
                     distance: b.distance || '',
+                    // canonical price fields
+                    adultPrice: adultPriceNum,
+                    childPrice: childPriceNum,
+                    infantPrice: infantPriceNum,
+                    // legacy `price` kept for UI compatibility (= adultPrice)
                     price: priceNum,
                     originalPrice: parseNumber(b.originalPrice ?? b.listPrice ?? b.price_before_discount) || undefined,
                     seats: seatsTotal,

@@ -134,7 +134,10 @@ export default function BusResults({
                         </div>
                       )}
                       <div className="text-xl font-bold text-[hsl(var(--primary))]">
-                        {formatPrice(bus.price)}
+                        {formatPrice(bus.adultPrice ?? bus.price ?? 0)}
+                      </div>
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                        Trẻ em: {formatPrice(bus.childPrice ?? Math.round((bus.adultPrice ?? bus.price ?? 0) * 0.75))}
                       </div>
                       <div className="text-xs text-[hsl(var(--muted-foreground))]">Còn {bus.availableSeats} ghế</div>
                     </div>

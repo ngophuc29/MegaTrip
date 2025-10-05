@@ -166,6 +166,9 @@ const getBookingData = (searchParams: URLSearchParams) => {
             return base;
         }
         if (type === 'bus') {
+            const unitAdult = Number(searchParams.get('unitAdult')) || undefined;
+            const unitChild = Number(searchParams.get('unitChild')) || undefined;
+            const unitInfant = Number(searchParams.get('unitInfant')) || undefined;
             // parse extra bus-specific params (safe JSON parse)
             const busId = searchParams.get('busId') || '';
             const busNumber = searchParams.get('busNumber') || '';
@@ -184,6 +187,22 @@ const getBookingData = (searchParams: URLSearchParams) => {
             let passengersArr: any[] = [];
             try { const p = searchParams.get('passengers'); passengersArr = p ? JSON.parse(p) : []; } catch { passengersArr = []; }
 
+            const pricing: any = {
+                basePrice: Number(searchParams.get('basePrice')) || 0,
+                taxes: Number(searchParams.get('taxes')) || 0,
+                addOns: Number(searchParams.get('addOns')) || 0,
+                discount: Number(searchParams.get('discount')) || 0,
+                total: Number(searchParams.get('total')) || 0,
+            };
+
+            // attach explicit per-pax units if present
+            if (typeof unitAdult !== 'undefined' || typeof unitChild !== 'undefined' || typeof unitInfant !== 'undefined') {
+                pricing.perPax = {
+                    adultUnit: unitAdult ?? 0,
+                    childUnit: unitChild ?? Math.round((unitAdult ?? 0) * 0.75),
+                    infantUnit: unitInfant ?? 0,
+                };
+            }
             return {
                 type: 'bus',
                 meta: {
@@ -204,13 +223,7 @@ const getBookingData = (searchParams: URLSearchParams) => {
                     passengerInfo,
                     passengers: passengersArr,
                 },
-                pricing: {
-                    basePrice: Number(searchParams.get('basePrice')) || 0,
-                    taxes: Number(searchParams.get('taxes')) || 0,
-                    addOns: Number(searchParams.get('addOns')) || 0,
-                    discount: Number(searchParams.get('discount')) || 0,
-                    total: Number(searchParams.get('total')) || 0,
-                }
+                pricing
             };
         }
     }
@@ -1464,10 +1477,10 @@ export default function ThanhToan() {
                                                 <span>Giờ xuất phát:</span>
                                                 <span>{normalizedDetails.time ?? '---'}</span>
                                             </div>
-                                            <div className="flex justify-between">
+                                            {/* <div className="flex justify-between">
                                                 <span>Hành khách:</span>
                                                 <span>{passengers.length} người</span>
-                                            </div>
+                                            </div> */}
                                         </div>
                                     </div>
                                 )}
@@ -1499,6 +1512,104 @@ export default function ThanhToan() {
                                 {/* Pricing: hỗ trợ nhiều shape của payload -> lấy trường phù hợp nhất từ payload (ghi nhận tất cả) */}
                                 {mounted ? (() => {
                                     const p = normalizedPricing || {};
+                                    // BUS breakdown (new)
+                                    if (bookingType === 'bus') {
+                                        // derive counts: prefer explicit counts in bookingData, then URL params, then local passengers array
+                                        const counts = {
+                                            adults: Number(searchParams.get('adults')) || (bookingData?.passengers?.counts?.adults ?? 0) || passengers.filter((x: any) => x.type === 'adult').length,
+                                            children: Number(searchParams.get('children')) || (bookingData?.passengers?.counts?.children ?? 0) || passengers.filter((x: any) => x.type === 'child').length,
+                                            infants: Number(searchParams.get('infants')) || (bookingData?.passengers?.counts?.infants ?? 0) || passengers.filter((x: any) => x.type === 'infant').length,
+                                        };
+
+                                        // per-pax units: prefer explicit perPax or perPax.* fields, otherwise try to infer from basePrice
+                                        const basePriceTotal = Number(p.basePrice ?? p.total ?? 0);
+                                        let adultUnit = Number(p.perPax?.adultUnit ?? p.adultUnit ?? p.unitAdult ?? 0);
+                                        let childUnit = Number(p.perPax?.childUnit ?? p.childUnit ?? p.unitChild ?? 0);
+                                        let infantUnit = Number(p.perPax?.infantUnit ?? p.infantUnit ?? 0);
+
+                                        if (!adultUnit) {
+                                            // try infer adultUnit given basePriceTotal and counts (assume child pays 0.75 of adult)
+                                            const denom = Math.max(1, counts.adults + (counts.children * 0.75));
+                                            adultUnit = Math.round(basePriceTotal / denom) || 0;
+                                        }
+                                        if (!childUnit) childUnit = Math.round(adultUnit * 0.75);
+                                        if (!infantUnit) infantUnit = 0; // infants free per UX requirement
+
+                                        const adultTotal = counts.adults * adultUnit;
+                                        const childTotal = counts.children * childUnit;
+                                        const infantTotal = counts.infants * infantUnit; // likely 0
+
+                                        const addOnsTotal = Number(p.addOnsTotal ?? p.addOnsAmount ?? 0);
+                                        const taxes = Number(p.taxes ?? Math.round((adultTotal + childTotal + infantTotal) * 0.08));
+                                        const discount = Number(p.discount ?? 0);
+                                        const computedTotal = adultTotal + childTotal + infantTotal + addOnsTotal + taxes - discount;
+
+                                        return (
+                                            <>
+                                                <div className="mb-2 text-sm">
+                                                    <div className="flex justify-between"><span>Hành khách</span><span>{counts.adults + counts.children + counts.infants} người</span></div>
+                                                    <div className="text-xs text-muted-foreground">
+                                                        {counts.adults > 0 && <span>Người lớn: {counts.adults} </span>}
+                                                        {counts.children > 0 && <span>• Trẻ em: {counts.children} </span>}
+                                                        {counts.infants > 0 && <span>• Em bé: {counts.infants}</span>}
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-2 space-y-2 text-sm">
+                                                    {counts.adults > 0 && <div className="flex justify-between"><span>Người lớn ({counts.adults} × {formatPrice(adultUnit)})</span><span>{formatPrice(adultTotal)}</span></div>}
+                                                    {counts.children > 0 && <div className="flex justify-between"><span>Trẻ em ({counts.children} × {formatPrice(childUnit)})</span><span>{formatPrice(childTotal)}</span></div>}
+                                                    {counts.infants > 0 && <div className="flex justify-between"><span>Em bé ({counts.infants})</span><span>{formatPrice(infantTotal)}</span></div>}
+                                                </div>
+
+                                                <Separator />
+
+                                                <div
+                                                    className="flex items-center justify-between text-sm cursor-pointer mt-2"
+                                                    onClick={() => setShowAddonsDetails(prev => !prev)}
+                                                >
+                                                    <div className='font-semibold text-base'> Tổng tiền dịch vụ </div>
+                                                    <div className="flex items-center gap-4">
+                                                        <span className="font-semibold text-base text-[hsl(var(--primary))]">{formatPrice(addOnsTotal)}</span>
+                                                        <ChevronDown className={`h-4 w-4 transition-transform ${showAddonsDetails ? 'rotate-180' : ''}`} />
+                                                    </div>
+                                                </div >
+
+                                                {showAddonsDetails && (
+                                                    <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
+                                                        {Array.isArray(p.addOns) && p.addOns.length ? (
+                                                            <div className="space-y-2">
+                                                                {p.addOns.map((a: any, idx: number) => (
+                                                                    <div key={idx} className="flex justify-between">
+                                                                        <div>{a.name}{a.qty && a.qty > 1 ? ` ×${a.qty}` : ''}</div>
+                                                                        <div>{formatPrice(Number(a.total ?? (Number(a.qty ?? 1) * Number(a.unitPrice ?? a.price ?? 0))))}</div>
+                                                                    </div>
+                                                                ))}
+                                                                <div className="flex justify-between font-medium pt-2 border-t">
+                                                                    <div>Tổng dịch vụ</div>
+                                                                    <div>{formatPrice(addOnsTotal)}</div>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-muted-foreground">Không có thông tin dịch vụ thêm</div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex justify-between text-sm mt-2"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
+                                                <div className="flex justify-between text-sm text-green-600"><span>Giảm giá</span><span>{formatPrice(discount)}</span></div>
+                                                {/* Fare subtotal (tổng giá vé trước thuế & dịch vụ) */}
+                                                <div className="flex justify-between font-medium mt-2">
+                                                    <span>Tổng giá vé</span>
+                                                    <span>{formatPrice(adultTotal + childTotal + infantTotal)}</span>
+                                                </div>
+                                                <Separator />
+                                                <div className="flex justify-between font-bold text-lg">
+                                                    <span>Tổng cộng</span>
+                                                    <span className="text-primary">{formatPrice(Math.round(computedTotal))}</span>
+                                                </div>
+                                            </>
+                                        );
+                                    }
                                     if (bookingType === 'tour') {
                                         // derive counts: prefer bookingData.passengers.counts -> pricing.breakdown -> local passengers
                                         const counts = bookingData?.passengers?.counts ?? (() => {

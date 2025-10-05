@@ -69,7 +69,7 @@ const busDetails = {
     policies: {
         cancellation: 'Miễn phí hủy trước 2 giờ khởi hành',
         baggage: 'Hành lý ký gửi: 20kg miễn phí, xách tay: 5kg',
-        children: 'Trẻ em dưới 6 tuổi được miễn phí (không có ghế riêng)',
+        children: 'Trẻ con dưới 4 tuổi được miễn phí (không có ghế riêng)',
         pets: 'Không cho phép mang thú cưng',
     }
 };
@@ -134,6 +134,10 @@ export function mapBusDocToClient(doc: any) {
         });
     });
     const seatLayout = Object.keys(rows).sort((a, b) => Number(a) - Number(b)).map(k => rows[k]);
+    // price mapping: prefer explicit adultPrice/childPrice/infantPrice; fallback to legacy price if present
+    const adultPrice = toNumber(doc.adultPrice ?? doc.price);
+    const childPrice = toNumber(doc.childPrice ?? (adultPrice ? Math.round(adultPrice * 0.75) : undefined));
+    const infantPrice = toNumber(doc.infantPrice ?? (adultPrice ? Math.round(adultPrice * 0.2) : undefined));
 
     return {
         id: doc._id?.$oid ?? doc._id ?? doc.busCode,
@@ -158,7 +162,9 @@ export function mapBusDocToClient(doc: any) {
         arrivalDate,
         duration: doc.duration ?? '',
         type: Array.isArray(doc.busType) ? doc.busType.join(', ') : doc.busType,
-        price: toNumber(doc.price),
+        adultPrice: adultPrice ?? 0,
+        childPrice: childPrice ?? 0,
+        infantPrice: infantPrice ?? 0,
         seats: toNumber(doc.seatsTotal),
         availableSeats: toNumber(doc.seatsAvailable),
         seatLayout, // array of rows with seats
@@ -410,22 +416,42 @@ export default function ChiTietXeDuLich() {
 
     // Hàm cập nhật số lượng khách
     const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
-        setParticipants(prev => ({
-            ...prev,
-            [type]: Math.max(type === 'adults' ? 1 : 0, prev[type] + (increment ? 1 : -1))
-        }));
+        setParticipants(prev => {
+            const next = { ...prev };
+            const delta = increment ? 1 : -1;
+            // minimum: adults >= 1, others >= 0
+            const min = type === 'adults' ? 1 : 0;
+            next[type] = Math.max(min, (prev[type] || 0) + delta);
+
+            // ensure children/infants not negative
+            if (next.children < 0) next.children = 0;
+            if (next.infants < 0) next.infants = 0;
+
+            // enforce infants <= adults (each infant must have an adult)
+            if (next.infants > next.adults) next.infants = next.adults;
+
+            // ensure at least one adult
+            if (next.adults < 1) {
+                next.adults = 1;
+                if (next.infants > next.adults) next.infants = next.adults;
+            }
+
+            return next;
+        });
     };
 
     // Tính tổng tiền
     const calculateTotal = () => {
-        const adultTotal = participants.adults * bus.price;
-        // Giả sử trẻ em 75% giá vé, em bé 20% giá vé
-        const childTotal = participants.children * Math.round(bus.price * 0.75);
-        const infantTotal = participants.infants * Math.round(bus.price * 0.2);
-        return adultTotal + childTotal + infantTotal;
+        const adultUnit = bus.adultPrice ?? bus.price ?? 0;
+        const childUnit = (typeof bus.childPrice === 'number' && bus.childPrice > 0) ? bus.childPrice : Math.round(adultUnit * 0.75);
+        // infants are free and do not add to price
+        const adultTotal = participants.adults * adultUnit;
+        const childTotal = participants.children * childUnit;
+        return adultTotal + childTotal;
     };
 
-    const totalParticipants = participants.adults + participants.children + participants.infants;
+    // totalParticipants counts only those who need a seat: adults  children
+    const totalParticipants = participants.adults + participants.children;
     useEffect(() => {
         if (!remoteBus) return;
         const p = remoteBus.pickup?.[0]?.location ?? remoteBus.routeFrom?.name ?? '';
@@ -773,7 +799,7 @@ export default function ChiTietXeDuLich() {
                                             placeholder="Nhập số CCCD/CMND"
                                         />
                                     </div>
-                                     
+
                                 </div>
                             </CardContent>
                         </Card>
@@ -844,7 +870,7 @@ export default function ChiTietXeDuLich() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Trẻ em</div>
-                                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">&gt; 4 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button
@@ -867,8 +893,8 @@ export default function ChiTietXeDuLich() {
                                         </div>
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <div className="font-medium">Em bé</div>
-                                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                                                <div className="font-medium">Trẻ con</div>
+                                                <div className="text-sm text-muted-foreground">&lt; 4 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button
@@ -1003,18 +1029,23 @@ export default function ChiTietXeDuLich() {
                                 <div className="space-y-2">
                                     <div className="flex justify-between">
                                         <span>Người lớn ({participants.adults})</span>
-                                        <span>{formatPrice(participants.adults * bus.price)}</span>
+                                        <span>{formatPrice(participants.adults * (bus.adultPrice ?? 0))}</span>
                                     </div>
                                     {participants.children > 0 && (
                                         <div className="flex justify-between">
                                             <span>Trẻ em ({participants.children})</span>
-                                            <span>{formatPrice(participants.children * Math.round(bus.price * 0.75))}</span>
+                                            <span>{formatPrice(participants.children * ((bus.childPrice && bus.childPrice > 0) ? bus.childPrice : Math.round((bus.adultPrice ?? 0) * 0.75)))}</span>
                                         </div>
                                     )}
                                     {participants.infants > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Em bé ({participants.infants})</span>
-                                            <span>{formatPrice(participants.infants * Math.round(bus.price * 0.2))}</span>
+                                        <div className="flex flex-col">
+                                            <div className="flex justify-between">
+                                                <span>Trẻ con ({participants.infants})</span>
+                                                <span className="font-medium">{formatPrice(0)}</span>
+                                            </div>
+                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                Miễn phí — mỗi trẻ đi kèm 1 người lớn và không cần ghế riêng
+                                            </div>
                                         </div>
                                     )}
                                     {bus.originalPrice && (
@@ -1057,7 +1088,9 @@ export default function ChiTietXeDuLich() {
                                         size="lg"
                                         disabled={isDeparturePast || (selectedSeats.length !== totalParticipants) || totalParticipants === 0 || seatEditMode}
                                         onClick={() => {
-                                            const basePrice = (participants.adults * bus.price) + (participants.children * Math.round(bus.price * 0.75)) + (participants.infants * Math.round(bus.price * 0.2));
+                                            const adultUnitForCheckout = bus.adultPrice ?? 0;
+                                            const childUnitForCheckout = (typeof bus.childPrice === 'number' && bus.childPrice > 0) ? bus.childPrice : Math.round(adultUnitForCheckout * 0.75);
+                                            const basePrice = (participants.adults * adultUnitForCheckout) + (participants.children * childUnitForCheckout);
                                             const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
                                             const addOns = 0; // xe chưa có dịch vụ thêm
                                             const discount = bus.originalPrice ? basePrice - calculateTotal() : 0;
@@ -1100,6 +1133,10 @@ export default function ChiTietXeDuLich() {
                                                 addOns: addOns.toString(),
                                                 discount: discount.toString(),
                                                 total: total.toString(),
+                                                // send explicit per‑pax units to avoid inference errors in ThanhToan
+                                                unitAdult: String(adultUnitForCheckout),
+                                                unitChild: String(childUnitForCheckout),
+                                                unitInfant: String(0),
                                                 adults: participants.adults.toString(),
                                                 children: participants.children.toString(),
                                                 infants: participants.infants.toString(),

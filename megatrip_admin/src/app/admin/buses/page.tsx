@@ -41,7 +41,8 @@ interface BusRoute {
     arrivalAt: string;
     duration: string;
     busType: string[];
-    price: number;
+    adultPrice: number;
+    childPrice?: number;
     seatsTotal: number;
     seatsAvailable: number;
     status: "scheduled" | "cancelled" | "delayed" | "completed";
@@ -64,7 +65,8 @@ interface BusFormData {
     arrivalAt: string;
     duration: string;
     busType: string[];
-    price: number;
+    adultPrice: number;
+    childPrice?: number;
     seatsTotal: number;
     seatsAvailable: number;
     amenities: string;
@@ -95,248 +97,248 @@ const mockStations = [
 ];
 
 const busTypeOptions = [
-	{ value: "Ghế ngồi", label: "Ghế ngồi" },
-	{ value: "Giường nằm", label: "Giường nằm" },
-	{ value: "Limousine", label: "Limousine" },
-	{ value: "VIP", label: "VIP" }
+    { value: "Ghế ngồi", label: "Ghế ngồi" },
+    { value: "Giường nằm", label: "Giường nằm" },
+    { value: "Limousine", label: "Limousine" },
+    { value: "VIP", label: "VIP" }
 ];
 
 // --- New: amenities options (value = stored key, label = display text) ---
 const amenitiesOptions = [
-	{ value: "wifi", label: "Wi‑Fi miễn phí trên xe" },
-	{ value: "water", label: "Nước uống miễn phí" },
-	{ value: "blanket", label: "Chăn đắp" },
-	{ value: "toilet", label: "Nhà vệ sinh trên xe" },
-	{ value: "entertainment", label: "Màn hình giải trí / TV" },
-	{ value: "massage", label: "Ghế massage" },
-	{ value: "snack", label: "Đồ ăn nhẹ / Snack" }
+    { value: "wifi", label: "Wi‑Fi miễn phí trên xe" },
+    { value: "water", label: "Nước uống miễn phí" },
+    { value: "blanket", label: "Chăn đắp" },
+    { value: "toilet", label: "Nhà vệ sinh trên xe" },
+    { value: "entertainment", label: "Màn hình giải trí / TV" },
+    { value: "massage", label: "Ghế massage" },
+    { value: "snack", label: "Đồ ăn nhẹ / Snack" }
 ];
 
 // --- New helper: safe collect all subtypes without flatMap ---
 const getAllSubtypes = (data: any) => {
-	// returns [] if data is not an array
-	if (!Array.isArray(data)) return [];
-	const result: any[] = [];
-	for (const cat of data) {
-		if (cat && Array.isArray(cat.subtypes)) {
-			for (const s of cat.subtypes) result.push(s);
-		}
-	}
-	return result;
+    // returns [] if data is not an array
+    if (!Array.isArray(data)) return [];
+    const result: any[] = [];
+    for (const cat of data) {
+        if (cat && Array.isArray(cat.subtypes)) {
+            for (const s of cat.subtypes) result.push(s);
+        }
+    }
+    return result;
 };
 
 // --- small helper: read provinces data exposed to module helpers ---
 const getGlobalProvinces = () => {
-	if (typeof globalThis !== 'undefined') return (globalThis as any).__PROVINCES_DATA;
-	return undefined;
+    if (typeof globalThis !== 'undefined') return (globalThis as any).__PROVINCES_DATA;
+    return undefined;
 };
 
 // --- New helper: parse route select value into object { code, name, city } ---
 const parseRouteValue = (value: string) => {
-	// value may be "PROV_CODE||Station Name" (when loaded from provincesData)
-	if (!value) return null;
-	if (typeof value !== 'string') return null;
+    // value may be "PROV_CODE||Station Name" (when loaded from provincesData)
+    if (!value) return null;
+    if (typeof value !== 'string') return null;
 
-	const provinces = getGlobalProvinces();
+    const provinces = getGlobalProvinces();
 
-	// try prov||station format
-	const parts = value.split('||');
-	if (parts.length === 2) {
-		const provCode = parts[0];
-		const stationName = parts[1];
-		// use exposed provinces if available
-		if (Array.isArray(provinces)) {
-			const prov = provinces.find((p: any) => String(p.code) === String(provCode) || p.name === provCode);
-			if (prov && Array.isArray(prov.bus_stations)) {
-				const st = prov.bus_stations.find((s: any) => s.name === stationName);
-				if (st) {
-					// IMPORTANT: set city to the province "name" as requested
-					return {
-						code: provCode,
-						name: st.name,
-						city: prov.name || ''
-					};
-				}
-			}
-		}
-		// fallback: try to find station in mockStations by name
-		const m = mockStations.find(s => s.name === stationName || s.code === stationName);
-		if (m) return { code: m.code, name: m.name, city: m.city };
-		// fallback generic
-		return { code: provCode, name: stationName, city: '' };
-	}
+    // try prov||station format
+    const parts = value.split('||');
+    if (parts.length === 2) {
+        const provCode = parts[0];
+        const stationName = parts[1];
+        // use exposed provinces if available
+        if (Array.isArray(provinces)) {
+            const prov = provinces.find((p: any) => String(p.code) === String(provCode) || p.name === provCode);
+            if (prov && Array.isArray(prov.bus_stations)) {
+                const st = prov.bus_stations.find((s: any) => s.name === stationName);
+                if (st) {
+                    // IMPORTANT: set city to the province "name" as requested
+                    return {
+                        code: provCode,
+                        name: st.name,
+                        city: prov.name || ''
+                    };
+                }
+            }
+        }
+        // fallback: try to find station in mockStations by name
+        const m = mockStations.find(s => s.name === stationName || s.code === stationName);
+        if (m) return { code: m.code, name: m.name, city: m.city };
+        // fallback generic
+        return { code: provCode, name: stationName, city: '' };
+    }
 
-	// otherwise value might be a simple code like "SGN_MB"
-	const ms = mockStations.find(s => s.code === value);
-	if (ms) return { code: ms.code, name: ms.name, city: ms.city };
-	// try provinces list search
-	if (Array.isArray(provinces)) {
-		for (const prov of provinces) {
-			if (Array.isArray(prov.bus_stations)) {
-				const st = prov.bus_stations.find((s: any) => s.name === value || s.code === value);
-				if (st) {
-					return { code: prov.code || value, name: st.name, city: prov.name || '' };
-				}
-			}
-		}
-	}
-	return { code: value, name: value, city: '' };
+    // otherwise value might be a simple code like "SGN_MB"
+    const ms = mockStations.find(s => s.code === value);
+    if (ms) return { code: ms.code, name: ms.name, city: ms.city };
+    // try provinces list search
+    if (Array.isArray(provinces)) {
+        for (const prov of provinces) {
+            if (Array.isArray(prov.bus_stations)) {
+                const st = prov.bus_stations.find((s: any) => s.name === value || s.code === value);
+                if (st) {
+                    return { code: prov.code || value, name: st.name, city: prov.name || '' };
+                }
+            }
+        }
+    }
+    return { code: value, name: value, city: '' };
 };
 
 // --- New helper: format a route object into the Select value used by the UI ---
 const formatRouteSelectValue = (routeObj: any) => {
-	// routeObj may be { code, name, city } or a simple code string
-	if (!routeObj) return "";
-	if (typeof routeObj === "string") return routeObj;
+    // routeObj may be { code, name, city } or a simple code string
+    if (!routeObj) return "";
+    if (typeof routeObj === "string") return routeObj;
 
-	const provinces = getGlobalProvinces();
-	const code = routeObj.code || "";
-	const name = routeObj.name || "";
+    const provinces = getGlobalProvinces();
+    const code = routeObj.code || "";
+    const name = routeObj.name || "";
 
-	// prefer provinces data provCode||stationName when possible
-	if (Array.isArray(provinces)) {
-		for (const prov of provinces) {
-			if (!Array.isArray(prov.bus_stations)) continue;
-			const found = prov.bus_stations.find((s: any) => {
-				return s.name === name || s.name === code || s.code === name || s.code === code;
-			});
-			if (found) {
-				return `${prov.code}||${found.name}`;
-			}
-		}
-	}
+    // prefer provinces data provCode||stationName when possible
+    if (Array.isArray(provinces)) {
+        for (const prov of provinces) {
+            if (!Array.isArray(prov.bus_stations)) continue;
+            const found = prov.bus_stations.find((s: any) => {
+                return s.name === name || s.name === code || s.code === name || s.code === code;
+            });
+            if (found) {
+                return `${prov.code}||${found.name}`;
+            }
+        }
+    }
 
-	// fallback to mockStations by code or name
-	const ms = mockStations.find(s => s.code === code || s.name === name || s.code === name || s.name === code);
-	if (ms) return ms.code;
+    // fallback to mockStations by code or name
+    const ms = mockStations.find(s => s.code === code || s.name === name || s.code === name || s.name === code);
+    if (ms) return ms.code;
 
-	// fallback to use code if present, otherwise name
-	return code || name || "";
+    // fallback to use code if present, otherwise name
+    return code || name || "";
 };
 
 // --- Stronger validation ---
 const validateForm = (data: BusFormData): Record<string, string> => {
-	const errors: Record<string, string> = {};
+    const errors: Record<string, string> = {};
 
-	// busCode: required, uppercase alnum/_- 3-12 chars
-	if (!data.busCode || !data.busCode.trim()) {
-		errors.busCode = "Bạn phải nhập mã tuyến xe";
-	} else {
-		const code = data.busCode.trim().toUpperCase();
-		const re = /^[A-Z0-9_-]{3,12}$/;
-		if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
-	}
+    // busCode: required, uppercase alnum/_- 3-12 chars
+    if (!data.busCode || !data.busCode.trim()) {
+        errors.busCode = "Bạn phải nhập mã tuyến xe";
+    } else {
+        const code = data.busCode.trim().toUpperCase();
+        const re = /^[A-Z0-9_-]{3,12}$/;
+        if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+    }
 
-	// operator: must exist in loaded operators (if available)
-	if (!data.operatorId) {
-		errors.operatorId = "Bạn phải chọn nhà xe";
-	} else if (operatorsData && Array.isArray(operatorsData)) {
-		const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
-		if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
-	}
+    // operator: must exist in loaded operators (if available)
+    if (!data.operatorId) {
+        errors.operatorId = "Bạn phải chọn nhà xe";
+    } else if (operatorsData && Array.isArray(operatorsData)) {
+        const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+        if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+    }
 
-	// routeFrom / routeTo: required and must map to a station
-	if (!data.routeFrom) {
-		errors.routeFrom = "Bạn phải chọn điểm đi";
-	} else {
-		const parsedFrom = parseRouteValue(data.routeFrom);
-		if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
-	}
-	if (!data.routeTo) {
-		errors.routeTo = "Bạn phải chọn điểm đến";
-	} else {
-		const parsedTo = parseRouteValue(data.routeTo);
-		if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
-	}
-	// Ensure they are different
-	if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
-		errors.routeTo = "Điểm đến phải khác điểm đi";
-	}
+    // routeFrom / routeTo: required and must map to a station
+    if (!data.routeFrom) {
+        errors.routeFrom = "Bạn phải chọn điểm đi";
+    } else {
+        const parsedFrom = parseRouteValue(data.routeFrom);
+        if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+    }
+    if (!data.routeTo) {
+        errors.routeTo = "Bạn phải chọn điểm đến";
+    } else {
+        const parsedTo = parseRouteValue(data.routeTo);
+        if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+    }
+    // Ensure they are different
+    if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+        errors.routeTo = "Điểm đến phải khác điểm đi";
+    }
 
-	// departureDates: require at least one, each valid and not in past
-	const now = new Date();
-	if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
-		errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
-	} else {
-		const seen = new Set<string>();
-		for (let i = 0; i < data.departureDates.length; i++) {
-			const d = data.departureDates[i];
-			if (!d || isNaN(new Date(d).getTime())) {
-				errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
-			} else {
-				const dt = new Date(d);
-				if (dt < now) {
-					errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
-				}
-				const key = dt.toISOString();
-				if (seen.has(key)) {
-					errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
-				}
-				seen.add(key);
-			}
-		}
-	}
+    // departureDates: require at least one, each valid and not in past
+    const now = new Date();
+    if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
+        errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
+    } else {
+        const seen = new Set<string>();
+        for (let i = 0; i < data.departureDates.length; i++) {
+            const d = data.departureDates[i];
+            if (!d || isNaN(new Date(d).getTime())) {
+                errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
+            } else {
+                const dt = new Date(d);
+                if (dt < now) {
+                    errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+                }
+                const key = dt.toISOString();
+                if (seen.has(key)) {
+                    errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
+                }
+                seen.add(key);
+            }
+        }
+    }
 
-	// arrivalAt validation: must be valid and after earliest departure
-	if (!data.arrivalAt) {
-		errors.arrivalAt = "Bạn phải chọn giờ đến";
-	} else if (isNaN(new Date(data.arrivalAt).getTime())) {
-		errors.arrivalAt = "Giờ đến không hợp lệ";
-	} else {
-		const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
-		if (earliest && new Date(data.arrivalAt) <= earliest) {
-			errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
-		}
-	}
+    // arrivalAt validation: must be valid and after earliest departure
+    if (!data.arrivalAt) {
+        errors.arrivalAt = "Bạn phải chọn giờ đến";
+    } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+        errors.arrivalAt = "Giờ đến không hợp lệ";
+    } else {
+        const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
+        if (earliest && new Date(data.arrivalAt) <= earliest) {
+            errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+        }
+    }
 
-	// numeric checks
-	if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
-		errors.price = "Giá vé phải là số lớn hơn 0";
-	}
-	if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
-		errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
-	}
-	if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
-		errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
-	} else if (data.seatsAvailable > data.seatsTotal) {
-		errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
-	}
+    // numeric checks
+    if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
+        errors.price = "Giá vé phải là số lớn hơn 0";
+    }
+    if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+        errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+    }
+    if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+        errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+    } else if (data.seatsAvailable > data.seatsTotal) {
+        errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+    }
 
-	// busType must have at least one entry
-	if (!Array.isArray(data.busType) || data.busType.length === 0) {
-		errors.busType = "Bạn phải chọn ít nhất một loại xe";
-	}
+    // busType must have at least one entry
+    if (!Array.isArray(data.busType) || data.busType.length === 0) {
+        errors.busType = "Bạn phải chọn ít nhất một loại xe";
+    }
 
-	// No strict requirement for amenities (checkboxes) — optional
+    // No strict requirement for amenities (checkboxes) — optional
 
-	// arrivalDates: if present, must pair with departures and be after each corresponding departure
-	if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
-		for (let i = 0; i < (data.departureDates || []).length; i++) {
-			const dep = data.departureDates?.[i];
-			const arr = data.arrivalDates?.[i];
-			if (!arr || isNaN(new Date(arr).getTime())) {
-				errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
-			} else if (dep && !isNaN(new Date(dep).getTime())) {
-				if (new Date(arr) <= new Date(dep)) {
-					errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
-				}
-			}
-		}
-	} else {
-		// fallback to single arrivalAt check (existing)
-		if (!data.arrivalAt) {
-			errors.arrivalAt = "Bạn phải chọn giờ đến";
-		} else if (isNaN(new Date(data.arrivalAt).getTime())) {
-			errors.arrivalAt = "Giờ đến không hợp lệ";
-		} else {
-			const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
-			if (earliest && new Date(data.arrivalAt) <= earliest) {
-				errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
-			}
-		}
-	}
+    // arrivalDates: if present, must pair with departures and be after each corresponding departure
+    if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
+        for (let i = 0; i < (data.departureDates || []).length; i++) {
+            const dep = data.departureDates?.[i];
+            const arr = data.arrivalDates?.[i];
+            if (!arr || isNaN(new Date(arr).getTime())) {
+                errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
+            } else if (dep && !isNaN(new Date(dep).getTime())) {
+                if (new Date(arr) <= new Date(dep)) {
+                    errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                }
+            }
+        }
+    } else {
+        // fallback to single arrivalAt check (existing)
+        if (!data.arrivalAt) {
+            errors.arrivalAt = "Bạn phải chọn giờ đến";
+        } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+            errors.arrivalAt = "Giờ đến không hợp lệ";
+        } else {
+            const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
+            if (earliest && new Date(data.arrivalAt) <= earliest) {
+                errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+            }
+        }
+    }
 
-	return errors;
+    return errors;
 };
 
 export default function Buses() {
@@ -365,7 +367,8 @@ export default function Buses() {
         arrivalAt: "",
         duration: "",
         busType: ["Ghế ngồi"],
-        price: 0,
+        adultPrice: 0,
+        childPrice: 0,
         seatsTotal: 0,
         seatsAvailable: 0,
         amenities: "",
@@ -379,7 +382,7 @@ export default function Buses() {
     const [seatMap, setSeatMap] = useState<any[] | null>(null);
 
     // --- New state: selected amenities (checkboxes) ---
-	const [amenitiesSelected, setAmenitiesSelected] = useState<string[]>([]);
+    const [amenitiesSelected, setAmenitiesSelected] = useState<string[]>([]);
 
     // New: recurrence mode state
     const [recurrenceMode, setRecurrenceMode] = useState<"single" | "weekly" | "monthly" | "weekday_of_month">("single");
@@ -393,7 +396,7 @@ export default function Buses() {
     // format Date -> local input 'YYYY-MM-DDTHH:mm'
     const toLocalInput = (d: Date) => {
         const tzOffset = d.getTimezoneOffset() * 60000;
-        return new Date(d.getTime() - tzOffset).toISOString().slice(0,16);
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
 
     // build a JS Date from a 'YYYY-MM-DDTHH:mm' local string reliably
@@ -490,7 +493,7 @@ export default function Buses() {
 
         if (!generatedDeps || generatedDeps.length === 0) {
             toast({ title: "Không có ngày nào được tạo", description: "Vui lòng kiểm tra ngày bắt đầu hoặc loại lặp", variant: "destructive" });
-   setRecurrenceApplied(false);
+            setRecurrenceApplied(false);
             return;
         }
 
@@ -502,11 +505,11 @@ export default function Buses() {
         if (generatedArrs.length) {
             handleFormChange('arrivalDates' as any, generatedArrs);
             handleFormChange('arrivalAt' as any, generatedArrs[0]);
-   // mark applied only when we have at least one generated arrival (so Clear can be used)
-   setRecurrenceApplied(true);
-      } else {
-   // if no arrivals were generated, do not mark as applied for Clear visibility
-   setRecurrenceApplied(false);
+            // mark applied only when we have at least one generated arrival (so Clear can be used)
+            setRecurrenceApplied(true);
+        } else {
+            // if no arrivals were generated, do not mark as applied for Clear visibility
+            setRecurrenceApplied(false);
         }
 
         setIsFormDirty(true);
@@ -543,8 +546,8 @@ export default function Buses() {
 
         // mark dirty so save is possible (you can set false if you prefer)
         setIsFormDirty(true);
-    // hide Clear button after reset
-    setRecurrenceApplied(false);
+        // hide Clear button after reset
+        setRecurrenceApplied(false);
 
         toast({ title: "Đã đặt lại lịch", description: "Lịch khởi hành và giờ đến đã được xóa", variant: "default" });
     };
@@ -573,7 +576,7 @@ export default function Buses() {
             if (!res.ok) throw new Error('Failed to fetch buses');
             return res.json();
         },
-         
+
     });
 
     // --- Add data fetch for operators and stations (provinces) ---
@@ -596,12 +599,12 @@ export default function Buses() {
             return res.json();
         },
     });
- // expose loaded provinces to module-scoped helpers so they can read prov.name as city
- useEffect(() => {
-     if (typeof globalThis !== 'undefined') {
-         (globalThis as any).__PROVINCES_DATA = provincesData;
-     }
- }, [provincesData]);
+    // expose loaded provinces to module-scoped helpers so they can read prov.name as city
+    useEffect(() => {
+        if (typeof globalThis !== 'undefined') {
+            (globalThis as any).__PROVINCES_DATA = provincesData;
+        }
+    }, [provincesData]);
 
     // --- New: fetch vehicle categories (loaixe) ---
     const { data: loaixeData, isLoading: loaixeLoading } = useQuery({
@@ -631,16 +634,16 @@ export default function Buses() {
 
             // --- New: set departureDates array (normalize to ISO/Z) ---
             payload.departureDates = (data as any).departureDates && Array.isArray((data as any).departureDates)
-               ? (data as any).departureDates.map((s: string) => localToIso(s))
-               : ((data as any).departureAt ? [localToIso((data as any).departureAt)] : []);
+                ? (data as any).departureDates.map((s: string) => localToIso(s))
+                : ((data as any).departureAt ? [localToIso((data as any).departureAt)] : []);
             // --- New: normalize arrivalDates (ISO/Z) ---
             payload.arrivalDates = (data as any).arrivalDates && Array.isArray((data as any).arrivalDates)
-               ? (data as any).arrivalDates.map((s: string) => localToIso(s))
-               : ((data as any).arrivalAt ? [localToIso((data as any).arrivalAt)] : []);
+                ? (data as any).arrivalDates.map((s: string) => localToIso(s))
+                : ((data as any).arrivalAt ? [localToIso((data as any).arrivalAt)] : []);
 
             // compute duration from first pair when present
             if (payload.departureDates.length && payload.arrivalDates.length) {
-              payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
+                payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
             }
 
             // Important: DO NOT send scalar departureAt/arrivalAt to backend anymore.
@@ -660,6 +663,12 @@ export default function Buses() {
 
             // DEBUG: log payload so we can inspect what will be sent when creating a bus
             console.log('[Buses] createBus payload (arrays only):', payload);
+
+            // convert price fields names for backend
+            if (typeof payload.adultPrice !== 'undefined') payload.adultPrice = Number(payload.adultPrice);
+            if (typeof payload.childPrice !== 'undefined') payload.childPrice = Number(payload.childPrice);
+            // remove legacy price if present
+            delete payload.price;
 
             const res = await fetch(`${API_BASE}/api/buses`, {
                 method: 'POST',
@@ -692,17 +701,17 @@ export default function Buses() {
                 if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
             }
             if ((data as any).routeFrom) {
-				const parsedFromUp = parseRouteValue((data as any).routeFrom);
-				payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
-			}
+                const parsedFromUp = parseRouteValue((data as any).routeFrom);
+                payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
+            }
             if ((data as any).routeTo) {
-				const parsedToUp = parseRouteValue((data as any).routeTo);
-				payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
-			}
+                const parsedToUp = parseRouteValue((data as any).routeTo);
+                payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
+            }
 
             // Normalize arrivalDates if provided (to ISO/Z)
             if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates)) {
-              payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
+                payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
             }
             // If a single arrivalAt (local) was provided, convert and put into arrivalDates array
             if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length)) {
@@ -711,7 +720,7 @@ export default function Buses() {
 
             // Normalize departureDates if provided (to ISO/Z)
             if ((data as any).departureDates && Array.isArray((data as any).departureDates)) {
-              payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
+                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
             }
             // If a single departureAt (local) was provided, convert and put into departureDates array
             if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length)) {
@@ -743,9 +752,13 @@ export default function Buses() {
             }
             // set amenities string from selected checkboxes (if user changed via UI)
             if (amenitiesSelected && amenitiesSelected.length) {
-				payload.amenities = amenitiesSelected.join(', ');
-			}
+                payload.amenities = amenitiesSelected.join(', ');
+            }
             payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+            if (typeof payload.adultPrice !== 'undefined') payload.adultPrice = Number(payload.adultPrice);
+            if (typeof payload.childPrice !== 'undefined') payload.childPrice = Number(payload.childPrice);
+            delete payload.price;
 
             const res = await fetch(`${API_BASE}/api/buses/${id}`, {
                 method: 'PUT',
@@ -908,8 +921,14 @@ export default function Buses() {
         }
 
         // numeric checks
-        if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
-            errors.price = "Giá vé phải là số lớn hơn 0";
+        if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
+            errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
+        }
+        if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
+            errors.childPrice = "Giá vé trẻ em phải là số >= 0";
+        }
+        if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
+            errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
         }
         if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
             errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
@@ -969,7 +988,8 @@ export default function Buses() {
             arrivalAt: "",
             duration: "",
             busType: ["Ghế ngồi"],
-            price: 0,
+            adultPrice: 0,
+            childPrice: 0,
             seatsTotal: 0,
             seatsAvailable: 0,
             amenities: "",
@@ -979,8 +999,8 @@ export default function Buses() {
         setIsFormDirty(false);
         setSelectedSubtypeId("");
         setAmenitiesSelected([]);
-    // also clear recurrence applied flag when form resets/closed
-    setRecurrenceApplied(false);
+        // also clear recurrence applied flag when form resets/closed
+        setRecurrenceApplied(false);
     };
 
     const handleFormChange = (field: keyof BusFormData, value: any) => {
@@ -1012,9 +1032,9 @@ export default function Buses() {
         const d = new Date();
         // convert to local ISO without seconds: YYYY-MM-DDTHH:mm
         const tzOffset = d.getTimezoneOffset() * 60000;
-        return new Date(d.getTime() - tzOffset).toISOString().slice(0,16);
+        return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
-    
+
     // Helper: build seat map from a subtype.layout
     const buildSeatMapFromLayout = (layout: any) => {
         if (!layout || !Array.isArray(layout.rows)) return [];
@@ -1068,7 +1088,7 @@ export default function Buses() {
             title: "Nhà xe",
             render: (value, record: BusRoute) => (
                 <div className="flex items-center space-x-2">
-                     
+
                     <div>
                         <div className="font-medium">{value.name}</div>
                         <div className="text-sm text-gray-500">{value.code}</div>
@@ -1142,11 +1162,14 @@ export default function Buses() {
             key: "price",
             title: "Giá vé",
             sortable: true,
-            render: (value) => (
-                <div className="text-sm">
+            render: (_, record: BusRoute) => (
+                <div className="flex flex-col">
                     <div className="flex items-center font-medium">
                         <DollarSign className="w-3 h-3 mr-1" />
-                        {new Intl.NumberFormat('vi-VN').format(value)} ₫
+                        Người lớn: {new Intl.NumberFormat('vi-VN').format(record.adultPrice || 0)} ₫
+                    </div>
+                    <div className="text-sm text-gray-500">
+                        Trẻ em: {new Intl.NumberFormat('vi-VN').format(record.childPrice || 0)} ₫
                     </div>
                 </div>
             ),
@@ -1204,13 +1227,14 @@ export default function Buses() {
             // keep departureAt for compatibility
             departureAt: bus.departureAt ? bus.departureAt.slice(0, 16) : "",
             // populate departureDates if present (convert ISO -> local input format)
-            departureDates: Array.isArray((bus as any).departureDates) ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0,16))) : (bus.departureAt ? [bus.departureAt.slice(0,16)] : []),
+            departureDates: Array.isArray((bus as any).departureDates) ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []),
             // populate arrivalDates if present (convert ISO -> local input format)
-            arrivalDates: Array.isArray((bus as any).arrivalDates) ? (bus as any).arrivalDates.map((d: string) => (new Date(d).toISOString().slice(0,16))) : (bus.arrivalAt ? [bus.arrivalAt.slice(0,16)] : []),
+            arrivalDates: Array.isArray((bus as any).arrivalDates) ? (bus as any).arrivalDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (bus.arrivalAt ? [bus.arrivalAt.slice(0, 16)] : []),
             arrivalAt: bus.arrivalAt ? bus.arrivalAt.slice(0, 16) : "",
             duration: bus.duration,
             busType: bus.busType,
-            price: bus.price,
+            adultPrice: (bus as any).adultPrice ?? (bus as any).price ?? 0,
+            childPrice: (bus as any).childPrice ?? 0,
             seatsTotal: bus.seatsTotal,
             seatsAvailable: bus.seatsAvailable,
             amenities: bus.amenities || "",
@@ -1287,13 +1311,17 @@ export default function Buses() {
         const arrsRaw = (formData.arrivalDates && formData.arrivalDates.length) ? formData.arrivalDates : (formData.arrivalAt ? [formData.arrivalAt] : []);
         dataToSend.arrivalDates = arrsRaw.map((s: string) => localToIso(s)).filter(Boolean);
 
-        // Remove scalar fields to avoid duplication on the server
+        // Remove scalar fields to avoid duplication
         delete dataToSend.departureAt;
         delete dataToSend.arrivalAt;
+        // ensure price mapping -> adultPrice/childPrice (backend expects adultPrice/childPrice)
+        if (typeof dataToSend.adultPrice !== 'undefined') dataToSend.adultPrice = Number(dataToSend.adultPrice);
+        if (typeof dataToSend.childPrice !== 'undefined') dataToSend.childPrice = Number(dataToSend.childPrice);
+        delete dataToSend.price;
 
         // compute duration from first pair (if both present)
         if (dataToSend.departureDates.length && dataToSend.arrivalDates.length) {
-          dataToSend.duration = calculateDuration(dataToSend.departureDates[0], dataToSend.arrivalDates[0]);
+            dataToSend.duration = calculateDuration(dataToSend.departureDates[0], dataToSend.arrivalDates[0]);
         }
 
         // Log the exact payload that will be sent to the server
@@ -1442,7 +1470,10 @@ export default function Buses() {
                                 <div>
                                     <Label className="text-sm font-medium text-gray-700">Giá vé</Label>
                                     <p className="mt-1 text-lg font-bold text-green-600">
-                                        {new Intl.NumberFormat('vi-VN').format(selectedBus.price)} ₫
+                                        Người lớn: {new Intl.NumberFormat('vi-VN').format((selectedBus as any).adultPrice ?? (selectedBus as any).price ?? 0)} ₫
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        Trẻ em: {new Intl.NumberFormat('vi-VN').format((selectedBus as any).childPrice ?? 0)} ₫
                                     </p>
                                 </div>
                                 <div>
@@ -1503,17 +1534,17 @@ export default function Buses() {
                                     )}
                                 </div>
                             </div>
-                           
+
                         </div>
                     </div>
 
-                   
+
                 </div>
             );
         }
 
         return (
-        <div className="space-y-4 " style={{ height: '70vh', overflowY: 'auto' }}>
+            <div className="space-y-4 " style={{ height: '70vh', overflowY: 'auto' }}>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="busCode">Mã tuyến xe *</Label>
@@ -1645,7 +1676,7 @@ export default function Buses() {
                             </Select>
 
                             {recurrenceMode === "weekday_of_month" && (
-                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v,10))}>
+                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}>
                                     <SelectTrigger className="w-40">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -1663,156 +1694,156 @@ export default function Buses() {
 
                             <div className="flex items-center space-x-2">
                                 <Button onClick={applyRecurrence}>Áp dụng</Button>
-                          
-                       {/* Clear button only visible after apply produced departures with arrivals */}
-                       {recurrenceApplied && (
-                         <Button
-                           onClick={handleResetSchedule}
-                           className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-sm"
-                         >
-                           <svg
-                               xmlns="http://www.w3.org/2000/svg"
-                               className="h-4 w-4"
-                               fill="none"
-                               viewBox="0 0 24 24"
-                               stroke="currentColor"
-                           >
-                               <path
-                                   strokeLinecap="round"
-                                   strokeLinejoin="round"
-                                   strokeWidth={2}
-                                   d="M6 18L18 6M6  6l12 12"
-                               />
-                           </svg>
-                           Clear
-                         </Button>
-                       )}
+
+                                {/* Clear button only visible after apply produced departures with arrivals */}
+                                {recurrenceApplied && (
+                                    <Button
+                                        onClick={handleResetSchedule}
+                                        className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-sm"
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className="h-4 w-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6  6l12 12"
+                                            />
+                                        </svg>
+                                        Clear
+                                    </Button>
+                                )}
                             </div>
                         </div>
 
                         <div className="mt-2 space-y-2">
-                          {(formData.departureDates && formData.departureDates.length ? formData.departureDates : [formData.departureAt || ""]).map((d, idx) => {
-                            const arrVal = (formData.arrivalDates && formData.arrivalDates[idx]) || "";
-                            return (
-                              <div key={idx} className="flex items-center space-x-2">
-                                <div className="flex-1">
-                                  <Label className="text-xs">Xuất phát #{idx + 1}</Label>
-                                  <Input
-                                    type="datetime-local"
-                                    value={d || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
-                                      if (idx >= deps.length) deps.push(val); else deps[idx] = val;
-                                      // update departureDates
-                                      handleFormChange('departureDates' as any, deps);
-                                      // keep canonical departureAt in sync with first date
-                                      if (idx === 0) handleFormChange('departureAt', val);
+                            {(formData.departureDates && formData.departureDates.length ? formData.departureDates : [formData.departureAt || ""]).map((d, idx) => {
+                                const arrVal = (formData.arrivalDates && formData.arrivalDates[idx]) || "";
+                                return (
+                                    <div key={idx} className="flex items-center space-x-2">
+                                        <div className="flex-1">
+                                            <Label className="text-xs">Xuất phát #{idx + 1}</Label>
+                                            <Input
+                                                type="datetime-local"
+                                                value={d || ""}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
+                                                    if (idx >= deps.length) deps.push(val); else deps[idx] = val;
+                                                    // update departureDates
+                                                    handleFormChange('departureDates' as any, deps);
+                                                    // keep canonical departureAt in sync with first date
+                                                    if (idx === 0) handleFormChange('departureAt', val);
 
-                                      // ensure arrivalDates has a corresponding entry
-                                      const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                      if (!arrs[idx]) {
-                                        // try to compute default arrival using delta from first pair if available
-                                        const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
-                                        const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
-                                        let defaultArr = "";
-                                        if (firstDep && firstArr) {
-                                          const baseDep = parseLocalInput(firstDep);
-                                          const baseArr = parseLocalInput(firstArr);
-                                          if (baseDep && baseArr) {
-                                                                                       const delta = baseArr.getTime() - baseDep.getTime();
-                                            const thisDep = parseLocalInput(val) || parseLocalInput(firstDep);
-                                            if (thisDep) defaultArr = toLocalInput(new Date(thisDep.getTime() + delta));
-                                          }
-                                        }
-                                        if (!defaultArr) {
-                                          // fallback: +6 hours
-                                          const thisDep = parseLocalInput(val);
-                                          defaultArr = thisDep ? toLocalInput(new Date(thisDep.getTime() + 6 * 3600000)) : "";
-                                        }
-                                        arrs[idx] = defaultArr;
-                                        handleFormChange('arrivalDates' as any, arrs);
-                                        if (idx === 0) handleFormChange('arrivalAt', arrs[0] || "");
-                                      }
-                                    }}
-                                    min={isoLocalNow()}
-                                    className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
-                                  />
-                                </div>
+                                                    // ensure arrivalDates has a corresponding entry
+                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                    if (!arrs[idx]) {
+                                                        // try to compute default arrival using delta from first pair if available
+                                                        const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
+                                                        const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
+                                                        let defaultArr = "";
+                                                        if (firstDep && firstArr) {
+                                                            const baseDep = parseLocalInput(firstDep);
+                                                            const baseArr = parseLocalInput(firstArr);
+                                                            if (baseDep && baseArr) {
+                                                                const delta = baseArr.getTime() - baseDep.getTime();
+                                                                const thisDep = parseLocalInput(val) || parseLocalInput(firstDep);
+                                                                if (thisDep) defaultArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                                            }
+                                                        }
+                                                        if (!defaultArr) {
+                                                            // fallback: +6 hours
+                                                            const thisDep = parseLocalInput(val);
+                                                            defaultArr = thisDep ? toLocalInput(new Date(thisDep.getTime() + 6 * 3600000)) : "";
+                                                        }
+                                                        arrs[idx] = defaultArr;
+                                                        handleFormChange('arrivalDates' as any, arrs);
+                                                        if (idx === 0) handleFormChange('arrivalAt', arrs[0] || "");
+                                                    }
+                                                }}
+                                                min={isoLocalNow()}
+                                                className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
+                                            />
+                                        </div>
 
-                                <div className="flex-1">
-                                  <Label className="text-xs">Giờ đến #{idx + 1}</Label>
-                                  <Input
-                                    type="datetime-local"
-                                    value={arrVal || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                      if (idx >= arrs.length) arrs.push(val); else arrs[idx] = val;
-                                      handleFormChange('arrivalDates' as any, arrs);
-                                                                           if (idx === 0) handleFormChange('arrivalAt', val);
+                                        <div className="flex-1">
+                                            <Label className="text-xs">Giờ đến #{idx + 1}</Label>
+                                            <Input
+                                                type="datetime-local"
+                                                value={arrVal || ""}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                    if (idx >= arrs.length) arrs.push(val); else arrs[idx] = val;
+                                                    handleFormChange('arrivalDates' as any, arrs);
+                                                    if (idx === 0) handleFormChange('arrivalAt', val);
 
-                                      // recompute duration for canonical pair (first)
-                                      const firstDep = (formData.departureDates && formData.departureDates.length) ? formData.departureDates[0] : formData.departureAt;
-                                      const firstArr = (arrs && arrs.length) ? arrs[0] : formData.arrivalAt;
-                                      if (firstDep && firstArr) {
-                                        const duration = calculateDuration(firstDep, firstArr);
-                                        if (duration) handleFormChange('duration', duration);
-                                      }
-                                    }}
-                                    min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : isoLocalNow()}
-                                    className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
-                                  />
-                                </div>
+                                                    // recompute duration for canonical pair (first)
+                                                    const firstDep = (formData.departureDates && formData.departureDates.length) ? formData.departureDates[0] : formData.departureAt;
+                                                    const firstArr = (arrs && arrs.length) ? arrs[0] : formData.arrivalAt;
+                                                    if (firstDep && firstArr) {
+                                                        const duration = calculateDuration(firstDep, firstArr);
+                                                        if (duration) handleFormChange('duration', duration);
+                                                    }
+                                                }}
+                                                min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : isoLocalNow()}
+                                                className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
+                                            />
+                                        </div>
 
-                                <div className="flex items-end" style={{ marginTop: 'auto' }}>
-                                  <Button variant="outline" onClick={() => {
+                                        <div className="flex items-end" style={{ marginTop: 'auto' }}>
+                                            <Button variant="outline" onClick={() => {
+                                                const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
+                                                const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                // if using fallback single departureAt, convert first then remove
+                                                if (!deps.length && formData.departureAt) deps.push(formData.departureAt);
+                                                deps.splice(idx, 1);
+                                                arrs.splice(idx, 1);
+                                                handleFormChange('departureDates' as any, deps);
+                                                handleFormChange('arrivalDates' as any, arrs);
+                                                // ensure canonical fields sync
+                                                handleFormChange('departureAt', (deps[0] || ""));
+                                                handleFormChange('arrivalAt', (arrs[0] || ""));
+                                            }}>Xóa</Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            <div>
+                                <Button variant="ghost" onClick={() => {
+                                    // add an empty row — user will fill datetime themselves
                                     const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
                                     const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                    // if using fallback single departureAt, convert first then remove
-                                    if (!deps.length && formData.departureAt) deps.push(formData.departureAt);
-                                    deps.splice(idx, 1);
-                                    arrs.splice(idx, 1);
+                                    const newDep = ""; // do not prefill
+                                    deps.push(newDep);
+                                    // only compute default arrival when we can (and newDep is not empty).
+                                    // For empty newDep we keep arrival empty so user can input it.
+                                    let newArr = "";
+                                    const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
+                                    const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
+                                    if (newDep && firstDep && firstArr) {
+                                        const baseDep = parseLocalInput(firstDep);
+                                        const baseArr = parseLocalInput(firstArr);
+                                        if (baseDep && baseArr) {
+                                            const delta = baseArr.getTime() - baseDep.getTime();
+                                            const thisDep = parseLocalInput(newDep);
+                                            if (thisDep) newArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                        }
+                                    }
+                                    // if still empty, leave newArr = "" (no auto-fill)
+                                    arrs.push(newArr);
                                     handleFormChange('departureDates' as any, deps);
                                     handleFormChange('arrivalDates' as any, arrs);
-                                    // ensure canonical fields sync
-                                    handleFormChange('departureAt', (deps[0] || ""));
-                                    handleFormChange('arrivalAt', (arrs[0] || ""));
-                                  }}>Xóa</Button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                          <div>
-                            <Button variant="ghost" onClick={() => {
-                              // add an empty row — user will fill datetime themselves
-                              const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
-                              const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                              const newDep = ""; // do not prefill
-                              deps.push(newDep);
-                              // only compute default arrival when we can (and newDep is not empty).
-                              // For empty newDep we keep arrival empty so user can input it.
-                              let newArr = "";
-                              const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
-                              const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
-                              if (newDep && firstDep && firstArr) {
-                                const baseDep = parseLocalInput(firstDep);
-                                const baseArr = parseLocalInput(firstArr);
-                                if (baseDep && baseArr) {
-                                  const delta = baseArr.getTime() - baseDep.getTime();
-                                  const thisDep = parseLocalInput(newDep);
-                                  if (thisDep) newArr = toLocalInput(new Date(thisDep.getTime() + delta));
-                                }
-                              }
-                              // if still empty, leave newArr = "" (no auto-fill)
-                              arrs.push(newArr);
-                              handleFormChange('departureDates' as any, deps);
-                              handleFormChange('arrivalDates' as any, arrs);
-                              // set canonical only when first entries are non-empty
-                              if (deps.length === 1 && deps[0]) handleFormChange('departureAt', deps[0]);
-                              if (arrs.length === 1 && arrs[0]) handleFormChange('arrivalAt', arrs[0]);
-                            }}>Thêm ngày khởi hành</Button>
-                          </div>
+                                    // set canonical only when first entries are non-empty
+                                    if (deps.length === 1 && deps[0]) handleFormChange('departureAt', deps[0]);
+                                    if (arrs.length === 1 && arrs[0]) handleFormChange('arrivalAt', arrs[0]);
+                                }}>Thêm ngày khởi hành</Button>
+                            </div>
                         </div>
                     </div>
 
@@ -1854,17 +1885,31 @@ export default function Buses() {
 
                 <div className="grid grid-cols-3 gap-4">
                     <div>
-                        <Label htmlFor="price">Giá vé (VNĐ) *</Label>
+                        <Label htmlFor="adultPrice">Giá vé - Người lớn (VNĐ) *</Label>
                         <Input
-                            id="price"
+                            id="adultPrice"
                             type="number"
-                            value={formData.price || ""}
-                            onChange={(e) => handleFormChange('price', parseInt(e.target.value) || 0)}
+                            value={formData.adultPrice || ""}
+                            onChange={(e) => handleFormChange('adultPrice', parseInt(e.target.value) || 0)}
                             placeholder="350000"
-                            className={formErrors.price ? "border-red-500" : ""}
+                            className={formErrors.adultPrice ? "border-red-500" : ""}
                         />
-                        {formErrors.price && (
-                            <p className="text-sm text-red-500 mt-1">{formErrors.price}</p>
+                        {formErrors.adultPrice && (
+                            <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Label htmlFor="childPrice">Giá vé - Trẻ em (VNĐ)</Label>
+                        <Input
+                            id="childPrice"
+                            type="number"
+                            value={formData.childPrice || ""}
+                            onChange={(e) => handleFormChange('childPrice', parseInt(e.target.value) || 0)}
+                            placeholder="200000"
+                            className={formErrors.childPrice ? "border-red-500" : ""}
+                        />
+                        {formErrors.childPrice && (
+                            <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
                         )}
                     </div>
                     <div>
@@ -1939,38 +1984,38 @@ export default function Buses() {
                                 <SelectValue placeholder="Chọn loại xe (chọn 1 loại con)" />
                             </SelectTrigger>
                             <SelectContent>
-                   {/*
+                                {/*
                      Prefer categories from loaixeData when it contains subtypes.
                      Otherwise try a flat list from getAllSubtypes(loaixeData).
                      Only if both are empty do we fallback to busTypeOptions.
                    */}
-                   {Array.isArray(loaixeData) && loaixeData.length > 0 && loaixeData.some((c: any) => Array.isArray(c.subtypes) && c.subtypes.length > 0) ? (
-                       loaixeData.map((cat: any) => (
-                           <div key={cat.id || cat.name}>
-                               <div className="px-3 py-1 text-sm font-semibold text-gray-700">{cat.name}</div>
-                               {Array.isArray(cat.subtypes) && cat.subtypes.map((s: any) => (
-                                   <SelectItem key={s.id || s.name} value={s.id || s.name}>
-                                       {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
-                                   </SelectItem>
-                               ))}
-                           </div>
-                       ))
-                   ) : (() => {
-                       const flat = getAllSubtypes(loaixeData);
-                       if (flat && flat.length > 0) {
-                           return flat.map((s: any) => (
-                               <SelectItem key={s.id || s.name} value={s.id || s.name}>
-                                   {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
-                               </SelectItem>
-                           ));
-                       }
-                       // final fallback: small static list
-                       return busTypeOptions.map((option) => (
-                           <SelectItem key={option.value} value={option.value}>
-                               {option.label}
-                           </SelectItem>
-                       ));
-                   })()}
+                                {Array.isArray(loaixeData) && loaixeData.length > 0 && loaixeData.some((c: any) => Array.isArray(c.subtypes) && c.subtypes.length > 0) ? (
+                                    loaixeData.map((cat: any) => (
+                                        <div key={cat.id || cat.name}>
+                                            <div className="px-3 py-1 text-sm font-semibold text-gray-700">{cat.name}</div>
+                                            {Array.isArray(cat.subtypes) && cat.subtypes.map((s: any) => (
+                                                <SelectItem key={s.id || s.name} value={s.id || s.name}>
+                                                    {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
+                                                </SelectItem>
+                                            ))}
+                                        </div>
+                                    ))
+                                ) : (() => {
+                                    const flat = getAllSubtypes(loaixeData);
+                                    if (flat && flat.length > 0) {
+                                        return flat.map((s: any) => (
+                                            <SelectItem key={s.id || s.name} value={s.id || s.name}>
+                                                {s.name} {s.seat_capacity ? `- ${s.seat_capacity} chỗ` : ''}
+                                            </SelectItem>
+                                        ));
+                                    }
+                                    // final fallback: small static list
+                                    return busTypeOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ));
+                                })()}
                             </SelectContent>
                         </Select>
                         {formErrors.busType && (
@@ -1981,36 +2026,36 @@ export default function Buses() {
                 </div>
 
                 {/* --- Replace Textarea with amenities checkboxes --- */}
-				<div>
-					<Label>Tiện ích</Label>
-					<div className="mt-2 space-y-2">
-						{amenitiesOptions.map((opt) => {
-							const checked = amenitiesSelected.includes(opt.value);
-							return (
-								<div key={opt.value} className="flex items-center space-x-2">
-									<Checkbox
-										id={opt.value}
-										checked={checked}
-										onCheckedChange={(c) => {
-											setIsFormDirty(true);
-											if (c) {
-												setAmenitiesSelected(prev => [...prev, opt.value]);
-											} else {
-												setAmenitiesSelected(prev => prev.filter(a => a !== opt.value));
-											}
-											// clear errors if any
-											if (formErrors['amenities']) {
-												setFormErrors(prev => ({ ...prev, amenities: "" }));
-											}
-										}}
-									/>
-									<Label htmlFor={opt.value}>{opt.label}</Label>
-								</div>
-							);
-						})}
-					</div>
-					<p className="text-sm text-gray-500 mt-2">Chọn các tiện ích có sẵn trên tuyến.</p>
-				</div>
+                <div>
+                    <Label>Tiện ích</Label>
+                    <div className="mt-2 space-y-2">
+                        {amenitiesOptions.map((opt) => {
+                            const checked = amenitiesSelected.includes(opt.value);
+                            return (
+                                <div key={opt.value} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={opt.value}
+                                        checked={checked}
+                                        onCheckedChange={(c) => {
+                                            setIsFormDirty(true);
+                                            if (c) {
+                                                setAmenitiesSelected(prev => [...prev, opt.value]);
+                                            } else {
+                                                setAmenitiesSelected(prev => prev.filter(a => a !== opt.value));
+                                            }
+                                            // clear errors if any
+                                            if (formErrors['amenities']) {
+                                                setFormErrors(prev => ({ ...prev, amenities: "" }));
+                                            }
+                                        }}
+                                    />
+                                    <Label htmlFor={opt.value}>{opt.label}</Label>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-2">Chọn các tiện ích có sẵn trên tuyến.</p>
+                </div>
 
                 <div>
                     <Label htmlFor="status">Trạng thái</Label>
@@ -2199,7 +2244,7 @@ export default function Buses() {
                 type="danger"
                 requireTyping={true}
                 // typingText={busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? "FORCE_DELETE" : "DELETE"}
-                typingText={busToDelete   ? "FORCE_DELETE" : "DELETE"}
+                typingText={busToDelete ? "FORCE_DELETE" : "DELETE"}
 
                 onConfirm={confirmDelete}
                 confirmText="Xóa tuyến xe"
