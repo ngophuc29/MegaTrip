@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, X, Image as ImageIcon, RotateCcw, Move } from "lucide-react";
 import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
@@ -8,7 +8,8 @@ import { useToast } from "./ui/use-toast";
 // ...existing code...
 interface ImageFile {
   id: string;
-  file: File;
+
+  file?: File | null;
   url: string;
   alt?: string;
   uploading?: boolean;
@@ -42,7 +43,22 @@ export function ImageUploader({
 
   // base API for upload (adjust via NEXT_PUBLIC_API_BASE_URL)
   const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
-
+  // sync incoming value (array of URLs) into internal preview state
+  useEffect(() => {
+    const urls = Array.isArray(value) ? value : [];
+    setImages(prev => {
+      const prevUrls = prev.map(p => p.url);
+      // no-op when identical to avoid re-renders
+      if (urls.length === prevUrls.length && urls.every((u, i) => u === prevUrls[i])) return prev;
+      return urls.map((url, idx) => ({
+        id: `init_${idx}_${url}`,
+        file: null,
+        url,
+        uploading: false,
+        progress: 100,
+      }));
+    });
+  }, [value, onChange]);
   const validateFile = (file: File): string | null => {
     if (!file.type.startsWith('image/')) {
       return "Chỉ cho phép tải lên file hình ảnh";
@@ -376,4 +392,3 @@ export function ImageUploader({
     </div>
   );
 }
- 

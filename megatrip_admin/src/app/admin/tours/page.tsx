@@ -307,6 +307,57 @@ export default function Tours() {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<any>(null);
 
+    // add compress helpers (insert near top of file after imports)
+    async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
+        return new Promise((resolve) => {
+            try {
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.min(1, maxWidth / img.width);
+                    const w = Math.max(1, Math.floor(img.width * scale));
+                    const h = Math.max(1, Math.floor(img.height * scale));
+                    const canvas = document.createElement("canvas");
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) return resolve(dataUri);
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const mime = dataUri.match(/^data:(image\/[a-zA-Z]+);base64,/)?.[1] || "image/jpeg";
+                    try {
+                        const out = canvas.toDataURL(mime, quality);
+                        resolve(out);
+                    } catch {
+                        resolve(dataUri);
+                    }
+                };
+                img.onerror = () => resolve(dataUri);
+                img.src = dataUri;
+            } catch {
+                resolve(dataUri);
+            }
+        });
+    }
+
+    async function compressEmbeddedImagesInHtmlClient(html: string, maxWidth = 1600, quality = 0.8) {
+        if (!html || typeof html !== "string") return html;
+        const regex = /<img[^>]+src=(["'])(data:[^"'>]+)\1[^>]*>/g;
+        const seen = new Map<string, Promise<string>>();
+        let m;
+        const replacements: Array<Promise<void>> = [];
+        while ((m = regex.exec(html)) !== null) {
+            const dataUri = m[2];
+            if (!dataUri || !dataUri.startsWith("data:")) continue;
+            if (!seen.has(dataUri)) {
+                seen.set(dataUri, compressDataUriClient(dataUri, maxWidth, quality));
+            }
+            replacements.push((async () => {
+                const compressed = await seen.get(dataUri)!;
+                html = html.split(dataUri).join(compressed);
+            })());
+        }
+        await Promise.all(replacements);
+        return html;
+    }
     // map server tour -> UI Tour
     const mapServerTour = (t: any): Tour => {
         const toLocal = (iso?: string | null) => (iso ? toLocalInput(new Date(iso)) : "");
@@ -831,6 +882,23 @@ export default function Tours() {
     // Create tour mutation
     const createTourMutation = useMutation({
         mutationFn: async (payload: any) => {
+            // compress embedded images in description & itinerary (client-side)
+            try {
+                if (payload.description) {
+                    payload.description = await compressEmbeddedImagesInHtmlClient(payload.description, 1600, 0.8);
+                }
+                if (Array.isArray(payload.itinerary)) {
+                    for (let i = 0; i < payload.itinerary.length; i++) {
+                        const d = payload.itinerary[i];
+                        if (d && d.description && typeof d.description === "string" && d.description.startsWith("data:") || /<img[^>]+src=(["'])(data:[^"'>]+)\1/.test(d.description)) {
+                            payload.itinerary[i].description = await compressEmbeddedImagesInHtmlClient(d.description, 1600, 0.8);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Client-side compression failed:", err);
+            }
+
             console.log('[DEBUG] Sending POST /api/tours with payload:', payload);
             const res = await fetch(`${API_BASE}/api/tours`, {
                 method: "POST",
@@ -886,6 +954,23 @@ export default function Tours() {
     // Update tour mutation
     const updateTourMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<TourFormData> }) => {
+            // compress embedded images in description & itinerary (client-side)
+            try {
+                if (data.description) {
+                    (data as any).description = await compressEmbeddedImagesInHtmlClient(data.description as string, 1600, 0.8);
+                }
+                if (Array.isArray((data as any).itinerary)) {
+                    for (let i = 0; i < (data as any).itinerary.length; i++) {
+                        const d = (data as any).itinerary[i];
+                        if (d && d.description && typeof d.description === "string" && (d.description.startsWith("data:") || /<img[^>]+src=(["'])(data:[^"'>]+)\1/.test(d.description))) {
+                            (data as any).itinerary[i].description = await compressEmbeddedImagesInHtmlClient(d.description, 1600, 0.8);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn("Client-side compression failed:", err);
+            }
+
             console.log("[DEBUG] Sending PUT /api/tours/" + id, data);
             const res = await fetch(`${API_BASE}/api/tours/${id}`, {
                 method: "PUT",
@@ -2480,10 +2565,10 @@ export default function Tours() {
                         <Label>Hình ảnh tour * (tối thiểu 1, tối đa 10)</Label>
                         <div className="mt-2">
                             <ImageUploader
-                                maxFiles={10}
-                                maxSizeMB={5}
-                                initialFiles={formData.images}
+                                value={formData.images || []}
                                 onChange={(files) => handleFormChange("images", files)}
+                                maxFiles={10}
+                                maxSizePerFile={5}
                                 hint="Kích thước tối đa 5MB/file, khuyến nghị 1920×1080"
                                 className={formErrors.images ? "border-red-500" : ""}
                             />

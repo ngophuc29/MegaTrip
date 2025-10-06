@@ -93,12 +93,61 @@ export default function News() {
     const queryClient = useQueryClient();
 
     const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
-    const BACKEND_AVAILABLE = false;
-
+    const BACKEND_AVAILABLE = true;
+    // base URL for backend API (override with NEXT_PUBLIC_API_BASE)
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
     // local store used while BE not ready (or for optimistic updates)
     const [articlesState, setArticlesState] = useState<NewsArticle[]>([]);
     const [totalState, setTotalState] = useState<number>(0);
     // stubbed fetch/query
+    async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
+        return new Promise((resolve, reject) => {
+            try {
+                const img = new Image();
+                img.onload = () => {
+                    const scale = Math.min(1, maxWidth / img.width);
+                    const w = Math.max(1, Math.floor(img.width * scale));
+                    const h = Math.max(1, Math.floor(img.height * scale));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) return resolve(dataUri);
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const mime = dataUri.match(/^data:(image\/[a-zA-Z]+);base64,/)?.[1] || 'image/jpeg';
+                    const out = canvas.toDataURL(mime, quality);
+                    resolve(out);
+                };
+                img.onerror = () => resolve(dataUri);
+                img.src = dataUri;
+            } catch (err) {
+                resolve(dataUri);
+            }
+        });
+    }
+
+    async function compressEmbeddedImagesInHtmlClient(html: string, maxWidth = 1600, quality = 0.8) {
+        if (!html) return html;
+        const regex = /<img[^>]+src=(["'])(data:[^"'>]+)\1[^>]*>/g;
+        const seen = new Map<string, Promise<string>>();
+        let m;
+        const replaces: Array<Promise<void>> = [];
+        while ((m = regex.exec(html)) !== null) {
+            const dataUri = m[2];
+            if (!dataUri || !dataUri.startsWith('data:')) continue;
+            if (!seen.has(dataUri)) {
+                seen.set(dataUri, compressDataUriClient(dataUri, maxWidth, quality));
+            }
+            replaces.push(
+                (async () => {
+                    const compressed = await seen.get(dataUri)!;
+                    html = html.split(dataUri).join(compressed);
+                })()
+            );
+        }
+        await Promise.all(replaces);
+        return html;
+    }
     const { data: newsData, isLoading, error, refetch } = (() => {
         if (BACKEND_AVAILABLE) {
             return useQuery({
@@ -111,7 +160,7 @@ export default function News() {
                         ...(filters.status !== "all" && { status: filters.status }),
                         ...(filters.category !== "all" && { category: filters.category }),
                     });
-                    const response = await fetch(`/api/admin/news?${params}`);
+                    const response = await fetch(`${API_BASE}/api/admin/news?${params}`);
                     if (!response.ok) throw new Error("Failed to fetch news");
                     return response.json();
                 },
@@ -164,8 +213,16 @@ export default function News() {
                 // actual network create (kept here for when BE ready)
                 (async () => {
                     try {
-                        const payload = { ...data }; // tags removed
-                        const res = await fetch("/api/admin/news", {
+                        const payload = { ...data };
+                        // compress embedded images in content (client-side)
+                        if (payload.content) {
+                            try {
+                                payload.content = await compressEmbeddedImagesInHtmlClient(payload.content, 1600, 0.8);
+                            } catch (err) {
+                                console.warn('Client-side compression failed, sending original content', err);
+                            }
+                        }
+                        const res = await fetch(`${API_BASE}/api/admin/news`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify(payload),
@@ -183,6 +240,11 @@ export default function News() {
 
     const updateNewsMutation = {
         mutate: ({ id, data }: { id: string; data: NewsFormData }) => {
+            // guard: ensure id is defined
+            if (!id) {
+                toast({ title: "Thiếu id bài viết", description: "Không có id để cập nhật", variant: "destructive" });
+                return;
+            }
             setArticlesState(prev => prev.map(a => a.id === id ? {
                 ...a,
                 title: data.title,
@@ -203,8 +265,16 @@ export default function News() {
             if (BACKEND_AVAILABLE) {
                 (async () => {
                     try {
-                        const payload = { ...data }; // tags removed
-                        const res = await fetch(`/api/admin/news/${id}`, {
+                        const payload = { ...data };
+                        // compress embedded images in content (client-side)
+                        if (payload.content) {
+                            try {
+                                payload.content = await compressEmbeddedImagesInHtmlClient(payload.content, 1600, 0.8);
+                            } catch (err) {
+                                console.warn('Client-side compression failed, sending original content', err);
+                            }
+                        }
+                        const res = await fetch(`${API_BASE}/api/admin/news/${id}`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify(payload),
@@ -233,7 +303,7 @@ export default function News() {
             if (BACKEND_AVAILABLE) {
                 (async () => {
                     try {
-                        const res = await fetch(`/api/admin/news/${id}`, { method: "DELETE" });
+                        const res = await fetch(`${API_BASE}/api/admin/news/${id}`, { method: "DELETE" });
                         if (!res.ok) throw new Error("Failed to delete article");
                         queryClient.invalidateQueries({ queryKey: ["news"] });
                     } catch (err: any) {
@@ -263,7 +333,7 @@ export default function News() {
             if (BACKEND_AVAILABLE) {
                 (async () => {
                     try {
-                        const res = await fetch("/api/admin/news/bulk", {
+                        const res = await fetch(`${API_BASE}/api/admin/news/bulk`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ action, ids }),
@@ -279,9 +349,10 @@ export default function News() {
         isPending: false,
     };
 
-    // use UI data from local state when BE not available
-    const articles: NewsArticle[] = (newsData?.data && BACKEND_AVAILABLE) ? newsData.data : articlesState;
-    const total = (newsData?.pagination?.total && BACKEND_AVAILABLE) ? newsData.pagination.total : totalState;
+    // normalize server items: ensure `id` exists (backend returns _id)
+    const serverItems = newsData?.data?.map((a: any) => ({ ...a, id: a._id || a.id })) || [];
+    const articles: NewsArticle[] = BACKEND_AVAILABLE && newsData?.data ? serverItems : articlesState;
+    const total = BACKEND_AVAILABLE && newsData?.pagination?.total ? newsData.pagination.total : totalState;
 
     const validateForm = (data: NewsFormData) => {
         const errors: Record<string, string> = {};
@@ -303,7 +374,6 @@ export default function News() {
             status: "unpublished",
             summary: "",
             content: "",
-            tags: "",
             featured: false,
             heroImage: "",
 
@@ -518,7 +588,7 @@ export default function News() {
                     ) : (
                         <span className="text-gray-400">Chưa xuất bản</span>
                     )}
-                    <p className="text-xs text-gray-500">{record.views.toLocaleString()} lượt xem</p>
+                    {/* <p className="text-xs text-gray-500">{record.views.toLocaleString()} lượt xem</p> */}
                 </div>
             ),
         },
@@ -548,11 +618,11 @@ export default function News() {
                         dangerouslySetInnerHTML={{ __html: selectedArticle.content }}
                     />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                {/* <div className="flex flex-wrap gap-2">
                     {selectedArticle.tags.map((tag) => (
                         <Badge key={tag} variant="outline" className="text-xs">#{tag}</Badge>
                     ))}
-                </div>
+                </div> */}
             </div>
         );
     };
