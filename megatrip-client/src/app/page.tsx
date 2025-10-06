@@ -253,6 +253,12 @@ const latestNews = [
 
 export default function Index() {
   const [currentBanner, setCurrentBanner] = useState(0);
+  const [latestNews, setLatestNews] = useState<any[]>([
+    // keep fallback placeholder while loading
+    { id: 'placeholder-1', title: 'Đang tải...', category: '', date: '', image: '/placeholder.svg' },
+    { id: 'placeholder-2', title: 'Đang tải...', category: '', date: '', image: '/placeholder.svg' },
+    { id: 'placeholder-3', title: 'Đang tải...', category: '', date: '', image: '/placeholder.svg' },
+  ]);
   // recently viewed tours state
   const [recentTours, setRecentTours] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<any[]>([]);
@@ -281,27 +287,61 @@ export default function Index() {
       }
     })();
   }, []);
-
+  // fetch latest featured news for home
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:7700/api/admin/news?page=1&limit=3&status=published&featured=true');
+        if (!res.ok) {
+          console.warn('Failed to fetch latest news, status', res.status);
+          return;
+        }
+        const json = await res.json();
+        const items = Array.isArray(json.data) ? json.data : [];
+        const mapped = items.map((a: any) => {
+          const id = a._id?.$oid ?? a._id ?? a.id ?? a.slug ?? String(Math.random());
+          // prefer heroImage, else try to extract first <img> from content, else placeholder
+          let image = a.heroImage || a.image || '/placeholder.svg';
+          if (!image && typeof a.content === 'string') {
+            const m = a.content.match(/<img[^>]+src=(["'])([^"']+)\1/);
+            if (m && m[2]) image = m[2];
+          }
+          const date = a.publishedAt ? (new Date(a.publishedAt)).toLocaleDateString('vi-VN') : (a.createdAt ? (new Date(a.createdAt)).toLocaleDateString('vi-VN') : '');
+          return {
+            id,
+            title: a.title || 'Untitled',
+            category: a.category || '',
+            date,
+            image,
+            summary: a.summary || '',
+            slug: a.slug || id,
+          };
+        });
+        setLatestNews(mapped);
+      } catch (err) {
+        console.warn('Error loading latest news', err);
+      }
+    })();
+  }, []);
   // pick one promo per service type BUT only promos that require a code (requireCode === true)
   const promotionsToShow = (() => {
     const types = ['flights', 'buses', 'tours'];
     const picked: any[] = [];
     // only consider promos that are active/usable AND require a code
     const usableWithCode = (p: any) => !!p && p.isActiveNow && !p.isExpired && !p.isUsedUp && p.requireCode === true;
-    +
-      types.forEach((type) => {
-        // prefer promo that explicitly lists the type and requires a code
-        const explicit = remotePromotions.find((p) =>
-          Array.isArray(p.appliesTo) && p.appliesTo.includes(type) && usableWithCode(p)
-        );
-        if (explicit) { picked.push(explicit); return; }
-        // fallback to global 'all' promo that requires a code
-        const global = remotePromotions.find((p) =>
-          Array.isArray(p.appliesTo) && p.appliesTo.includes('all') && usableWithCode(p)
-        );
-        if (global) picked.push(global);
-        // if neither found, do not include this type
-      });
+    types.forEach((type) => {
+      // prefer promo that explicitly lists the type and requires a code
+      const explicit = remotePromotions.find((p) =>
+        Array.isArray(p.appliesTo) && p.appliesTo.includes(type) && usableWithCode(p)
+      );
+      if (explicit) { picked.push(explicit); return; }
+      // fallback to global 'all' promo that requires a code
+      const global = remotePromotions.find((p) =>
+        Array.isArray(p.appliesTo) && p.appliesTo.includes('all') && usableWithCode(p)
+      );
+      if (global) picked.push(global);
+      // if neither found, do not include this type
+    });
     return picked;
   })();
   const formatPrice = (price: number) =>
@@ -633,27 +673,39 @@ export default function Index() {
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {latestNews.map((article) => (
-              <Card key={article.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                <img
-                  src={article.image}
-                  alt={article.title}
-                  className="w-full h-48 object-cover"
-                />
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge variant="outline" className="text-xs">
-                      {article.category}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{article.date}</span>
-                  </div>
-                  <h3 className="font-semibold line-clamp-2 mb-2">{article.title}</h3>
-                  <Button variant="ghost" className="p-0 h-auto text-[hsl(var(--primary))]">
-                    Đọc thêm →
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
+            {latestNews.map((article) => {
+              const labelsMap: Record<string, string> = {
+                company: "Tin công ty",
+                promotion: "Ưu đãi & khuyến mãi",
+                travel: "Cẩm nang du lịch",
+                policy: "Chính sách",
+              };
+              const categoryLabel = article.category === 'travel' ? labelsMap.travel : (labelsMap[article.category] || article.category);
+              return (
+                <Card key={article.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                  <img
+                    src={article.image}
+                    alt={article.title}
+                    className="w-full h-48 object-cover"
+                  />
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge variant="outline" className="text-xs">
+                        {categoryLabel}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{article.date}</span>
+                    </div>
+                    <h3 className="font-semibold line-clamp-2 mb-2">{article.title}</h3>
+                    {article.summary && (
+                      <p className="text-sm text-muted-foreground mb-3 line-clamp-3">{article.summary}</p>
+                    )}
+                    <Button variant="ghost" className="p-0 h-auto text-[hsl(var(--primary))]">
+                      Đọc thêm →
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>

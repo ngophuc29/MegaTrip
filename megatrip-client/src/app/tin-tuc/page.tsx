@@ -1,7 +1,6 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -20,191 +19,129 @@ import {
     TrendingUp,
     MapPin,
     Plane,
-    AlertCircle,
     Coffee,
     Camera,
 } from 'lucide-react';
+import NewsCard from './NewsCard';
 
-const categories = [
-    { id: 'all', name: 'Tất cả', count: 45, icon: Newspaper },
-    { id: 'travel-tips', name: 'Mẹo du lịch', count: 18, icon: Coffee },
-    { id: 'destinations', name: 'Điểm đến', count: 12, icon: MapPin },
-    { id: 'airline-news', name: 'Thông báo hãng', count: 8, icon: Plane },
-    { id: 'promotions', name: 'Khuyến mãi', count: 5, icon: TrendingUp },
-    { id: 'experiences', name: 'Trải nghiệm', count: 2, icon: Camera },
-];
-
-const featuredArticles = [
-    {
-        id: 1,
-        title: 'Top 10 điểm đến không thể bỏ qua trong dịp Tết Nguyên Đán 2025',
-        excerpt: 'Khám phá những điểm đến tuyệt đẹp và ý nghĩa để có một kỳ nghỉ Tết đáng nhớ cùng gia đình và bạn bè.',
-        content: 'Dịp Tết Nguyên Đán là thời gian tuyệt vời để du lịch và khám phá những vùng đất mới...',
-        author: 'Minh Anh',
-        publishDate: '28/12/2024',
-        readTime: '8 phút đọc',
-        views: 12543,
-        likes: 245,
-        category: 'destinations',
-        categoryName: 'Điểm đến',
-        image: '/placeholder.svg',
-        featured: true,
-        tags: ['Tết 2025', 'Điểm đến', 'Du lịch gia đình'],
-    },
-    {
-        id: 2,
-        title: 'Hàng không Vietnam Airlines mở rộng mạng lưới đường bay đến Côn Đảo',
-        excerpt: 'Vietnam Airlines chính thức công bố kế hoạch mở thêm đường bay mới từ TP.HCM và Hà Nội đến Côn Đảo.',
-        content: 'Trong nỗ lực mở rộng mạng lưới đường bay nội địa, Vietnam Airlines đã công bố...',
-        author: 'Hồng Nhung',
-        publishDate: '27/12/2024',
-        readTime: '5 phút đọc',
-        views: 8932,
-        likes: 156,
-        category: 'airline-news',
-        categoryName: 'Thông báo hãng',
-        image: '/placeholder.svg',
-        featured: true,
-        tags: ['Vietnam Airlines', 'Côn Đảo', 'Đường bay mới'],
-    },
-    {
-        id: 3,
-        title: '7 mẹo tiết kiệm chi phí khi du lịch Sapa mùa đông',
-        excerpt: 'Sapa mùa đông tuyệt đẹp nhưng chi phí có thể cao. Hãy cùng tìm hiểu cách tiết kiệm mà vẫn có trải nghiệm tuyệt vời.',
-        content: 'Sapa trong mùa đông mang một vẻ đẹp hoang sơ và lãng mạn khó cưỡng...',
-        author: 'Đức Minh',
-        publishDate: '26/12/2024',
-        readTime: '6 phút đọc',
-        views: 15678,
-        likes: 324,
-        category: 'travel-tips',
-        categoryName: 'Mẹo du lịch',
-        image: '/placeholder.svg',
-        featured: true,
-        tags: ['Sapa', 'Tiết kiệm', 'Mùa đông'],
-    },
-];
-
-const allArticles = [
-    ...featuredArticles,
-    {
-        id: 4,
-        title: 'Lịch trình xe khách được cập nhật cho dịp Tết Nguyên Đán',
-        excerpt: 'Các nhà xe lớn đã công bố lịch trình và giá vé mới cho dịp Tết Nguyên Đán 2025.',
-        content: 'Với nhu cầu đi lại tăng cao trong dịp Tết, các nhà xe đã chuẩn bị...',
-        author: 'Thu Hà',
-        publishDate: '25/12/2024',
-        readTime: '4 phút đọc',
-        views: 6543,
-        likes: 89,
-        category: 'airline-news',
-        categoryName: 'Thông báo hãng',
-        image: '/placeholder.svg',
-        featured: false,
-        tags: ['Xe khách', 'Tết 2025', 'Lịch trình'],
-    },
-    {
-        id: 5,
-        title: 'Phú Quốc vs Nha Trang: Chọn điểm đến biển nào cho kỳ nghỉ?',
-        excerpt: 'So sánh chi tiết giữa hai điểm đến biển hàng đầu Việt Nam để bạn có lựa chọn phù hợp.',
-        content: 'Cả Phú Quốc và Nha Trang đều là những điểm đến biển tuyệt vời...',
-        author: 'Lan Anh',
-        publishDate: '24/12/2024',
-        readTime: '7 phút đọc',
-        views: 9876,
-        likes: 187,
-        category: 'destinations',
-        categoryName: 'Điểm đến',
-        image: '/placeholder.svg',
-        featured: false,
-        tags: ['Phú Quốc', 'Nha Trang', 'So sánh'],
-    },
-    {
-        id: 6,
-        title: 'Cách chuẩn bị hành lý thông minh cho chuyến bay',
-        excerpt: 'Những mẹo hay để chuẩn bị hành lý hiệu quả, tiết kiệm không gian và tránh phát sinh phí.',
-        content: 'Việc chuẩn bị hành lý là một nghệ thuật, đặc biệt khi bạn muốn mang theo...',
-        author: 'Văn Hùng',
-        publishDate: '23/12/2024',
-        readTime: '5 phút đọc',
-        views: 11234,
-        likes: 203,
-        category: 'travel-tips',
-        categoryName: 'Mẹo du lịch',
-        image: '/placeholder.svg',
-        featured: false,
-        tags: ['Hành lý', 'Máy bay', 'Mẹo hay'],
-    },
-    {
-        id: 7,
-        title: 'Trải nghiệm ẩm thực đường phố Hà Nội trong 2 ngày',
-        excerpt: 'Hành trình khám phá những món ăn đường phố đặc trưng của Thủ đô trong 48 giờ.',
-        content: 'Hà Nội không chỉ nổi tiếng với những di tích lịch sử mà còn là thiên đường ẩm thực...',
-        author: 'Mai Linh',
-        publishDate: '22/12/2024',
-        readTime: '6 phút đọc',
-        views: 7890,
-        likes: 145,
-        category: 'experiences',
-        categoryName: 'Trải nghiệm',
-        image: '/placeholder.svg',
-        featured: false,
-        tags: ['Hà Nội', 'Ẩm thực', 'Đường phố'],
-    },
-    {
-        id: 8,
-        title: 'Khuyến mãi đặc biệt: Giảm 40% cho tour miền Trung',
-        excerpt: 'Chương trình khuyến mãi hấp dẫn cho các tour khám phá miền Trung trong tháng 1/2025.',
-        content: 'Nhằm kích cầu du lịch nội địa, nhiều công ty lữ hành đã tung ra...',
-        author: 'Thanh Tùng',
-        publishDate: '21/12/2024',
-        readTime: '3 phút đọc',
-        views: 5432,
-        likes: 67,
-        category: 'promotions',
-        categoryName: 'Khuyến mãi',
-        image: '/placeholder.svg',
-        featured: false,
-        tags: ['Khuyến mãi', 'Miền Trung', 'Tour'],
-    },
-];
+const DEFAULT_PLACEHOLDER = '/placeholder.svg';
 
 export default function TinTuc() {
+    const [articles, setArticles] = useState<any[]>([]);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('newest');
     const [favorites, setFavorites] = useState<number[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            setLoading(true);
+            try {
+                const res = await fetch('http://localhost:7700/api/admin/news?page=1&limit=1000&status=published');
+                if (!res.ok) {
+                    console.warn('Failed to fetch news', res.status);
+                    setArticles([]);
+                    setLoading(false);
+                    return;
+                }
+                const json = await res.json();
+                const items = Array.isArray(json.data) ? json.data : [];
+                const mapped = items.map((a: any) => {
+                    const id = a._id?.$oid ?? a._id ?? a.id ?? a.slug ?? String(Math.random());
+                    let image = a.heroImage || a.image || DEFAULT_PLACEHOLDER;
+                    if (!image && typeof a.content === 'string') {
+                        const m = a.content.match(/<img[^>]+src=(["'])([^"']+)\1/);
+                        if (m && m[2]) image = m[2];
+                    }
+                    return {
+                        id,
+                        title: a.title || 'Untitled',
+                        category: a.category || 'uncategorized',
+                        categoryName: a.category || 'Khác',
+                        excerpt: a.summary || (typeof a.content === 'string' ? a.content.replace(/<[^>]+>/g, '').slice(0, 200) : ''),
+                        image,
+                        featured: !!a.featured,
+                        author: a.author?.name || 'Admin',
+                        publishDate: a.publishedAt ? (new Date(a.publishedAt)).toLocaleDateString('vi-VN') : (a.createdAt ? (new Date(a.createdAt)).toLocaleDateString('vi-VN') : ''),
+                        readTime: a.readTime || '3 phút đọc',
+                        views: a.views || 0,
+                        likes: a.likes || 0,
+                        tags: a.tags || [],
+                        raw: a,
+                    };
+                });
+                setArticles(mapped);
+            } catch (err) {
+                console.warn('Error loading news', err);
+                setArticles([]);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, []);
+
+    // derive categories with counts from fetched articles
+    const categories = useMemo(() => {
+        const map = new Map<string, { name: string; count: number }>();
+        map.set('all', { name: 'Tất cả', count: articles.length });
+        for (const a of articles) {
+            const key = a.category || 'uncategorized';
+            const existing = map.get(key);
+            const label = key === 'travel' ? 'Cẩm nang du lịch' :
+                key === 'promotion' ? 'Khuyến mãi' :
+                    key === 'company' ? 'Tin công ty' :
+                        key === 'policy' ? 'Chính sách' :
+                            (a.categoryName || key);
+            if (existing) {
+                existing.count += 1;
+            } else {
+                map.set(key, { name: label, count: 1 });
+            }
+        }
+        return Array.from(map.entries()).map(([id, v]) => ({ id, name: v.name, count: v.count }));
+    }, [articles]);
 
     const toggleFavorite = (articleId: number) => {
         setFavorites(prev =>
-            prev.includes(articleId)
-                ? prev.filter(id => id !== articleId)
-                : [...prev, articleId]
+            prev.includes(articleId) ? prev.filter(id => id !== articleId) : [...prev, articleId]
         );
     };
 
-    const filteredArticles = allArticles.filter(article => {
-        const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
-        const matchesSearch = article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            article.excerpt.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            article.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-        return matchesCategory && matchesSearch;
-    });
+    const filteredArticles = useMemo(() => {
+        return articles.filter(article => {
+            const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
+            const q = searchTerm.trim().toLowerCase();
+            const matchesSearch = !q || (
+                article.title.toLowerCase().includes(q) ||
+                article.excerpt.toLowerCase().includes(q) ||
+                article.tags.some((t: string) => t.toLowerCase().includes(q))
+            );
+            return matchesCategory && matchesSearch;
+        });
+    }, [articles, selectedCategory, searchTerm]);
 
-    const sortedArticles = [...filteredArticles].sort((a, b) => {
-        switch (sortBy) {
-            case 'newest': return new Date(b.publishDate.split('/').reverse().join('-')).getTime() -
-                new Date(a.publishDate.split('/').reverse().join('-')).getTime();
-            case 'oldest': return new Date(a.publishDate.split('/').reverse().join('-')).getTime() -
-                new Date(b.publishDate.split('/').reverse().join('-')).getTime();
-            case 'popular': return b.views - a.views;
-            case 'liked': return b.likes - a.likes;
-            default: return 0;
-        }
-    });
+    const sortedArticles = useMemo(() => {
+        const copy = [...filteredArticles];
+        copy.sort((a, b) => {
+            switch (sortBy) {
+                case 'newest':
+                    return new Date(b.publishDate).getTime() - new Date(a.publishDate).getTime();
+                case 'oldest':
+                    return new Date(a.publishDate).getTime() - new Date(b.publishDate).getTime();
+                case 'popular':
+                    return (b.views || 0) - (a.views || 0);
+                case 'liked':
+                    return (b.likes || 0) - (a.likes || 0);
+                default:
+                    return 0;
+            }
+        });
+        return copy;
+    }, [filteredArticles, sortBy]);
 
-    const featuredNews = sortedArticles.filter(article => article.featured);
-    const regularNews = sortedArticles.filter(article => !article.featured);
+    const featuredNews = useMemo(() => articles.filter(a => !!a.featured), [articles]);
+    const regularNews = useMemo(() => sortedArticles.filter(a => !a.featured), [sortedArticles]);
 
     return (
         <>
@@ -246,7 +183,6 @@ export default function TinTuc() {
                                 onClick={() => setSelectedCategory(category.id)}
                                 className="whitespace-nowrap"
                             >
-                                <category.icon className="h-4 w-4 mr-2" />
                                 {category.name} ({category.count})
                             </Button>
                         ))}
@@ -267,107 +203,13 @@ export default function TinTuc() {
                                 </h2>
 
                                 {/* Main Featured Article */}
-                                {featuredNews[0] && (
-                                    <Card className="mb-6 overflow-hidden hover:shadow-lg transition-shadow">
-                                        <div className="md:flex">
-                                            <div className="md:w-1/2">
-                                                <img
-                                                    src={featuredNews[0].image}
-                                                    alt={featuredNews[0].title}
-                                                    className="w-full h-64 md:h-full object-cover"
-                                                />
-                                            </div>
-                                            <div className="md:w-1/2 p-6">
-                                                <div className="flex items-center gap-2 mb-3">
-                                                    <Badge variant="secondary">{featuredNews[0].categoryName}</Badge>
-                                                    <Badge variant="destructive">Nổi bật</Badge>
-                                                </div>
-                                                <h3 className="text-xl font-bold mb-3 hover:text-primary transition-colors">
-                                                    <Link prefetch={false}  href={`/tin-tuc/${featuredNews[0].id}`}>
-                                                        {featuredNews[0].title}
-                                                    </Link>
-                                                </h3>
-                                                <p className="text-muted-foreground mb-4 line-clamp-3">
-                                                    {featuredNews[0].excerpt}
-                                                </p>
-                                                <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <span className="flex items-center">
-                                                            <User className="h-3 w-3 mr-1" />
-                                                            {featuredNews[0].author}
-                                                        </span>
-                                                        <span className="flex items-center">
-                                                            <Calendar className="h-3 w-3 mr-1" />
-                                                            {featuredNews[0].publishDate}
-                                                        </span>
-                                                        <span className="flex items-center">
-                                                            <Clock className="h-3 w-3 mr-1" />
-                                                            {featuredNews[0].readTime}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                                        <span className="flex items-center">
-                                                            <Eye className="h-3 w-3 mr-1" />
-                                                            {featuredNews[0].views.toLocaleString()}
-                                                        </span>
-                                                        <button
-                                                            className="flex items-center hover:text-red-500 transition-colors"
-                                                            onClick={() => toggleFavorite(featuredNews[0].id)}
-                                                        >
-                                                            <Heart className={`h-3 w-3 mr-1 ${favorites.includes(featuredNews[0].id) ? 'fill-red-500 text-red-500' : ''}`} />
-                                                            {featuredNews[0].likes}
-                                                        </button>
-                                                    </div>
-                                                    <Button size="sm" asChild>
-                                                        <Link prefetch={false}  href={`/tin-tuc/${featuredNews[0].id}`}>
-                                                            Đọc thêm
-                                                        </Link>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </Card>
-                                )}
+                                {featuredNews[0] && <NewsCard article={featuredNews[0]} featured />}
 
                                 {/* Secondary Featured Articles */}
                                 {featuredNews.length > 1 && (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {featuredNews.slice(1, 3).map((article) => (
-                                            <Card key={article.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                                                <img
-                                                    src={article.image}
-                                                    alt={article.title}
-                                                    className="w-full h-48 object-cover"
-                                                />
-                                                <CardContent className="p-4">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <Badge variant="outline">{article.categoryName}</Badge>
-                                                    </div>
-                                                    <h3 className="font-semibold mb-2 line-clamp-2 hover:text-primary transition-colors">
-                                                        <Link prefetch={false}  href={`/tin-tuc/${article.id}`}>
-                                                            {article.title}
-                                                        </Link>
-                                                    </h3>
-                                                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                                                        {article.excerpt}
-                                                    </p>
-                                                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                                        <div className="flex items-center gap-2">
-                                                            <span>{article.author}</span>
-                                                            <span>•</span>
-                                                            <span>{article.publishDate}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="flex items-center">
-                                                                <Eye className="h-3 w-3 mr-1" />
-                                                                {article.views.toLocaleString()}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
+                                            <NewsCard key={article.id} article={article} />
                                         ))}
                                     </div>
                                 )}
@@ -392,75 +234,13 @@ export default function TinTuc() {
                             </div>
 
                             <div className="space-y-6">
-                                {regularNews.map((article) => (
-                                    <Card key={article.id} className="hover:shadow-md transition-shadow">
-                                        <div className="md:flex">
-                                            <div className="md:w-1/3">
-                                                <img
-                                                    src={article.image}
-                                                    alt={article.title}
-                                                    className="w-full h-48 md:h-full object-cover"
-                                                />
-                                            </div>
-                                            <div className="md:w-2/3 p-4">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Badge variant="outline">{article.categoryName}</Badge>
-                                                </div>
-                                                <h3 className="text-lg font-semibold mb-2 hover:text-primary transition-colors">
-                                                    <Link prefetch={false}  href={`/tin-tuc/${article.id}`}>
-                                                        {article.title}
-                                                    </Link>
-                                                </h3>
-                                                <p className="text-muted-foreground mb-3 line-clamp-2">
-                                                    {article.excerpt}
-                                                </p>
-                                                <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
-                                                    <div className="flex items-center gap-4">
-                                                        <span className="flex items-center">
-                                                            <User className="h-3 w-3 mr-1" />
-                                                            {article.author}
-                                                        </span>
-                                                        <span className="flex items-center">
-                                                            <Calendar className="h-3 w-3 mr-1" />
-                                                            {article.publishDate}
-                                                        </span>
-                                                        <span className="flex items-center">
-                                                            <Clock className="h-3 w-3 mr-1" />
-                                                            {article.readTime}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                                        <span className="flex items-center">
-                                                            <Eye className="h-3 w-3 mr-1" />
-                                                            {article.views.toLocaleString()}
-                                                        </span>
-                                                        <button
-                                                            className="flex items-center hover:text-red-500 transition-colors"
-                                                            onClick={() => toggleFavorite(article.id)}
-                                                        >
-                                                            <Heart className={`h-3 w-3 mr-1 ${favorites.includes(article.id) ? 'fill-red-500 text-red-500' : ''}`} />
-                                                            {article.likes}
-                                                        </button>
-                                                        <button className="flex items-center hover:text-blue-500 transition-colors">
-                                                            <Share2 className="h-3 w-3 mr-1" />
-                                                            Chia sẻ
-                                                        </button>
-                                                    </div>
-                                                    <Button variant="outline" size="sm" asChild>
-                                                        <Link prefetch={false}  href={`/tin-tuc/${article.id}`}>
-                                                            Đọc thêm
-                                                        </Link>
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </Card>
+                                {loading && <Card className="text-center p-8"><CardContent>Đang tải...</CardContent></Card>}
+                                {!loading && regularNews.map((article) => (
+                                    <NewsCard key={article.id} article={article} />
                                 ))}
                             </div>
 
-                            {sortedArticles.length === 0 && (
+                            {sortedArticles.length === 0 && !loading && (
                                 <Card className="text-center py-12">
                                     <CardContent>
                                         <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -507,7 +287,7 @@ export default function TinTuc() {
                             </CardHeader>
                             <CardContent>
                                 <div className="flex flex-wrap gap-2">
-                                    {['Tết 2025', 'Khuyến mãi', 'Sapa', 'Phú Quốc', 'Hà Nội', 'TP.HCM', 'Đà Nẵng', 'Tour', 'Mẹo hay'].map((tag) => (
+                                    {Array.from(new Set(articles.flatMap(a => a.tags || []))).slice(0, 12).map((tag) => (
                                         <Badge key={tag} variant="secondary" className="cursor-pointer hover:bg-primary hover:text-primary-foreground">
                                             {tag}
                                         </Badge>
@@ -524,15 +304,15 @@ export default function TinTuc() {
                             <CardContent className="space-y-3">
                                 <div className="flex justify-between">
                                     <span className="text-sm text-muted-foreground">Tổng bài viết</span>
-                                    <span className="font-medium">45</span>
+                                    <span className="font-medium">{articles.length}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-sm text-muted-foreground">Tuần này</span>
-                                    <span className="font-medium">8</span>
+                                    <span className="text-sm text-muted-foreground">Tin nổi bật</span>
+                                    <span className="font-medium">{featuredNews.length}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-muted-foreground">Lượt xem</span>
-                                    <span className="font-medium">125.4K</span>
+                                    <span className="font-medium">{articles.reduce((s, a) => s + (a.views || 0), 0).toLocaleString()}</span>
                                 </div>
                             </CardContent>
                         </Card>
