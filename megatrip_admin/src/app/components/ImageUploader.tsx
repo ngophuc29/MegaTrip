@@ -40,15 +40,20 @@ export function ImageUploader({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  // stable ref for onChange to avoid triggering effects when parent passes new function identity
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   // base API for upload (adjust via NEXT_PUBLIC_API_BASE_URL)
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+  // const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+  // base API for upload (use NEXT_PUBLIC_API_BASE if set, fallback to 7700)
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+  // sync incoming value (array of URLs) into internal preview state
   // sync incoming value (array of URLs) into internal preview state
   useEffect(() => {
     const urls = Array.isArray(value) ? value : [];
     setImages(prev => {
       const prevUrls = prev.map(p => p.url);
-      // no-op when identical to avoid re-renders
       if (urls.length === prevUrls.length && urls.every((u, i) => u === prevUrls[i])) return prev;
       return urls.map((url, idx) => ({
         id: `init_${idx}_${url}`,
@@ -58,7 +63,8 @@ export function ImageUploader({
         progress: 100,
       }));
     });
-  }, [value, onChange]);
+    // intentionally NOT depending on onChange to avoid re-running when parent handler identity changes
+  }, [value]);
   const validateFile = (file: File): string | null => {
     if (!file.type.startsWith('image/')) {
       return "Chỉ cho phép tải lên file hình ảnh";
@@ -93,15 +99,47 @@ export function ImageUploader({
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               const body = JSON.parse(xhr.responseText);
+              console.debug('[ImageUploader] upload response:', body);
+              let url: string | undefined;
               if (body && body.success && Array.isArray(body.data) && body.data.length > 0) {
-                const url = body.data[0].url || body.data[0].secure_url;
+                url = body.data[0].secure_url || body.data[0].url || body.data[0];
+                if (typeof url !== "string" && typeof body.data[0] === "string") url = body.data[0];
+              } else if (body && (body.secure_url || body.url)) {
+                url = body.secure_url || body.url;
+              } else if (typeof body === "string") {
+                url = body;
+              }
+              if (body && body.success && Array.isArray(body.data) && body.data.length > 0) {
+                // const url = body.data[0].url || body.data[0].secure_url;
+                // setImages(prev =>
+                //   prev.map(img => img.id === id ? { ...img, uploading: false, progress: 100, url } : img)
+                // );
+                // // call onChange with current uploaded URLs
+                // setTimeout(() => {
+                //   setImages(curr => {
+                //     onChange?.(curr.filter(i => !i.error).map(i => i.url));
+                //     return curr;
+                //   });
+                // }, 0);
+                // resolve(url);
+                if (!url) {
+                  const errMsg = body?.message || "Upload failed (no url returned)";
+                  setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: errMsg } : img));
+                  reject(new Error(errMsg));
+                  return;
+                }
+
+                // Update uploaded image entry
                 setImages(prev =>
                   prev.map(img => img.id === id ? { ...img, uploading: false, progress: 100, url } : img)
                 );
-                // call onChange with current uploaded URLs
+                // notify parent with current uploaded URLs (use ref to avoid dependency loops)
                 setTimeout(() => {
+                  const urls = (images /* closure snapshot */ || []).map(i => i).concat([]); // noop to satisfy types
+                  // compute fresh urls from latest state
                   setImages(curr => {
-                    onChange?.(curr.filter(i => !i.error).map(i => i.url));
+                    const uploaded = curr.filter(i => !i.error && !i.uploading).map(i => i.url);
+                    try { onChangeRef.current?.(uploaded); } catch { /* ignore */ }
                     return curr;
                   });
                 }, 0);
@@ -176,12 +214,8 @@ export function ImageUploader({
       newImages.push(imageFile);
     }
 
-    setImages(prev => {
-      const combined = [...prev, ...newImages];
-      // initial onChange with previews (optional)
-      onChange?.(combined.filter(i => !i.error && !i.uploading).map(i => i.url));
-      return combined;
-    });
+    // append previews; do NOT call onChange yet (we will notify after upload completes)
+    setImages(prev => [...prev, ...newImages]);
 
     // Upload files sequentially (you can parallelize if desired)
     for (const imageFile of newImages) {
@@ -221,7 +255,11 @@ export function ImageUploader({
   const removeImage = (id: string) => {
     setImages(prev => {
       const updated = prev.filter(img => img.id !== id);
-      onChange?.(updated.filter(i => !i.error).map(i => i.url));
+      // emit after state applied
+      setTimeout(() => {
+        const urls = updated.filter(i => !i.error && !i.uploading).map(i => i.url);
+        try { onChangeRef.current?.(urls); } catch { }
+      }, 0);
       return updated;
     });
   };
@@ -231,7 +269,10 @@ export function ImageUploader({
       const updated = [...prev];
       const [movedItem] = updated.splice(fromIndex, 1);
       updated.splice(toIndex, 0, movedItem);
-      onChange?.(updated.filter(i => !i.error).map(i => i.url));
+      setTimeout(() => {
+        const urls = updated.filter(i => !i.error && !i.uploading).map(i => i.url);
+        try { onChangeRef.current?.(urls); } catch { }
+      }, 0);
       return updated;
     });
   };
