@@ -786,7 +786,6 @@ export default function ThanhToan() {
         const ok1 = validateStep(1);
         const ok2 = validateStep(2);
         if (!ok1 || !ok2) {
-            // jump to first invalid step
             if (!ok1) setCurrentStep(1);
             else if (!ok2) setCurrentStep(2);
             return;
@@ -799,15 +798,10 @@ export default function ThanhToan() {
             setErrors(prev => { const c = { ...prev }; delete c['agreeTerms']; return c; });
         }
 
-        // Lưu dữ liệu booking (toàn bộ payload) vào sessionStorage tại bookingKey nếu có,
-        // hoặc tạo bookingKey mới để các bước sau có thể truy xuất payload đầy đủ.
+        // persist UI state (participants & booking payload)
         try {
             if (typeof window !== 'undefined') {
-                // always persist participants to localStorage for quick UI restore
                 window.localStorage.setItem('participants', JSON.stringify(passengers));
-
-                // persist booking payload to sessionStorage under bookingKey (preserve full payload)
-                // merge shuttlePickup into bookingData.details for persistence
                 const payloadToSave = {
                     ...(bookingData || {}),
                     details: {
@@ -821,88 +815,125 @@ export default function ThanhToan() {
                     const newKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
                     sessionStorage.setItem(newKey, JSON.stringify(payloadToSave));
                     setBookingKey(newKey);
-                    // update URL to include bookingKey for bookmarking/share flow
                     try {
                         const url = new URL(window.location.href);
                         url.searchParams.set('bookingKey', newKey);
                         window.history.replaceState({}, '', url.toString());
                     } catch { /* ignore */ }
                 }
-                // update local state so summary and subsequent flows see shuttlePickup
                 setBookingData(payloadToSave);
             }
         } catch (e) {
             console.warn('Could not persist booking payload', e);
         }
 
-        // Handle payment processing
-        console.log('Processing payment...', {
-            method: selectedPayment,
-            contactInfo,
-            passengerInfo: passengers,
-            paymentInfo,
-            invoiceInfo: needInvoice ? invoiceInfo : null,
-        });
+        // Build order payload and create order on server before redirecting to payment
+        let createdOrder = null;
+        try {
+            const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
+            const finalTotal = Math.max(0, Math.round(payloadTotal - (discountAmount || 0)));
+            const tax = Number(normalizedPricing?.taxes ?? normalizedPricing?.tax ?? 0);
 
-        // inside handlePayment()
-        if (selectedPayment === 'vnpay') {
-            try {
+            // create one aggregated item as a simple representation (you can expand to per-product items)
+            const itemName = (normalizedDetails?.flightNumber || normalizedDetails?.route || normalizedDetails?.title || `${bookingType} booking`) + (bookingData?.meta?.label ? ` - ${bookingData.meta.label}` : '');
+            const items = [{
+                itemId: bookingKey || (bookingData?.id || null),
+                type: bookingType,
+                name: itemName,
+                sku: bookingData?.meta?.sku || undefined,
+                quantity: passengers.length || 1,
+                unitPrice: Math.round(finalTotal),
+                subtotal: Math.round(finalTotal)
+            }];
+
+            const discounts = [];
+            if (discountAmount && discountAmount > 0) {
+                discounts.push({
+                    code: (appliedPromoAuto && appliedPromoAuto.code) || promoCode || null,
+                    name: (appliedPromoAuto && appliedPromoAuto.title) || promoCode || 'discount',
+                    amount: Math.round(discountAmount)
+                });
+            }
+
+            const orderPayload = {
+                customerName: contactInfo.fullName || 'Khách hàng',
+                customerEmail: contactInfo.email || '',
+                customerPhone: contactInfo.phone || '',
+                customerAddress: '', // optional: you can collect billing address in UI if needed
+                items,
+                subtotal: Math.round(payloadTotal),
+                discounts,
+                fees: [], // fill if any service fees
+                tax: Math.round(tax),
+                total: Math.round(finalTotal),
+                paymentMethod: selectedPayment,
+                paymentStatus: 'pending',
+                orderStatus: 'pending',
+                metadata: {
+                    bookingKey: bookingKey || null,
+                    bookingDataSnapshot: bookingData || null
+                }
+            };
+
+            const resp = await fetch(`${API_BASE}/api/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orderPayload)
+            });
+
+            if (!resp.ok) {
+                const txt = await resp.text().catch(() => '');
+                console.error('Order creation failed:', resp.status, txt);
+                alert('Không thể tạo đơn hàng. Vui lòng thử lại.');
+                return;
+            }
+            createdOrder = await resp.json();
+            console.log('Order created:', createdOrder);
+        } catch (err) {
+            console.error('Error creating order:', err);
+            alert('Lỗi khi tạo đơn hàng. Vui lòng thử lại.');
+            return;
+        }
+
+        // Proceed to payment flows - include order reference so backend/payment gateways can reconcile
+        try {
+            if (selectedPayment === 'vnpay') {
                 const resp = await fetch('http://localhost:7000/vnpay/create_payment_url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? normalizedPricing?.offerTotal ?? bookingData.pricing?.total ?? 50000),
+                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
                         orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
+                        orderId: createdOrder?.orderNumber || createdOrder?._id,
                         ip: '127.0.0.1',
-                        returnUrl: 'http://localhost:7000/vnpay/check-payment',
+                        returnUrl: `${API_BASE}/vnpay/check-payment?orderNumber=${encodeURIComponent(createdOrder?.orderNumber || createdOrder?._id)}`
                     }),
                 });
-
                 if (!resp.ok) {
                     const text = await resp.text();
                     console.error('VNPay create-qr failed:', resp.status, text);
                     alert('Không thể tạo thanh toán VNPay. (server trả lỗi)');
                     return;
                 }
-
-                // try parse JSON, fallback to text
                 let data;
                 const ct = resp.headers.get('content-type') || '';
-                if (ct.includes('application/json')) {
-                    data = await resp.json();
-                } else {
-                    data = await resp.text();
-                }
-                console.log('VNPay response raw:', data);
-
-                // data có thể là:
-                // - một string url trực tiếp
-                // - 1 object { paymentUrl: '...' } hoặc { data: '...' }
-                const url =
-                    (typeof data === 'string' && data) ||
-                    (data && (data.paymentUrl || data.data || data.url));
-
-                if (url) {
-                    window.location.href = url;
-                    return;
-                }
+                if (ct.includes('application/json')) data = await resp.json();
+                else data = await resp.text();
+                const url = (typeof data === 'string' && data) || (data && (data.paymentUrl || data.data || data.url));
+                if (url) { window.location.href = url; return; }
                 alert('Không thể tạo thanh toán VNPay. (data không hợp lệ)');
-            } catch (err) {
-                console.error('Lỗi khi kết nối VNPay:', err);
-                alert('Lỗi khi kết nối VNPay: ' + (err?.message || err));
+                return;
             }
-            return;
-        }
 
-        if (selectedPayment === 'zalopay') {
-            try {
+            if (selectedPayment === 'zalopay') {
                 const resp = await fetch('http://localhost:7000/zalo/payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
                         orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
-                        // các trường khác nếu cần
+                        orderId: createdOrder?.orderNumber || createdOrder?._id
+                        
                     }),
                 });
                 const data = await resp.json();
@@ -912,21 +943,19 @@ export default function ThanhToan() {
                 } else {
                     alert('Không thể tạo thanh toán ZaloPay: ' + (data?.return_message || 'Lỗi không xác định'));
                 }
-            } catch (err) {
-                console.error('Lỗi khi kết nối ZaloPay:', err);
-                alert('Lỗi khi kết nối ZaloPay: ' + (err?.message || err));
+                return;
             }
-            return;
-        }
 
-        if (selectedPayment === 'momo') {
-            try {
+            if (selectedPayment === 'momo') {
                 const resp = await fetch('http://localhost:7000/momo/payment', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        // amount, orderInfo... nếu backend MoMo cần truyền từ client
-                        // ở đây backend đang lấy sẵn từ config, nếu muốn truyền động thì sửa backend
+                        orderId: createdOrder?.orderNumber || createdOrder?._id,
+                        
+
+                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
+                        orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
                     }),
                 });
                 const data = await resp.json();
@@ -936,25 +965,27 @@ export default function ThanhToan() {
                 } else {
                     alert('Không thể tạo thanh toán MoMo: ' + (data?.message || 'Lỗi không xác định'));
                 }
-            } catch (err) {
-                console.error('Lỗi khi kết nối MoMo:', err);
-                alert('Lỗi khi kết nối MoMo: ' + (err?.message || err));
+                return;
             }
-            return;
-        }
 
-        // Simulate payment processing
-        setTimeout(() => {
+            // bank transfer: show instructions page and include orderNumber for reference
             if (selectedPayment === 'bank_transfer') {
-                // Redirect to bank transfer instructions page
-                router.push('/chuyen-khoan');
-            } else {
-                // Redirect to success page for instant payment methods
-                // ensure bookingKey remains in query so success page / webhook can correlate
-                if (bookingKey) router.push(`/thanh-toan-thanh-cong?bookingKey=${encodeURIComponent(bookingKey)}`);
-                else router.push('/thanh-toan-thanh-cong');
+                router.push(`/chuyen-khoan?orderNumber=${encodeURIComponent(createdOrder?.orderNumber || createdOrder?._id)}${bookingKey ? `&bookingKey=${encodeURIComponent(bookingKey)}` : ''}`);
+                return;
             }
-        }, 1000);
+
+            // other instant methods or credit card (simulated) -> success page with orderNumber
+            if (createdOrder?.orderNumber) {
+                router.push(`/thanh-toan-thanh-cong?orderNumber=${encodeURIComponent(createdOrder.orderNumber)}${bookingKey ? `&bookingKey=${encodeURIComponent(bookingKey)}` : ''}`);
+            } else if (createdOrder?._id) {
+                router.push(`/thanh-toan-thanh-cong?orderId=${encodeURIComponent(createdOrder._id)}${bookingKey ? `&bookingKey=${encodeURIComponent(bookingKey)}` : ''}`);
+            } else {
+                router.push('/thanh-toan-thanh-cong');
+            }
+        } catch (err) {
+            console.error('Payment flow error:', err);
+            alert('Lỗi khi chuyển tới cổng thanh toán. Vui lòng thử lại.');
+        }
     };
 
     const steps = [
