@@ -252,7 +252,21 @@ export function ImageUploader({
     setIsDragging(false);
   }, []);
 
+  // const removeImage = (id: string) => {
+  //   setImages(prev => {
+  //     const updated = prev.filter(img => img.id !== id);
+  //     // emit after state applied
+  //     setTimeout(() => {
+  //       const urls = updated.filter(i => !i.error && !i.uploading).map(i => i.url);
+  //       try { onChangeRef.current?.(urls); } catch { }
+  //     }, 0);
+  //     return updated;
+  //   });
+  // };
   const removeImage = (id: string) => {
+    const img = images.find(i => i.id === id);
+    const label = img?.url ? "ảnh này" : "file này";
+    if (!confirm(`Bạn có chắc chắn muốn xóa ${label}?`)) return;
     setImages(prev => {
       const updated = prev.filter(img => img.id !== id);
       // emit after state applied
@@ -263,7 +277,6 @@ export function ImageUploader({
       return updated;
     });
   };
-
   const moveImage = (fromIndex: number, toIndex: number) => {
     setImages(prev => {
       const updated = [...prev];

@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Newspaper, Plus, Edit, Eye, Trash2, RefreshCw, Calendar, Tag as TagIcon, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -148,6 +148,53 @@ export default function News() {
         await Promise.all(replaces);
         return html;
     }
+    // --- hero image upload helper (upload to backend /api/upload and set preview) ---
+    const [heroUploading, setHeroUploading] = useState(false);
+    const heroInputRef = useRef<HTMLInputElement | null>(null);
+
+    const handleHeroFileSelect = async (file?: File | null) => {
+        if (!file) return;
+        const err = (file && !file.type.startsWith('image/')) ? "Chỉ chấp nhận file ảnh" : null;
+        if (err) {
+            toast({ title: "File không hợp lệ", description: err, variant: "destructive" });
+            return;
+        }
+        try {
+            setHeroUploading(true);
+            const fd = new FormData();
+            fd.append("images", file);
+            const res = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(txt || "Upload failed");
+            }
+            const body = await res.json();
+            // support different response shapes
+            let url: string | undefined;
+            if (body && body.success && Array.isArray(body.data) && body.data.length > 0) {
+                url = body.data[0].secure_url || body.data[0].url || (typeof body.data[0] === "string" ? body.data[0] : undefined);
+            } else if (body && (body.secure_url || body.url)) {
+                url = body.secure_url || body.url;
+            } else if (typeof body === "string") {
+                url = body;
+            }
+            if (!url) throw new Error("Không nhận được URL từ server");
+            handleFormChange("heroImage", url);
+            toast({ title: "Tải ảnh lên thành công" });
+        } catch (err: any) {
+            console.error("hero upload error", err);
+            toast({ title: "Lỗi upload ảnh", description: err?.message || String(err), variant: "destructive" });
+        } finally {
+            setHeroUploading(false);
+        }
+    };
+
+    const triggerHeroInput = () => heroInputRef.current?.click();
+    const removeHeroImage = () => {
+        if (!formData.heroImage) return;
+        if (!confirm("Bạn có chắc chắn muốn xóa ảnh đại diện?")) return;
+        handleFormChange("heroImage", "");
+    };
     const { data: newsData, isLoading, error, refetch } = (() => {
         if (BACKEND_AVAILABLE) {
             return useQuery({
@@ -711,13 +758,40 @@ export default function News() {
 
 
             <div>
-                <Label htmlFor="heroImage">Ảnh đại diện</Label>
-                <Input
-                    id="heroImage"
-                    value={formData.heroImage}
-                    onChange={(e) => handleFormChange("heroImage", e.target.value)}
-                    placeholder="https://cdn.yoursite.com/uploads/hero-image.jpg"
-                />
+                <Label>Ảnh đại diện của bài viết (nếu có)</Label>
+                <div className="mt-2 flex items-center gap-3">
+                    <div className="w-36 h-24 bg-gray-100 rounded overflow-hidden flex items-center justify-center border">
+                        {formData.heroImage ? (
+                            <img src={formData.heroImage} alt="hero" className="object-cover w-full h-full" />
+                        ) : (
+                            <span className="text-xs text-gray-500">Chưa có ảnh</span>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2 flex-1">
+                        <input
+                            ref={heroInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0] || null;
+                                handleHeroFileSelect(file);
+                            }}
+                        />
+                        <div className="flex items-center gap-2">
+                            <Button type="button" onClick={triggerHeroInput} disabled={heroUploading} variant="outline">
+                                {heroUploading ? "Đang tải..." : "Chọn ảnh"}
+                            </Button>
+                            <Button type="button" onClick={removeHeroImage} variant="ghost">
+                                Xóa ảnh
+                            </Button>
+                            {heroUploading && <span className="text-sm text-gray-500">Đang upload…</span>}
+                        </div>
+                        {/* <p className="text-xs text-gray-500">
+                            Ảnh sẽ được upload lên server/Cloudinary và lưu link vào bài viết. (Không cần nhập link)
+                        </p> */}
+                    </div>
+                </div>
             </div>
 
             <div>
