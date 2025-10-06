@@ -560,6 +560,9 @@ export default function ThanhToan() {
         })();
         return () => { cancelled = true; };
     }, [normalizedPricing?.total, bookingType, promoCode, appliedPromoAuto]);
+    // add this so finalTotal is available throughout the component
+    const baseAmount = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? normalizedPricing?.offerTotal ?? bookingData?.pricing?.total ?? 0);
+    const finalTotal = Math.max(0, Math.round(baseAmount - (discountAmount || 0)));
     // New: toggle states for showing details
     const [showFareDetails, setShowFareDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
     const [showAddonsDetails, setShowAddonsDetails] = useState<{ outbound: boolean; inbound: boolean }>({ outbound: false, inbound: false });
@@ -829,13 +832,15 @@ export default function ThanhToan() {
 
         // Build order payload and create order on server before redirecting to payment
         let createdOrder = null;
+        // ensure itemName is available after the try/catch (used to build paymentDescription)
+        let itemName = '';
         try {
             const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
             const finalTotal = Math.max(0, Math.round(payloadTotal - (discountAmount || 0)));
             const tax = Number(normalizedPricing?.taxes ?? normalizedPricing?.tax ?? 0);
 
             // create one aggregated item as a simple representation (you can expand to per-product items)
-            const itemName = (normalizedDetails?.flightNumber || normalizedDetails?.route || normalizedDetails?.title || `${bookingType} booking`) + (bookingData?.meta?.label ? ` - ${bookingData.meta.label}` : '');
+            itemName = (normalizedDetails?.flightNumber || normalizedDetails?.route || normalizedDetails?.title || `${bookingType} booking`) + (bookingData?.meta?.label ? ` - ${bookingData.meta.label}` : '');
             const items = [{
                 itemId: bookingKey || (bookingData?.id || null),
                 type: bookingType,
@@ -894,6 +899,9 @@ export default function ThanhToan() {
             alert('Lỗi khi tạo đơn hàng. Vui lòng thử lại.');
             return;
         }
+        // build human-friendly payment description including order ref
+        const paymentLabel = `Thanh toán cho đơn ${createdOrder?.orderNumber || createdOrder?._id || ''}`;
+        const paymentDescription = `${paymentLabel} — ${itemName}`;
 
         // Proceed to payment flows - include order reference so backend/payment gateways can reconcile
         try {
@@ -902,8 +910,9 @@ export default function ThanhToan() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
-                        orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
+                        // use final paid amount (order total after discounts) and include human-readable description
+                        amount: (createdOrder?.total ?? finalTotal ?? (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000)),
+                        orderInfo: paymentDescription,
                         orderId: createdOrder?.orderNumber || createdOrder?._id,
                         ip: '127.0.0.1',
                         returnUrl: `${API_BASE}/vnpay/check-payment?orderNumber=${encodeURIComponent(createdOrder?.orderNumber || createdOrder?._id)}`
@@ -930,10 +939,17 @@ export default function ThanhToan() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
-                        orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
-                        orderId: createdOrder?.orderNumber || createdOrder?._id
-                        
+                        // amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
+                        // orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
+                        // orderId: createdOrder?.orderNumber || createdOrder?._id
+                        // send discounted total and description; backend will derive app_trans_id from orderId
+                        amount: (createdOrder?.total ?? finalTotal ?? (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000)),
+                        description: paymentDescription,
+                        orderId: createdOrder?.orderNumber || createdOrder?._id,
+                        app_user: contactInfo.email || 'guest',
+                        embed_data: { orderNumber: createdOrder?.orderNumber || createdOrder?._id }
+
+
                     }),
                 });
                 const data = await resp.json();
@@ -952,10 +968,9 @@ export default function ThanhToan() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         orderId: createdOrder?.orderNumber || createdOrder?._id,
-                        
-
-                        amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
-                        orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
+                        amount: (createdOrder?.total ?? finalTotal ?? (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000)),
+                        orderInfo: paymentDescription,
+                        orderDescription: (bookingType === 'flight' ? `${paymentDescription} - Vé máy bay` : bookingType === 'bus' ? `${paymentDescription} - Vé xe` : `${paymentDescription} - Tour`)
                     }),
                 });
                 const data = await resp.json();
