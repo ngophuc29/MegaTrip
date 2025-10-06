@@ -5,6 +5,7 @@ import { Progress } from "./ui/progress";
 import { cn } from "../lib/utils";
 import { useToast } from "./ui/use-toast";
 
+// ...existing code...
 interface ImageFile {
   id: string;
   file: File;
@@ -39,6 +40,9 @@ export function ImageUploader({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // base API for upload (adjust via NEXT_PUBLIC_API_BASE_URL)
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+
   const validateFile = (file: File): string | null => {
     if (!file.type.startsWith('image/')) {
       return "Chỉ cho phép tải lên file hình ảnh";
@@ -49,39 +53,70 @@ export function ImageUploader({
     return null;
   };
 
-  const uploadImage = async (file: File): Promise<string> => {
-    // Simulate upload with progress
+  // upload single file to server with XHR to get progress events
+  const uploadImage = async (file: File, id: string): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', file);
+      try {
+        const formData = new FormData();
+        // server expects field name "images" (upload.array('images'))
+        formData.append("images", file);
 
-      // Simulate API call
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        const imageId = file.name + Date.now();
-        setImages(prev => 
-          prev.map(img => 
-            img.id === imageId 
-              ? { ...img, progress }
-              : img
-          )
-        );
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API_BASE}/api/upload`, true);
 
-        if (progress >= 100) {
-          clearInterval(interval);
-          // Return a mock URL
-          const mockUrl = URL.createObjectURL(file);
-          setImages(prev => 
-            prev.map(img => 
-              img.id === imageId 
-                ? { ...img, uploading: false, progress: 100 }
-                : img
-            )
-          );
-          resolve(mockUrl);
-        }
-      }, 100);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            setImages(prev =>
+              prev.map(img => img.id === id ? { ...img, progress: percent } : img)
+            );
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const body = JSON.parse(xhr.responseText);
+              if (body && body.success && Array.isArray(body.data) && body.data.length > 0) {
+                const url = body.data[0].url || body.data[0].secure_url;
+                setImages(prev =>
+                  prev.map(img => img.id === id ? { ...img, uploading: false, progress: 100, url } : img)
+                );
+                // call onChange with current uploaded URLs
+                setTimeout(() => {
+                  setImages(curr => {
+                    onChange?.(curr.filter(i => !i.error).map(i => i.url));
+                    return curr;
+                  });
+                }, 0);
+                resolve(url);
+              } else {
+                const errMsg = body?.message || "Upload failed";
+                setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: errMsg } : img));
+                reject(new Error(errMsg));
+              }
+            } catch (err) {
+              setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: "Invalid server response" } : img));
+              reject(err);
+            }
+          } else {
+            const errText = `Upload failed (${xhr.status})`;
+            setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: errText } : img));
+            reject(new Error(errText));
+          }
+        };
+
+        xhr.onerror = () => {
+          const errText = "Network error during upload";
+          setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: errText } : img));
+          reject(new Error(errText));
+        };
+
+        xhr.send(formData);
+      } catch (err) {
+        setImages(prev => prev.map(img => img.id === id ? { ...img, uploading: false, error: "Upload exception" } : img));
+        reject(err);
+      }
     });
   };
 
@@ -90,7 +125,7 @@ export function ImageUploader({
 
     const fileArray = Array.from(files);
     const remainingSlots = maxFiles - images.length;
-    
+
     if (fileArray.length > remainingSlots) {
       toast({
         title: "Quá nhiều file",
@@ -101,7 +136,7 @@ export function ImageUploader({
     }
 
     const newImages: ImageFile[] = [];
-    
+
     for (const file of fileArray) {
       const error = validateFile(file);
       if (error) {
@@ -117,28 +152,26 @@ export function ImageUploader({
       const imageFile: ImageFile = {
         id: imageId,
         file,
-        url: URL.createObjectURL(file),
+        url: URL.createObjectURL(file), // preview until uploaded
         uploading: true,
         progress: 0,
       };
-      
+
       newImages.push(imageFile);
     }
 
-    setImages(prev => [...prev, ...newImages]);
+    setImages(prev => {
+      const combined = [...prev, ...newImages];
+      // initial onChange with previews (optional)
+      onChange?.(combined.filter(i => !i.error && !i.uploading).map(i => i.url));
+      return combined;
+    });
 
-    // Upload files
+    // Upload files sequentially (you can parallelize if desired)
     for (const imageFile of newImages) {
       try {
-        await uploadImage(imageFile.file);
+        await uploadImage(imageFile.file, imageFile.id);
       } catch (error) {
-        setImages(prev => 
-          prev.map(img => 
-            img.id === imageFile.id 
-              ? { ...img, uploading: false, error: "Upload failed" }
-              : img
-          )
-        );
         toast({
           title: "Upload thất bại",
           description: `Không thể upload ${imageFile.file.name}`,
@@ -146,12 +179,12 @@ export function ImageUploader({
         });
       }
     }
-  }, [images.length, maxFiles, disabled, toast]);
+  }, [images.length, maxFiles, disabled, toast, onChange]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     if (e.dataTransfer.files) {
       handleFiles(e.dataTransfer.files);
     }
@@ -172,7 +205,7 @@ export function ImageUploader({
   const removeImage = (id: string) => {
     setImages(prev => {
       const updated = prev.filter(img => img.id !== id);
-      onChange?.(updated.map(img => img.url));
+      onChange?.(updated.filter(i => !i.error).map(i => i.url));
       return updated;
     });
   };
@@ -182,7 +215,7 @@ export function ImageUploader({
       const updated = [...prev];
       const [movedItem] = updated.splice(fromIndex, 1);
       updated.splice(toIndex, 0, movedItem);
-      onChange?.(updated.map(img => img.url));
+      onChange?.(updated.filter(i => !i.error).map(i => i.url));
       return updated;
     });
   };
@@ -190,14 +223,20 @@ export function ImageUploader({
   const retryUpload = (id: string) => {
     const image = images.find(img => img.id === id);
     if (image) {
-      setImages(prev => 
-        prev.map(img => 
-          img.id === id 
+      setImages(prev =>
+        prev.map(img =>
+          img.id === id
             ? { ...img, uploading: true, error: undefined, progress: 0 }
             : img
         )
       );
-      uploadImage(image.file);
+      uploadImage(image.file, id).catch(() => {
+        toast({
+          title: "Upload thất bại",
+          description: `Không thể upload ${image.file.name}`,
+          variant: "destructive"
+        });
+      });
     }
   };
 
@@ -207,8 +246,8 @@ export function ImageUploader({
       <div
         className={cn(
           "border-2 border-dashed rounded-lg p-8 text-center transition-colors",
-          isDragging 
-            ? "border-primary bg-primary/5" 
+          isDragging
+            ? "border-primary bg-primary/5"
             : "border-gray-300 hover:border-gray-400",
           disabled && "opacity-50 cursor-not-allowed"
         )}
@@ -260,13 +299,13 @@ export function ImageUploader({
                 alt={image.alt || `Upload ${index + 1}`}
                 className="w-full h-full object-cover"
               />
-              
+
               {/* Upload Progress */}
               {image.uploading && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                   <div className="text-center text-white">
-                    <Progress 
-                      value={image.progress || 0} 
+                    <Progress
+                      value={image.progress || 0}
                       className="w-20 mx-auto mb-2"
                     />
                     <p className="text-xs">{image.progress || 0}%</p>
@@ -337,3 +376,4 @@ export function ImageUploader({
     </div>
   );
 }
+ 

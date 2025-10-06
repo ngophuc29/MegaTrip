@@ -24,7 +24,8 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Plus
+  Plus,
+  Newspaper
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../components/ui/button";
@@ -53,9 +54,10 @@ const navigation = [
   { name: 'Quản lý tour', href: '/admin/tours', icon: MapPin },
   { name: 'Quản lý chuyến bay', href: '/admin/flights', icon: Plane },
   { name: 'Quản lý vé xe', href: '/admin/buses', icon: Bus },
-  { name: 'Quản lý dịch vụ', href: '/admin/services', icon: Settings },
-  { name: 'Quản lý khuyến mãi', href: '/admin/promotions', icon: Tag },
   { name: 'Quản lý đơn đặt', href: '/admin/orders', icon: ShoppingBag },
+  { name: 'Quản lý dịch vụ', href: '/admin/services', icon: Settings },
+  { name: 'Quản lý tin tức', href: '/admin/news', icon: Newspaper },
+  { name: 'Quản lý khuyến mãi', href: '/admin/promotions', icon: Tag },
   { name: 'Quản lý đánh giá', href: '/admin/reviews', icon: Star },
   { name: 'Chăm sóc khách hàng', href: '/admin/support', icon: HeadphonesIcon },
   { name: 'Cài đặt hệ thống', href: '/admin/system-settings', icon: Cog },
