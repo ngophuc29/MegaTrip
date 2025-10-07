@@ -514,7 +514,78 @@ export default function ChiTietTour() {
     };
 
     const totalParticipants = participants.adults + participants.children + participants.infants;
+    const [slotInfo, setSlotInfo] = useState<{ dateIso?: string, capacity?: number, reserved?: number, available?: number } | null>(null);
 
+    useEffect(() => {
+        let mounted = true;
+        if (!id) return;
+        async function fetchBySlug() {
+            try {
+                const res = await fetch(`http://localhost:8080/api/tours/slug/${id}`);
+                if (!res.ok) {
+                    console.warn('Tour by slug fetch failed', res.status);
+                    return;
+                }
+                const json = await res.json();
+                const db = json.data ?? json.tour ?? json; // tolerate different BE shapes
+                if (!db) return;
+
+                const mapped = mapDbTourToClient(db);
+
+                     // fetch slot info for each start date and merge into mapped.availableDates
+                         const TOUR_SERVICE = 'http://localhost:8080';
+                     async function fetchSlotForDate(tourId: string, dateIso: string) {
+                             try {
+                                     const r = await fetch(`${TOUR_SERVICE}/api/tours/${encodeURIComponent(tourId)}/slots/${encodeURIComponent(dateIso)}`);
+                                     if (!r.ok) return null;
+                                     const j = await r.json();
+                                     return j.data?.slot ?? j.slot ?? j;
+                                 } catch (e) {
+                                         return null;
+                                     }
+                         }
+                    
+                         // collect dates to query (from mapped.availableDates -> .date)
+                         const tourId = String(mapped.id || id);
+                     const dates = (mapped.availableDates || []).map((d: any) => d.date).filter(Boolean);
+                     const slotResults = await Promise.all(dates.map((dt: string) => fetchSlotForDate(tourId, dt)));
+                
+                         // merge slot info into mapped.availableDates
+                         mapped.availableDates = (mapped.availableDates || []).map((d: any) => {
+                                 const slot = slotResults.find((s: any) => s && String(s.dateIso) === String(d.date));
+                                 if (slot) {
+                                         return { ...d, capacity: slot.capacity ?? d.capacity, reserved: slot.reserved ?? 0, available: (typeof slot.available === 'number' ? slot.available : ((slot.capacity ?? d.capacity) - (slot.reserved ?? 0))) };
+                                     }
+                                 return d;
+                             });
+                
+                         // set default selectedDate to first available (not soldout) if none chosen
+                         if (!selectedDate) {
+                                 const firstAvailable = mapped.availableDates.find((x: any) => (x.available ?? x.available === 0) ? (x.available > 0) : x.status !== 'soldout');
+                                 if (firstAvailable) setSelectedDate(new Date(firstAvailable.date));
+                             }
+                
+                // Merge mapped into sample tourDetails but preserve policies & reviews from sample if BE not ready
+                const keepPolicies = tourDetails.policies;
+                const keepReviews = tourDetails.reviews;
+                Object.assign(tourDetails, mapped);
+                // ensure policies/reviews kept when BE doesn't provide
+                tourDetails.policies = db.policies ? mapped.policies : keepPolicies;
+                tourDetails.reviews = db.reviews ? mapped.reviews : keepReviews;
+
+                if (mounted) setDbLoaded(true); // trigger re-render
+            } catch (err) {
+                console.error('Fetch tour by slug error', err);
+            }
+        }
+        fetchBySlug();
+        return () => { mounted = false; };
+    }, [id]);
+    const getCurrentAvailable = () => {
+        if (slotInfo && typeof slotInfo.available === 'number') return slotInfo.available;
+        const sel = getSelectedDateInfo();
+        return sel?.available ?? null;
+    };
     return (
         <>
             {/* Breadcrumb */}
@@ -1143,7 +1214,8 @@ export default function ChiTietTour() {
                                     {selectedDate && getSelectedDateInfo() && (
                                         <div className="  p-2 bg-[hsl(var(--success))/0.1] rounded text-sm">
                                             <div className="flex justify-between">
-                                                <span>Còn {getSelectedDateInfo()?.available} chỗ</span>
+                                                {/* <span>Còn {getSelectedDateInfo()?.available} chỗ</span> */}
+                                                <span>Còn {getCurrentAvailable() ?? getSelectedDateInfo()?.available ?? 0} chỗ</span>
                                                 <span className="font-medium">{formatPrice(getSelectedDateInfo()?.price || 0)}</span>
                                             </div>
                                         </div>
