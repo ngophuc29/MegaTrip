@@ -1092,6 +1092,48 @@ export default function ChiTietVeMayBay() {
         inboundCachedPricing,
         isRoundtrip,
     ]);
+
+    // airport lookup map loaded from public/airport.json (client-side)
+    const [airportsMap, setAirportsMap] = useState<Record<string, any> | null>(null);
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const r = await fetch('/airport.json');
+                if (!r.ok) return;
+                const j = await r.json();
+                // build lookup by IATA code for quick access (some JSON keys are ICAO)
+                const byIata: Record<string, any> = {};
+                Object.values(j || {}).forEach((entry: any) => {
+                    const iata = entry?.iata;
+                    if (iata && String(iata).trim()) byIata[String(iata).toUpperCase()] = entry;
+                });
+                // also merge any direct iata -> entry if JSON already keyed by iata
+                if (typeof j === 'object') {
+                    Object.entries(j).forEach(([k, v]: any) => {
+                        const maybeIata = (v && v.iata) ? String(v.iata).toUpperCase() : null;
+                        if (maybeIata) byIata[maybeIata] = v;
+                    });
+                }
+                if (mounted) setAirportsMap(byIata);
+            } catch (e) { /* ignore */ }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
+    const getAirportLabel = (iata: string | undefined | null, fallbackCity?: string) => {
+        if (!iata) return fallbackCity || '';
+        const code = String(iata).toUpperCase();
+        const entry = airportsMap?.[code] ?? null;
+        // prefer nice city name, then state, then fallbackCity, finally iata
+        if (entry) return entry.city || entry.state || fallbackCity || code;
+        // some sources send IATA in city field (like "DAD"), detect and try map too
+        if ((fallbackCity ?? '').length === 3 && airportsMap?.[fallbackCity?.toUpperCase()]) {
+            const e2 = airportsMap[fallbackCity!.toUpperCase()];
+            return e2.city || e2.state || code;
+        }
+        return fallbackCity || code;
+    };
     return (
         <>
             {/* Breadcrumb */}
@@ -1647,7 +1689,15 @@ export default function ChiTietVeMayBay() {
                                         </span>
                                     </div>
                                     <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        {`${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`}
+                                        {/* {`${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`} */}
+                                        {(() => {
+                                            const seg = extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                            const depCode = seg?.departure?.iataCode ?? flightDetails.departure.airport;
+                                            const arrCode = seg?.arrival?.iataCode ?? flightDetails.arrival.airport;
+                                            const depLabel = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.departure.city);
+                                            const arrLabel = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.arrival.city);
+                                            return `${depCode} (${depLabel}) → ${arrCode} (${arrLabel})`;
+                                        })()}
                                         <br />
                                         {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
                                     </div>
@@ -1721,14 +1771,37 @@ export default function ChiTietVeMayBay() {
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className="font-medium">Chuyến về</span>
                                                 <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                    {/* {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} */}
                                                     {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
                                                     {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
                                                 </span>
                                             </div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
+                                                {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
                                                 <br />
-                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
+                                                {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ? flightDetails.departure.city : flightDetails.departure.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ? flightDetails.arrival.city : flightDetails.arrival.city})`}
+                                                <br />
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
+                                                {(() => {
+                                                    const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                    const depCode = seg?.departure?.iataCode ?? flightDetails.arrival.airport;
+                                                    const depCity = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.arrival.city);
+                                                    const arrCode = seg?.arrival?.iataCode ?? flightDetails.departure.airport;
+                                                    const arrCity = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.departure.city);
+                                                    // return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
+                                                    return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
+
+                                                })()}
+                                                <br />
+                                                {(() => {
+                                                    const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                    const date = seg?.departure?.at?.split('T')?.[0] ?? flightDetails.date;
+                                                    const depTime = seg?.departure?.at ? seg.departure.at.split('T')[1]?.slice(0, 5) : flightDetails.departure.time;
+                                                    const arrTime = seg?.arrival?.at ? seg.arrival.at.split('T')[1]?.slice(0, 5) : flightDetails.arrival.time;
+                                                    return `${date} • ${depTime} - ${arrTime}`;
+                                                })()}
                                             </div>
                                             <div className="space-y-1 mt-2">
                                                 <div className="flex justify-between">

@@ -1125,6 +1125,8 @@ export default function ChiTietXeDuLich() {
                                                 selectedIndex: String(selectedIndex),
                                                 time: `${displayDepartureTime} - ${displayArrivalTime}`,
                                                 seats: selectedSeats.join(','),
+                                                 // include selectedPickup so ThanhToan receives it
+                                                 selectedPickup: selectedPickup,
                                                 selectedDropoff: selectedDropoff,
                                                 passengerInfo: leadJson,
                                                 passengers: passengersJson,

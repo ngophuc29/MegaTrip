@@ -194,6 +194,8 @@ const getBookingData = (searchParams: URLSearchParams) => {
                 addOns: Number(searchParams.get('addOns')) || 0,
                 discount: Number(searchParams.get('discount')) || 0,
                 total: Number(searchParams.get('total')) || 0,
+                // ensure seats are available under pricing for normalizedPricing
+                seats: seats
             };
 
             // attach explicit per-pax units if present
@@ -802,15 +804,40 @@ export default function ThanhToan() {
         }
 
         // persist UI state (participants & booking payload)
+
+        // make payloadToSave available after try/catch
+        let payloadToSave: any = null;
         try {
             if (typeof window !== 'undefined') {
                 window.localStorage.setItem('participants', JSON.stringify(passengers));
-                const payloadToSave = {
-                    ...(bookingData || {}),
-                    details: {
-                        ...((bookingData && bookingData.details) || {}),
-                        selectedPickup: shuttlePickup || ((bookingData && bookingData.details && bookingData.details.selectedPickup) || '')
+                // build details snapshot using current UI state so selectedPickup and passengers are preserved
+                const detailsSnapshot = {
+                    ...((bookingData && bookingData.details) || {}),
+                    selectedPickup: shuttlePickup || ((bookingData && bookingData.details && bookingData.details.selectedPickup) || ''),
+                    // persist selected passenger list from UI (not just original bookingData)
+                    passengers: Array.isArray(passengers) ? passengers.map(p => ({
+                        type: p.type,
+                        title: p.title,
+                        firstName: p.firstName,
+                        lastName: p.lastName,
+                        dateOfBirth: p.dateOfBirth,
+                        nationality: p.nationality,
+                        idNumber: p.idNumber,
+                        idType: p.idType
+                    })) : ((bookingData && bookingData.details && bookingData.details.passengers) || []),
+                    // preserve any passengerInfo/contact info if present
+                    passengerInfo: {
+                        name: contactInfo.fullName || ((bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.name) || ''),
+                        phone: contactInfo.phone || ((bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.phone) || ''),
+                        email: contactInfo.email || ((bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.email) || ''),
+                        idNumber: (bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.idNumber) || ''
                     }
+                };
+                payloadToSave = {
+                    ...(bookingData || {}),
+                    details: detailsSnapshot,
+                    // ensure pricing keeps seats etc.
+                    pricing: { ...(bookingData?.pricing || {}), ...(bookingData?.pricing ? {} : {}) }
                 };
                 if (bookingKey) {
                     sessionStorage.setItem(bookingKey, JSON.stringify(payloadToSave));
@@ -838,19 +865,40 @@ export default function ThanhToan() {
             const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
             const finalTotal = Math.max(0, Math.round(payloadTotal - (discountAmount || 0)));
             const tax = Number(normalizedPricing?.taxes ?? normalizedPricing?.tax ?? 0);
-
+            const qty = Math.max(1, passengers.length || ((bookingData?.passengers && bookingData.passengers.counts) ? (bookingData.passengers.counts.adults || 1) : 1));
+            const totalAmount = Math.round(Math.max(0, (Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0) - (discountAmount || 0))));
+            const perUnit = Math.round(totalAmount / Math.max(1, qty));
             // create one aggregated item as a simple representation (you can expand to per-product items)
             itemName = (normalizedDetails?.flightNumber || normalizedDetails?.route || normalizedDetails?.title || `${bookingType} booking`) + (bookingData?.meta?.label ? ` - ${bookingData.meta.label}` : '');
+            // const items = [{
+            //     itemId: bookingKey || (bookingData?.id || null),
+            //     type: bookingType,
+            //     name: itemName,
+            //     sku: bookingData?.meta?.sku || undefined,
+            //     quantity: Math.max(1, passengers.length || ((bookingData?.passengers && bookingData.passengers.counts) ? (bookingData.passengers.counts.adults || 1) : 1)),
+            //     unitPrice: Math.round(finalTotal),
+            //     subtotal: Math.round(finalTotal)
+            // }];
             const items = [{
                 itemId: bookingKey || (bookingData?.id || null),
                 type: bookingType,
                 name: itemName,
                 sku: bookingData?.meta?.sku || undefined,
-                quantity: passengers.length || 1,
-                unitPrice: Math.round(finalTotal),
-                subtotal: Math.round(finalTotal)
+                quantity: qty,
+                unitPrice: perUnit,
+                subtotal: perUnit * qty
             }];
-
+            // build snapshot that reflects applied promo
+            const bookingSnapshot = {
+                ...(bookingData || {}),
+                details: (payloadToSave && payloadToSave.details) ? payloadToSave.details : (bookingData?.details || {}),
+                pricing: {
+                    ...(bookingData?.pricing || {}),
+                    // override to reflect applied discount and final total
+                    discount: Math.round(discountAmount || Number(bookingData?.pricing?.discount || 0)),
+                    total: totalAmount
+                }
+            };
             const discounts = [];
             if (discountAmount && discountAmount > 0) {
                 discounts.push({
@@ -864,19 +912,19 @@ export default function ThanhToan() {
                 customerName: contactInfo.fullName || 'Khách hàng',
                 customerEmail: contactInfo.email || '',
                 customerPhone: contactInfo.phone || '',
-                customerAddress: '', // optional: you can collect billing address in UI if needed
+                customerAddress: '',
                 items,
-                subtotal: Math.round(payloadTotal),
-                discounts,
-                fees: [], // fill if any service fees
+                subtotal: Math.round(Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0)), // pre-discount subtotal
+                discounts: discounts,
+                fees: [],
                 tax: Math.round(tax),
-                total: Math.round(finalTotal),
+                total: totalAmount,
                 paymentMethod: selectedPayment,
                 paymentStatus: 'pending',
                 orderStatus: 'pending',
                 metadata: {
                     bookingKey: bookingKey || null,
-                    bookingDataSnapshot: bookingData || null
+                    bookingDataSnapshot: bookingSnapshot
                 }
             };
 
@@ -1141,7 +1189,47 @@ export default function ThanhToan() {
         }
     }, [bookingData]);
 
-
+     // airport lookup map loaded from public/airport.json (client-side)
+        const [airportsMap, setAirportsMap] = useState<Record<string, any> | null>(null);
+        useEffect(() => {
+            let mounted = true;
+            (async () => {
+                try {
+                    const r = await fetch('/airport.json');
+                    if (!r.ok) return;
+                    const j = await r.json();
+                    // build lookup by IATA code for quick access (some JSON keys are ICAO)
+                    const byIata: Record<string, any> = {};
+                    Object.values(j || {}).forEach((entry: any) => {
+                        const iata = entry?.iata;
+                        if (iata && String(iata).trim()) byIata[String(iata).toUpperCase()] = entry;
+                    });
+                    // also merge any direct iata -> entry if JSON already keyed by iata
+                    if (typeof j === 'object') {
+                        Object.entries(j).forEach(([k, v]: any) => {
+                            const maybeIata = (v && v.iata) ? String(v.iata).toUpperCase() : null;
+                            if (maybeIata) byIata[maybeIata] = v;
+                        });
+                    }
+                    if (mounted) setAirportsMap(byIata);
+                } catch (e) { /* ignore */ }
+            })();
+            return () => { mounted = false; };
+        }, []);
+    
+        const getAirportLabel = (iata: string | undefined | null, fallbackCity?: string) => {
+            if (!iata) return fallbackCity || '';
+            const code = String(iata).toUpperCase();
+            const entry = airportsMap?.[code] ?? null;
+            // prefer nice city name, then state, then fallbackCity, finally iata
+            if (entry) return entry.city || entry.state || fallbackCity || code;
+            // some sources send IATA in city field (like "DAD"), detect and try map too
+            if ((fallbackCity ?? '').length === 3 && airportsMap?.[fallbackCity?.toUpperCase()]) {
+                const e2 = airportsMap[fallbackCity!.toUpperCase()];
+                return e2.city || e2.state || code;
+            }
+            return fallbackCity || code;
+        };
     return (
         <>
             {/* Breadcrumb */}
@@ -1804,6 +1892,8 @@ export default function ThanhToan() {
                                         const taxes = Number(p.taxes ?? Math.round((adultTotal + childTotal + infantTotal) * 0.08));
                                         const discount = Number(p.discount ?? 0);
                                         const computedTotal = adultTotal + childTotal + infantTotal + addOnsTotal + taxes - discount;
+                                        // seats list (display as simple comma-separated list)
+                                        const seatsList: string[] = Array.isArray(p.seats) ? p.seats.map((s: any) => s?.number ?? String(s)) : (Array.isArray(bookingData?.details?.seats) ? bookingData.details.seats : []);
 
                                         return (
                                             <>
@@ -1814,6 +1904,12 @@ export default function ThanhToan() {
                                                         {counts.children > 0 && <span>• Trẻ em: {counts.children} </span>}
                                                         {counts.infants > 0 && <span>• Em bé: {counts.infants}</span>}
                                                     </div>
+                                                    {/* Chỗ ngồi: hiển thị ngay dưới Hành khách */}
+                                                    <div className="mt-2 text-sm flex justify-between">
+                                                        <div className="text-xs text-muted-foreground">Chỗ ngồi</div>
+                                                        <div className="font-medium">{seatsList && seatsList.length ? seatsList.join(', ') : 'Chưa chọn'}</div>
+                                                    </div>
+
                                                 </div>
 
                                                 <div className="mt-2 space-y-2 text-sm">
@@ -1991,6 +2087,13 @@ export default function ThanhToan() {
                                     const sumSeatsForLeg = (leg: string | null) => seatsArr.filter(s => (s.leg ?? null) === leg).reduce((s: number, it: any) => s + Number(it.price ?? 0), 0);
 
                                     const renderLeg = (label: string, flight: any, legKey: 'outbound' | 'inbound') => {
+                                        const seg = flight?.itineraries?.[0]?.segments?.[0] ?? null;
+                                        // prefer structured segment info; fallback to flight.route string
+                                        const depCode = seg?.departure?.iataCode ?? (typeof flight?.route === 'string' ? (flight.route.split('→')[0] || '').trim() : '');
+                                        const arrCode = seg?.arrival?.iataCode ?? (typeof flight?.route === 'string' ? (flight.route.split('→')[1] || '').trim() : '');
+                                        const depLabel = getAirportLabel(depCode || undefined, seg?.departure?.city ?? undefined);
+                                        const arrLabel = getAirportLabel(arrCode || undefined, seg?.arrival?.city ?? undefined);
+
                                         const addOnTotal = sumAddonsForLeg(legKey);
                                         const seatsTotal = sumSeatsForLeg(legKey);
                                         const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
@@ -2001,6 +2104,7 @@ export default function ThanhToan() {
                                         ) : Number(p.passengerBaseTotal ?? 0);
                                         const taxes = taxesPerLeg;
                                         const total = base + taxes + addOnTotal + seatsTotal;
+
                                         return (
                                             <div className="mb-4">
                                                 <div className="flex items-center justify-between mb-2">
@@ -2010,10 +2114,13 @@ export default function ThanhToan() {
                                                     </span>
                                                 </div>
                                                 <div className="text-sm text-muted-foreground space-y-1">
-                                                    <div className="flex justify-between"><span>Tuyến:</span><span>{flight?.route ?? '—'}</span></div>
-                                                    <div className="flex justify-between"><span>Ngày:</span><span>{flight?.date ?? '—'}</span></div>
-                                                    <div className="flex justify-between"><span>Giờ:</span><span>{flight?.time ?? '—'}</span></div>
+                                                    <div className="flex justify-between"><span>Tuyến:</span>
+                                                        <span>{(depCode && arrCode) ? `${depCode} (${depLabel}) → ${arrCode} (${arrLabel})` : (flight?.route ?? '—')}</span>
+                                                    </div>
+                                                    <div className="flex justify-between"><span>Ngày:</span><span>{seg?.departure?.at?.split('T')?.[0] ?? flight?.date ?? '—'}</span></div>
+                                                    <div className="flex justify-between"><span>Giờ:</span><span>{(seg?.departure?.at && seg?.arrival?.at) ? `${seg.departure.at.split('T')[1]?.slice(0, 5)} - ${seg.arrival.at.split('T')[1]?.slice(0, 5)}` : (flight?.time ?? '—')}</span></div>
                                                 </div>
+
                                                 <div className="space-y-2 mt-2">
                                                     {/* Giá vé with ChevronDown */}
                                                     <div
