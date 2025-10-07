@@ -1110,64 +1110,109 @@ const Support: React.FC = () => {
         const isCancel = selectedTicket.category === "cancel";
 
         try {
-            // If cancel ticket and there's a transId -> call momo refund first
-            if (isCancel && (selectedTicket as any).refundInfo?.transId) {
+            if (isCancel && (selectedTicket as any).refundInfo) {
                 const refundInfo = (selectedTicket as any).refundInfo;
-                const refundBody = {
-                    orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
-                    // amount: Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0),
-                    amount: 10000,
-                    transId: refundInfo.transId,
-                    description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
-                };
+                // const amount = Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0);
+                // const amount = Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0);
+                const amount = 10000;
 
-                const momoResp = await fetch("http://localhost:7000/momo/refund", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(refundBody),
-                });
 
-                if (!momoResp.ok) {
-                    const txt = await momoResp.text().catch(() => "");
-                    throw new Error(`Refund API lỗi: ${momoResp.status} ${txt}`);
+                // choose refund provider based on available transaction id
+                let refundResult: any = null;
+
+                if (refundInfo.transId) {
+                    // Momo refund
+                    const refundBody = {
+                        orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
+                        amount,
+                        transId: refundInfo.transId,
+                        description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
+                    };
+                    const momoResp = await fetch("http://localhost:7000/momo/refund", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(refundBody),
+                    });
+                    if (!momoResp.ok) {
+                        const txt = await momoResp.text().catch(() => "");
+                        throw new Error(`Refund (momo) lỗi: ${momoResp.status} ${txt}`);
+                    }
+                    refundResult = await momoResp.json();
+                } else if (refundInfo.zp_trans_id) {
+                    // ZaloPay refund
+                    const zaloBody = {
+                        zp_trans_id: refundInfo.zp_trans_id,
+                        amount,
+                        description: `Khách hàng hủy đơn ${refundInfo.orderRef || ticketId}`,
+                    };
+                    const zaloResp = await fetch("http://localhost:7000/zalo/refund", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(zaloBody),
+                    });
+                    if (!zaloResp.ok) {
+                        const txt = await zaloResp.text().catch(() => "");
+                        throw new Error(`Refund (zalo) lỗi: ${zaloResp.status} ${txt}`);
+                    }
+                    refundResult = await zaloResp.json();
+                } else {
+                    toast({ title: "Thiếu thông tin giao dịch", description: "Không có transId hoặc zp_trans_id để thực hiện refund." });
+                    return;
                 }
-                const momoJson = await momoResp.json();
 
-                // Add agent message with refund result
-                await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        text: `Xử lý hoàn tiền:\n${responseContent.trim()}\n\nKết quả refund: ${JSON.stringify(momoJson)}`,
-                        authorType: "agent",
-                        authorId: "admin_001",
+                // post agent message and update ticket status
+                await Promise.all([
+                    fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            text: `Xử lý hoàn tiền:\n${responseContent.trim()}\n\nKết quả refund: ${JSON.stringify(refundResult)}`,
+                            authorType: "agent",
+                            authorId: "admin_001",
+                        }),
                     }),
-                });
-
-                // Update ticket status to resolved and attach refund result to metadata/refundInfo if backend supports it
-                await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        status: "resolved",
-                        metadata: { refundResult: momoJson, handledBy: "admin_001" },
+                    fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            status: "resolved",
+                            metadata: { refundResult, handledBy: "admin_001" },
+                        }),
                     }),
-                });
+                ]);
 
-                toast({ title: "Hoàn tiền đã xử lý", description: `Kết quả: ${momoJson?.message || "OK"}` });
+                // update related order (best-effort)
+                const orderRef = refundInfo.orderRef;
+                if (orderRef) {
+                    try {
+                        await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderRef)}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                paymentStatus: "refunded",
+                                orderStatus: "cancelled",
+                                transId: refundInfo.transId || null,
+                                zp_trans_id: refundInfo.zp_trans_id || null,
+                                metadata: { refundHandledBy: ticketId, refundResult },
+                            }),
+                        });
+                    } catch (e) {
+                        console.warn("Update order after refund failed", e);
+                    }
+                }
+
+                toast({ title: "Hoàn tiền đã xử lý", description: `Kết quả: ${refundResult?.message || "OK"}` });
                 queryClient.invalidateQueries({ queryKey: ["tickets"] });
-                setResponseContent("");
-                setIsInternal(false);
-                return;
+            } else {
+                // Normal reply flow
+                await addResponseMutation.mutateAsync({
+                    ticketId,
+                    content: responseContent.trim(),
+                    isInternal,
+                });
             }
 
-            // Normal reply flow
-            addResponseMutation.mutate({
-                ticketId,
-                content: responseContent.trim(),
-                isInternal,
-            });
-
+            // Close detail modal and reset state after success
             setViewModalOpen(false);
             setSelectedTicket(null);
             setResponseContent("");
