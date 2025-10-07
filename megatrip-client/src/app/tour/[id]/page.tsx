@@ -284,10 +284,15 @@ export default function ChiTietTour() {
             : tourDetails.images;
 
         const startDates = Array.isArray(db.startDates) ? db.startDates : (db.startDates || []);
-        const availableDates = startDates.map((sd: any) => {
+        const endDates = Array.isArray(db.endDates) ? db.endDates : (db.endDates || []);
+        const availableDates = startDates.map((sd: any, idx: number) => {
+            const rawStart = sd.$date ?? sd;
+            const rawEnd = endDates?.[idx] ? (endDates[idx].$date ?? endDates[idx]) : null;
             const date = toIsoDate(sd);
             return {
                 date,
+                startIso: rawStart ? (new Date(rawStart).toISOString()) : null,
+                endIso: rawEnd ? (new Date(rawEnd).toISOString()) : null,
                 available: (sd.available ?? sd.seats ?? 20),
                 price: db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom,
                 status: (sd.available === 0 || sd.seats === 0) ? 'soldout' : (sd.available <= 5 || sd.seats <= 5 ? 'limited' : 'available')
@@ -351,6 +356,8 @@ export default function ChiTietTour() {
             };
         });
         return {
+            startDates: startDates,
+            endDates: endDates,
             id: db._id?.$oid ?? db._id ?? db.id ?? tourDetails.id,
             name: db.name || tourDetails.name,
             departure: db.departureFrom || db.startLocation?.address || db.departure || tourDetails.departure,
@@ -1362,6 +1369,28 @@ export default function ChiTietTour() {
                                         params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
                                         params.set('breakdown', JSON.stringify(passengers));
 
+                                        // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
+                                        // tourCode: use db id or fallback to generated id
+                                        const tourCode = String(tourDetails.id ?? id ?? '');
+                                        params.set('tourCode', tourCode);
+                                        // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
+                                        const startIso = selectedDateInfo?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
+                                        params.set('startDateTime', startIso);
+                                        // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
+                                        let endIso = selectedDateInfo?.endIso ?? '';
+                                        if (!endIso) {
+                                            try {
+                                                const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
+                                                const days = m ? Number(m[1]) : 1;
+                                                if (selectedDateInfo?.date) {
+                                                    const sd = new Date(selectedDateInfo.date);
+                                                    sd.setDate(sd.getDate()+ Math.max(0, days - 1));
+                                                    sd.setHours(23, 59, 0, 0);
+                                                    endIso = sd.toISOString();
+                                                }
+                                            } catch (e) { endIso = ''; }
+                                        }
+                                        params.set('endDateTime', endIso);
                                         router.push(`/thanh-toan?${params.toString()}`);
                                     }}>
                                         Đặt tour ngay

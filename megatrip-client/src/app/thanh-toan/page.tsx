@@ -112,6 +112,10 @@ const getBookingData = (searchParams: URLSearchParams) => {
                     route: searchParams.get('route') || '',
                     date: searchParams.get('date') || '',
                     time: searchParams.get('time') || '',
+                    // read extra tour fields passed from chi-tiet page
+                    tourCode: searchParams.get('tourCode') || null,
+                    startDateTime: searchParams.get('startDateTime') || null,
+                    endDateTime: searchParams.get('endDateTime') || null,
                 },
                 pricing: {
                     basePrice: Number(searchParams.get('basePrice')) || 0,
@@ -322,16 +326,77 @@ export default function ThanhToan() {
     }, [searchParams]);
 
     // Normalized view of booking payload: support both legacy bookingData.details and new booking.flight shape
+    // const normalizedDetails = (() => {
+    //     if (!bookingData) return {};
+    //     // prefer explicit flight / details
+    //     if (bookingData.flight) return bookingData.flight;
+    //     if (bookingData.details) return bookingData.details;
+
+    //     // support booking created by chi-tiet page: booking.flights.outbound
+    //     if (bookingData.flights?.outbound) {
+    //         const out = bookingData.flights.outbound;
+    //         // attempt to derive passenger count from bookingData.passengers.counts if present
+    //         const counts = bookingData.passengers?.counts;
+    //         const paxCnt = counts ? (Number(counts.adults || 0) + Number(counts.children || 0) + Number(counts.infants || 0)) : (bookingData.passengers?.length ?? 1);
+    //         return {
+    //             flightNumber: out.flightNumber ?? out.flightNo ?? out.number ?? '',
+    //             route: out.route ?? '',
+    //             date: out.date ?? '',
+    //             time: out.time ?? '',
+    //             airline: out.airline ?? '',
+    //             passengers: paxCnt,
+    //         };
+    //     }
+
+    //     // fallback
+    //     return bookingData.details ?? {};
+    // })();
+    // ...existing code...
+    // Normalized view of booking payload: support both legacy bookingData.details and new booking.flight shape
     const normalizedDetails = (() => {
         if (!bookingData) return {};
-        // prefer explicit flight / details
+
+        // flight / details passthrough
         if (bookingData.flight) return bookingData.flight;
-        if (bookingData.details) return bookingData.details;
+        if (bookingData.details && bookingData.type !== 'tour') return bookingData.details;
+
+        // TOUR: prefer explicit details, otherwise derive from bookingData.startDates/endDates
+        if (bookingData.type === 'tour' || (bookingData.details && (bookingData.details.tourCode || bookingData.startDates))) {
+            const det = bookingData.details ? { ...bookingData.details } : {};
+            // tourCode: prefer explicit, else try id/_id/slug
+            const tourCode = det.tourCode ?? bookingData.tourCode ?? bookingData._id?.$oid ?? bookingData._id ?? bookingData.id ?? bookingData.slug ?? null;
+
+            // try to resolve startDateTime/endDateTime
+            let startDateTime = det.startDateTime ?? det.startIso ?? null;
+            let endDateTime = det.endDateTime ?? det.endIso ?? null;
+
+            // if backend provided arrays of startDates/endDates, match by selected date (det.date) or pick first
+            if ((!startDateTime || !endDateTime) && Array.isArray(bookingData.startDates) && bookingData.startDates.length) {
+                const selDateRaw = det.date ?? null;
+                const normalize = (s: any) => {
+                    try { return new Date(s).toISOString().split('T')[0]; } catch { return null; }
+                };
+                const selIso = selDateRaw ? normalize(selDateRaw) : null;
+                let pickIndex = -1;
+                if (selIso) {
+                    pickIndex = bookingData.startDates.findIndex((sd: any) => normalize(sd) === selIso);
+                }
+                if (pickIndex === -1) pickIndex = 0;
+                startDateTime = startDateTime ?? bookingData.startDates[pickIndex] ?? null;
+                if (Array.isArray(bookingData.endDates)) endDateTime = endDateTime ?? bookingData.endDates[pickIndex] ?? null;
+            }
+
+            return {
+                ...det,
+                tourCode,
+                startDateTime,
+                endDateTime
+            };
+        }
 
         // support booking created by chi-tiet page: booking.flights.outbound
         if (bookingData.flights?.outbound) {
             const out = bookingData.flights.outbound;
-            // attempt to derive passenger count from bookingData.passengers.counts if present
             const counts = bookingData.passengers?.counts;
             const paxCnt = counts ? (Number(counts.adults || 0) + Number(counts.children || 0) + Number(counts.infants || 0)) : (bookingData.passengers?.length ?? 1);
             return {
@@ -347,7 +412,7 @@ export default function ThanhToan() {
         // fallback
         return bookingData.details ?? {};
     })();
-
+    // ...existing code...
     const normalizedPricing = (() => {
         if (!bookingData) return {};
         const p = bookingData.pricing ?? bookingData.pricingEstimate ?? bookingData.price ?? {};
@@ -868,25 +933,43 @@ export default function ThanhToan() {
             const qty = Math.max(1, passengers.length || ((bookingData?.passengers && bookingData.passengers.counts) ? (bookingData.passengers.counts.adults || 1) : 1));
             const totalAmount = Math.round(Math.max(0, (Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0) - (discountAmount || 0))));
             const perUnit = Math.round(totalAmount / Math.max(1, qty));
-            // create one aggregated item as a simple representation (you can expand to per-product items)
-            itemName = (normalizedDetails?.flightNumber || normalizedDetails?.route || normalizedDetails?.title || `${bookingType} booking`) + (bookingData?.meta?.label ? ` - ${bookingData.meta.label}` : '');
-            // const items = [{
-            //     itemId: bookingKey || (bookingData?.id || null),
-            //     type: bookingType,
-            //     name: itemName,
-            //     sku: bookingData?.meta?.sku || undefined,
-            //     quantity: Math.max(1, passengers.length || ((bookingData?.passengers && bookingData.passengers.counts) ? (bookingData.passengers.counts.adults || 1) : 1)),
-            //     unitPrice: Math.round(finalTotal),
-            //     subtotal: Math.round(finalTotal)
-            // }];
+            // determine product id coming from detail page (tour / bus / flight). If not provided, leave undefined.
+            // determine product id coming from detail page (tour / bus / flight). If not provided, leave undefined.
+            // try multiple places: meta.*, top-level id/_id, details.tourCode/tourId, flights.outbound.id/number
+            const detailItemId =
+                bookingData?.meta?.id ??
+                bookingData?.meta?.tourId ??
+                bookingData?.meta?.busId ??
+                bookingData?.meta?.flightId ??
+                bookingData?.id ??
+                (bookingData?._id && (typeof bookingData._id === 'object' ? (bookingData._id.$oid ?? bookingData._id) : bookingData._id)) ??
+                bookingData?.details?.tourCode ??
+                bookingData?.details?.tourId ??
+                bookingData?.flights?.outbound?.id ??
+                bookingData?.flights?.outbound?.flightNumber ??
+                undefined;
+
+            // Determine a short human-friendly item name required by backend:
+            const detailItemName =
+                (bookingData?.meta && (bookingData.meta.label || bookingData.meta.name)) ||
+                normalizedDetails?.flightNumber ||
+                normalizedDetails?.route ||
+                (bookingType === 'tour' ? 'Tour' : bookingType === 'bus' ? 'Vé xe' : 'Vé máy bay') ||
+                bookingType;
+
+            // items should store final total (after discounts/fees)
+            // include required `name` field (backend validation) and productId if provided
             const items = [{
-                itemId: bookingKey || (bookingData?.id || null),
+                // prefer real product id as itemId so backend that expects itemId gets it
+                itemId: detailItemId ?? bookingKey ?? undefined,
+                // keep productId explicit as well
+                productId: detailItemId ?? undefined,
                 type: bookingType,
-                name: itemName,
-                sku: bookingData?.meta?.sku || undefined,
-                quantity: qty,
-                unitPrice: perUnit,
-                subtotal: perUnit * qty
+                name: detailItemName,
+                sku: bookingData?.meta?.sku ?? undefined,
+                quantity: 1,
+                unitPrice: totalAmount,
+                subtotal: totalAmount
             }];
             // build snapshot that reflects applied promo
             const bookingSnapshot = {
@@ -907,7 +990,7 @@ export default function ThanhToan() {
                     amount: Math.round(discountAmount)
                 });
             }
-
+            console.log('Checkout debug: detailItemId=', detailItemId, 'bookingKey=', bookingKey, 'bookingData sample=', { meta: bookingData?.meta, id: bookingData?.id ?? bookingData?._id, details: bookingData?.details });
             const orderPayload = {
                 customerName: contactInfo.fullName || 'Khách hàng',
                 customerEmail: contactInfo.email || '',
@@ -1841,17 +1924,22 @@ export default function ThanhToan() {
                                         </div>
                                         <div className="text-sm text-muted-foreground space-y-1">
                                             <div className="flex justify-between">
+                                                <span>Mã tour:</span>
+                                                <span className="font-medium">{normalizedDetails.tourCode ?? (bookingData?.id ?? '—')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày giờ khởi hành:</span>
+                                                <span>{normalizedDetails.startDateTime ? new Date(normalizedDetails.startDateTime).toLocaleString('vi-VN') : (normalizedDetails.date ? `${normalizedDetails.date} ${normalizedDetails.time ?? ''}` : '---')}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>Ngày giờ kết thúc:</span>
+                                                <span>{normalizedDetails.endDateTime ? new Date(normalizedDetails.endDateTime).toLocaleString('vi-VN') : '---'}</span>
+                                            </div>
+                                            <div className="flex justify-between">
                                                 <span>Tên tour:</span>
                                                 <span>{normalizedDetails.route ?? '---'}</span>
                                             </div>
-                                            <div className="flex justify-between">
-                                                <span>Ngày khởi hành:</span>
-                                                <span>{normalizedDetails.date ?? '---'}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Giờ khởi hành:</span>
-                                                <span>{normalizedDetails.time ?? '---'}</span>
-                                            </div>
+
 
                                         </div>
                                     </div>
@@ -2007,6 +2095,7 @@ export default function ThanhToan() {
                                         const taxes = Number(p.taxes ?? p.taxesTotal ?? Math.round((adultTotal + childTotal + infantTotal) * 0.08));
                                         const discount = Number(p.discount ?? 0);
                                         const computedTotal = adultTotal + childTotal + infantTotal + addOnsTotal + seatsTotal + taxes - discount;
+                                        const preDiscount = adultTotal + childTotal + infantTotal + addOnsTotal + seatsTotal + taxes;
 
                                         return (
                                             <>
@@ -2061,6 +2150,12 @@ export default function ThanhToan() {
                                                 }
 
                                                 <div className="flex justify-between text-sm mt-2"><span>Thuế & phí</span><span>{formatPrice(taxes)}</span></div>
+                                                {/* Show pre-discount subtotal right above totals (fare + services + taxes, before promo) */}
+                                                <div className="flex justify-between font-medium mt-2">
+                                                    <span>Tổng giá vé (đã cộng thuế và phí)</span>
+                                                    <span>{formatPrice(preDiscount)}</span>
+                                                </div>
+
                                                 <div className="flex justify-between text-sm text-green-600">
                                                     <span>Giảm giá</span>
                                                     <span>{formatPrice(Number(discountAmount || discount || 0))}</span>
@@ -2069,7 +2164,8 @@ export default function ThanhToan() {
                                                 <Separator />
                                                 <div className="flex justify-between font-bold text-lg">
                                                     <span>Tổng cộng</span>
-                                                    <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(computedTotal) - (discountAmount || 0))))}</span>
+                                                    {/* <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(computedTotal) - (discountAmount || 0))))}</span> */}
+                                                    <span className="text-primary">{formatPrice(Math.max(0, Math.round(Number(preDiscount) - (discountAmount || 0))))}</span>
                                                 </div>
                                             </>
                                         );
