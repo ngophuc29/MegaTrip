@@ -1,5 +1,5 @@
 "use client"
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Layout from '../../../components/Layout';
@@ -75,10 +75,10 @@ function formatPrice(v: number) {
 }
 
 function ServiceIcon({ type }: { type: Booking['type'] }) {
-	if (type === 'flight') return <Plane className="h-4 w-4" />;
-	if (type === 'bus') return <Bus className="h-4 w-4" />;
-	if (type === 'tour') return <MapPin className="h-4 w-4" />;
-	return <FileText className="h-4 w-4" />;
+    if (type === 'flight') return <Plane className="h-4 w-4" />;
+    if (type === 'bus') return <Bus className="h-4 w-4" />;
+    if (type === 'tour') return <MapPin className="h-4 w-4" />;
+    return <FileText className="h-4 w-4" />;
 }
 
 const AIRLINE_POLICIES = {
@@ -93,8 +93,13 @@ function useBookingFromRoute(): Booking | null {
     return SAMPLE_BOOKINGS.find((b) => b.id === id) ?? null;
 }
 
+function useRouteId() {
+    const params = useParams() as any;
+    return params?.id as string | undefined;
+}
+
 export default function HuyDonPage() {
-    const booking = useBookingFromRoute();
+
     const router = useRouter();
 
     const [reason, setReason] = useState('');
@@ -108,7 +113,69 @@ export default function HuyDonPage() {
     const [walletId, setWalletId] = useState('');
     const [otpOpen, setOtpOpen] = useState(false);
     const [otp, setOtp] = useState('');
+    const id = useRouteId();
+    const [order, setOrder] = useState<any | null>(null);
+    const [loadingOrder, setLoadingOrder] = useState(false);
+    // derive booking view-model from fetched order (fallback to sample if not found)
+    const booking = useMemo<Booking | null>(() => {
+        if (!order) {
+            // fallback: try sample by id
+            const s = SAMPLE_BOOKINGS.find(b => b.id === id) ?? null;
+            return s;
+        }
+        const snap = order.metadata?.bookingDataSnapshot;
+        const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+        const pax = (() => {
+            if (snap?.passengers?.counts) {
+                const c = snap.passengers.counts;
+                return Number(c.adults || 0) + Number(c.children || 0) + Number(c.infants || 0);
+            }
+            if (Array.isArray(snap?.details?.passengers)) return snap.details.passengers.length;
+            if (item?.quantity) return Number(item.quantity) || 1;
+            return 1;
+        })();
+        const serviceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date ?? order.createdAt;
+        const serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
+        return {
+            id: order.orderNumber || order._id,
+            type: item?.type || 'tour',
+            status: order.orderStatus || order.status || 'pending',
+            bookingDate: order.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : '',
+            serviceDate,
+            title: item?.name || snap?.details?.route || 'Đặt dịch vụ',
+            details: item ? `${item.name} • x${item.quantity}` : (snap?.details?.route || ''),
+            passengers: pax,
+            total: Number(order.total || 0),
+        } as Booking;
+    }, [order, id]);
 
+    // fetch order details by id (supports orderNumber lookup at backend)
+    useEffect(() => {
+        let mounted = true;
+        if (!id) return;
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+        (async () => {
+            setLoadingOrder(true);
+            try {
+                const res = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(id)}`);
+                if (!res.ok) {
+                    // try search by orderNumber endpoint if your backend uses different route
+                    setOrder(null);
+                    return;
+                }
+                const json = await res.json();
+                // backend may return { data: order } or order directly
+                const o = json.data ?? json;
+                if (mounted) setOrder(o);
+            } catch (e) {
+                console.warn('fetch order failed', e);
+                if (mounted) setOrder(null);
+            } finally {
+                if (mounted) setLoadingOrder(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, [id]);
     const airlineCode = useMemo(() => {
         if (!booking || booking.type !== 'flight') return 'GEN';
         const m = booking.details.match(/^([A-Z]{2})\d+/);
@@ -123,9 +190,23 @@ export default function HuyDonPage() {
         if (service <= today) return { canCancel: false, message: 'Đơn đã qua ngày sử dụng.' } as const;
         const diffDays = Math.ceil((service.getTime() - today.getTime()) / (24 * 3600 * 1000));
 
+        // Tour cancellation policy (per request)
+        if (booking.type === 'tour') {
+            const tiers = [
+                { minDays: 15, feeRate: 0.20 },
+                { minDays: 7, feeRate: 0.50 },
+                { minDays: 3, feeRate: 0.75 },
+                { minDays: 0, feeRate: 1.00 }
+            ];
+            // find largest minDays <= diffDays
+            let tier = tiers.slice().reverse().find(t => diffDays >= t.minDays) ?? tiers[tiers.length - 1];
+            const airlinePolicy = { name: 'Chính sách hủy tour', tiers, nonRefundableTaxPerPax: 0, platformFee: 0 };
+            return { canCancel: true, diffDays, airlinePolicy, tier } as const;
+        }
+
+        // Fallback: existing airline/flight policy
         const airlinePolicy = (AIRLINE_POLICIES as any)[airlineCode] ?? { name: 'Nhà vận chuyển', tiers: [{ minDays: 7, feeRate: 0.08 }, { minDays: 3, feeRate: 0.25 }, { minDays: 0, feeRate: 0.55 }], nonRefundableTaxPerPax: 50000, platformFee: 15000 };
         const tier = airlinePolicy.tiers.find((t: any) => diffDays >= t.minDays) ?? airlinePolicy.tiers[airlinePolicy.tiers.length - 1];
-
         return { canCancel: true, diffDays, airlinePolicy, tier } as const;
     }, [booking, airlineCode]);
 
@@ -141,10 +222,18 @@ export default function HuyDonPage() {
         const refund = Math.max(0, baseAmount - totalFees);
         return { paxCount, baseAmount, airlinePenalty, taxes, platformFee, refund, tierRate };
     }, [booking, policy]);
+    // validate refund method - MUST be declared unconditionally (before any early return)
+    const validMethod = useMemo(() => {
+        if (!refundMethod) return false;
+        if (refundMethod === 'bank') return !!(bankName && bankAccountName && bankAccountNumber);
+        if (refundMethod === 'card') return !!(cardLast4.length === 4);
+        if (refundMethod === 'wallet') return !!walletId;
+        return false;
+    }, [refundMethod, bankName, bankAccountName, bankAccountNumber, cardLast4, walletId]);
 
     if (!booking) {
         return (
-            <Layout>
+            <>
                 <div className="container py-6">
                     <Card>
                         <CardContent className="p-6">
@@ -158,17 +247,17 @@ export default function HuyDonPage() {
                         </CardContent>
                     </Card>
                 </div>
-            </Layout>
+            </>
         );
     }
 
-    const validMethod = useMemo(() => {
-        if (!refundMethod) return false;
-        if (refundMethod === 'bank') return !!(bankName && bankAccountName && bankAccountNumber);
-        if (refundMethod === 'card') return !!(cardLast4.length === 4);
-        if (refundMethod === 'wallet') return !!walletId;
-        return false;
-    }, [refundMethod, bankName, bankAccountName, bankAccountNumber, cardLast4, walletId]);
+    // const validMethod = useMemo(() => {
+    //     if (!refundMethod) return false;
+    //     if (refundMethod === 'bank') return !!(bankName && bankAccountName && bankAccountNumber);
+    //     if (refundMethod === 'card') return !!(cardLast4.length === 4);
+    //     if (refundMethod === 'wallet') return !!walletId;
+    //     return false;
+    // }, [refundMethod, bankName, bankAccountName, bankAccountNumber, cardLast4, walletId]);
 
     function saveRequest() {
         const id = 'RQ-' + Date.now();
@@ -201,21 +290,55 @@ export default function HuyDonPage() {
         return id;
     }
 
-    const startOtpFlow = () => {
-        setOtp('');
-        setOtpOpen(true);
-    };
-
-    const confirmOtp = () => {
-        if (otp.trim().length !== 6) {
-            toast({ title: 'Mã OTP chưa hợp lệ', description: 'Nhập đủ 6 số để xác nhận' });
+    const submitCancelRequest = async () => {
+        if (!reason) {
+            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn lý do.' });
             return;
         }
-        const rid = saveRequest();
-        toast({ title: 'Đã gửi yêu cầu hủy', description: `Mã yêu cầu ${rid}` });
-        // set history state so TaiKhoan page can pick activeTab
-        if (typeof window !== 'undefined') window.history.replaceState({ activeTab: 'requests' }, '');
-        router.push('/tai-khoan');
+
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+        const payload = {
+            customerId: order?.customerId || '64e65e8d3d5e2b0c8a3e9f12',
+            customerName: order?.customerName || order?.customerName || order?.customer?.name || '',
+            customerEmail: order?.customerEmail || order?.customerEmail || order?.customer?.email || '',
+            customerPhone: order?.customerPhone || order?.customerPhone || order?.customer?.phone || '',
+            serviceType: booking.type,
+            type: 'cancel', // support category for cancellation/refund
+            title: `Yêu cầu hủy - ${booking.title} (${booking.id})`,
+            description: `${reason}${note ? '\n\nGhi chú: ' + note : ''}`,
+            orderRef: order ? (order.orderNumber || order._id) : booking.id,
+            transId: order?.transId || null,
+            zp_trans_id: order?.zp_trans_id || null,
+            paymentReference: order?.paymentReference || null,
+            // pass fee breakdown so support/backend knows amounts to refund
+            airlinePenalty: breakdown?.airlinePenalty || 0,
+            taxes: breakdown?.taxes || 0,
+            platformFee: breakdown?.platformFee || 0,
+            refundAmount: breakdown?.refund || 0,
+            currency: 'VND',
+            message: `${reason}${note ? '\n\n' + note : ''}`
+        };
+
+        try {
+            const resp = await fetch(`${API_BASE}/api/support`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (!resp.ok) {
+                const txt = await resp.text().catch(() => '');
+                toast({ title: 'Gửi yêu cầu thất bại', description: `Lỗi server: ${resp.status} ${txt}` });
+                return;
+            }
+            const json = await resp.json();
+            const ticket = json.ticket || json.data || json;
+            toast({ title: 'Yêu cầu đã gửi', description: `Mã yêu cầu: ${ticket?.ticketNumber || ticket?.id || '–'}` });
+            if (typeof window !== 'undefined') window.history.replaceState({ activeTab: 'requests' }, '');
+            router.push('/tai-khoan');
+        } catch (err) {
+            console.error('submitCancelRequest error', err);
+            toast({ title: 'Lỗi mạng', description: 'Không thể kết nối tới server. Vui lòng thử lại.' });
+        }
     };
 
     return (
@@ -255,7 +378,7 @@ export default function HuyDonPage() {
                                 </div>
                                 <Separator />
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                                     <div>
                                         <Label>Lý do hủy</Label>
                                         <Select value={reason} onValueChange={setReason}>
@@ -271,19 +394,7 @@ export default function HuyDonPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div>
-                                        <Label>Phương thức nhận tiền</Label>
-                                        <Select value={refundMethod} onValueChange={setRefundMethod}>
-                                            <SelectTrigger className="mt-1">
-                                                <SelectValue placeholder="Chọn phương thức" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="wallet">Ví Travel</SelectItem>
-                                                <SelectItem value="card">Thẻ đã thanh toán</SelectItem>
-                                                <SelectItem value="bank">Chuyển khoản ngân hàng</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
+
                                 </div>
 
                                 {refundMethod === 'bank' && (
@@ -327,25 +438,49 @@ export default function HuyDonPage() {
                                 <div className="p-3 rounded border bg-amber-50 text-amber-900 flex items-start gap-2">
                                     <Info className="h-4 w-4 mt-0.5" />
                                     <div className="text-sm">
-                                        <div className="font-medium">Chính sách hoàn tiền theo nhà vận chuyển</div>
-                                        {(policy as any).canCancel ? (
+                                        {booking.type === 'tour' ? (
                                             <>
-                                                <div className="mt-1">Nhà vận chuyển: {(policy as any).airlinePolicy.name} • Còn {(policy as any).diffDays} ngày đến ngày sử dụng</div>
-                                                <div className="mt-2">
-                                                    <div className="text-xs font-medium">Bảng phí</div>
-                                                    <ul className="list-disc ml-4 mt-1 space-y-1">
-                                                        {((policy as any).airlinePolicy.tiers as { minDays: number; feeRate: number }[]).map((t: any, idx: number) => (
-                                                            <li key={idx}>
-                                                                ≥ {t.minDays} ngày trước giờ bay: Phí {Math.round(t.feeRate * 100)}%
-                                                                {t.feeRate === (policy as any).tier.feeRate && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                    <div className="text-xs mt-1">Thuế/Phí không hoàn: {formatPrice((policy as any).airlinePolicy.nonRefundableTaxPerPax)} mỗi hành khách • Phí nền tảng: {formatPrice((policy as any).airlinePolicy.platformFee)}</div>
-                                                </div>
+                                                <div className="font-medium">Chính sách hủy tour</div>
+                                                {(policy as any).canCancel ? (
+                                                    <>
+                                                        <div className="mt-1">Còn {(policy as any).diffDays} ngày đến ngày sử dụng</div>
+                                                        <div className="mt-2">
+                                                            <div className="text-xs font-medium">Bảng phí hủy (tính theo % tổng tiền tour)</div>
+                                                            <ul className="list-disc ml-4 mt-1 space-y-1">
+                                                                <li>Trước 15 ngày: 20% tổng tiền tour {((policy as any).tier?.minDays === 15) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>7-14 ngày trước: 50% tổng tiền tour {((policy as any).tier?.minDays === 7) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>3-6 ngày trước: 75% tổng tiền tour {((policy as any).tier?.minDays === 3) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>Trong 2 ngày: 100% tổng tiền tour {((policy as any).tier?.minDays === 0) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                            </ul>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="mt-1">{(policy as any).message}</div>
+                                                )}
                                             </>
                                         ) : (
-                                            <div className="mt-1">{(policy as any).message}</div>
+                                            <>
+                                                <div className="font-medium">Chính sách hoàn tiền theo nhà vận chuyển</div>
+                                                {(policy as any).canCancel ? (
+                                                    <>
+                                                        <div className="mt-1">Nhà vận chuyển: {(policy as any).airlinePolicy.name} • Còn {(policy as any).diffDays} ngày đến ngày sử dụng</div>
+                                                        <div className="mt-2">
+                                                            <div className="text-xs font-medium">Bảng phí</div>
+                                                            <ul className="list-disc ml-4 mt-1 space-y-1">
+                                                                {((policy as any).airlinePolicy.tiers as { minDays: number; feeRate: number }[]).map((t: any, idx: number) => (
+                                                                    <li key={idx}>
+                                                                        ≥ {t.minDays} ngày trước giờ bay: Phí {Math.round(t.feeRate * 100)}%
+                                                                        {t.feeRate === (policy as any).tier.feeRate && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                            <div className="text-xs mt-1">Thuế/Phí không hoàn: {formatPrice((policy as any).airlinePolicy.nonRefundableTaxPerPax)} mỗi hành khách • Phí nền tảng: {formatPrice((policy as any).airlinePolicy.platformFee)}</div>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="mt-1">{(policy as any).message}</div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -357,9 +492,9 @@ export default function HuyDonPage() {
 
                                 <div className="flex gap-2">
                                     <Button onClick={() => router.back()} variant="outline">Hủy</Button>
-                                    <Button onClick={startOtpFlow} disabled={!(policy as any).canCancel || !reason || !refundMethod || !agreePolicy || !breakdown || !validMethod}>
+                                    <Button onClick={submitCancelRequest} disabled={!agreePolicy || !reason}>
                                         <DollarSign className="h-4 w-4 mr-1" />
-                                        Gửi yêu cầu hủy đơn
+                                        Gửi yêu cầu
                                     </Button>
                                 </div>
                             </CardContent>
@@ -399,12 +534,9 @@ export default function HuyDonPage() {
                                             <span className="font-medium">Hoàn dự kiến</span>
                                             <span className="text-lg font-bold text-green-600">{formatPrice(breakdown.refund)}</span>
                                         </div>
-                                        {refundMethod && (
-                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                <CreditCard className="h-3 w-3" />
-                                                Phương thức: {refundMethod === 'wallet' ? `Ví (${walletId || 'chưa nhập'})` : refundMethod === 'card' ? `Thẻ **** ${cardLast4 || '----'}` : bankName ? `Ngân hàng ${bankName}` : 'Ngân hàng'}
-                                            </div>
-                                        )}
+                                        <div className="text-xs text-muted-foreground mt-2">
+                                            Tiền sẽ được hoàn lại về tài khoản mà khách hàng đã sử dụng để thanh toán (ví dụ: thẻ/ngân hàng/ ví). Vui lòng đảm bảo thông tin thanh toán đã chính xác tại nơi đặt để nhận hoàn.
+                                        </div>
                                     </>
                                 )}
                             </CardContent>
@@ -413,40 +545,7 @@ export default function HuyDonPage() {
                 </div>
             </div>
 
-            {/* OTP Dialog */}
-            <Dialog open={otpOpen} onOpenChange={setOtpOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Xác minh OTP</DialogTitle>
-                        <DialogDescription>Nhập mã 6 số đã gửi tới email/SMS để xác nhận hủy đơn.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid grid-cols-6 gap-2">
-                        {Array.from({ length: 6 }).map((_, idx) => (
-                            <Input
-                                key={idx}
-                                inputMode="numeric"
-                                value={otp[idx] || ''}
-                                onChange={(e) => {
-                                    const v = e.target.value.replace(/[^0-9]/g, '').slice(-1);
-                                    const arr = otp.split('');
-                                    arr[idx] = v;
-                                    const next = arr.join('');
-                                    setOtp(next);
-                                }}
-                                className="text-center text-lg"
-                                maxLength={1}
-                            />
-                        ))}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setOtpOpen(false)}>Hủy</Button>
-                        <Button onClick={confirmOtp}>
-                            Xác nhận
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+
         </>
     );
 }

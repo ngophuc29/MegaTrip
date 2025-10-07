@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -35,7 +36,7 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@radix-ui/react-dialog';
 import { DialogFooter, DialogHeader } from '../components/ui/dialog';
-
+const FAKE_CUSTOMER_ID = '64e65e8d3d5e2b0c8a3e9f12';
 // Sample user data
 const userData = {
     profile: {
@@ -50,67 +51,67 @@ const userData = {
         verified: true,
     },
     bookings: [
-	{
-		id: 'TRV123456789',
-		type: 'flight',
-		status: 'confirmed',
-		bookingDate: (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); })(),
-		serviceDate: (() => { const d = new Date(); d.setDate(d.getDate() + 15); return d.toISOString().slice(0, 10); })(),
-		title: 'Chuyến bay TP.HCM - Hà Nội',
-		details: 'VN1546 • 06:15 - 08:30',
-		passengers: 2,
-		total: 4460000,
-		canCancel: true,
-		canChange: true,
-	},
-	{ id: 'TRV123456790', type: 'flight', status: 'confirmed', bookingDate: '2025-01-10', serviceDate: '2025-06-10', title: 'TP.HCM - Nha Trang', details: 'VJ221 • 08:00 - 09:10', passengers: 1, total: 900000, canCancel: true, canChange: true },
-	{ id: 'TRV123456791', type: 'flight', status: 'pending', bookingDate: '2025-02-01', serviceDate: '2025-07-01', title: 'HN - Đà Lạt', details: 'VN330 • 12:00 - 13:30', passengers: 2, total: 1800000 },
-	{
-		id: 'TRV123456792',
-		type: 'bus',
-		status: 'confirmed',
-		bookingDate: '2025-03-05',
-		serviceDate: '2025-08-15',
-		title: 'Xe Sài Gòn - Vũng Tàu',
-		details: 'Ghế ngồi thường • 07:00',
-		passengers: 3,
-		total: 450000,
-		canCancel: true,
-		canChange: true,
-	},
-	{
-		id: 'TRV123456787',
-		type: 'bus',
-		status: 'confirmed',
-		bookingDate: '2024-10-15',
-		serviceDate: '2025-12-20',
-		title: 'Xe TP.HCM - Đà Lạt',
-		details: 'Giường nằm VIP • 22:30',
-		passengers: 2,
-		total: 700000,
-		canCancel: true,
-		canChange: true,
-	},
-	{
-		id: 'TRV123456788',
-		type: 'tour',
-		status: 'confirmed',
-		bookingDate: '2024-11-20',
-		serviceDate: '2025-12-05',
-		title: 'Tour Đà Nẵng - Hội An 3N2Đ',
-		details: 'Khách sạn 4* • 4 khách',
-		passengers: 4,
-		total: 15960000,
-		canReview: true,
-		rating: 5,
-		canCancel: true,
-		canChange: true,
-	},
-	{ id: 'TRV123456793', type: 'tour', status: 'cancelled', bookingDate: '2024-09-12', serviceDate: '2024-10-01', title: 'Tour Sapa 2N1Đ', details: 'Khách sạn 3* • 2 khách', passengers: 2, total: 3200000 },
-	{ id: 'TRV123456794', type: 'bus', status: 'completed', bookingDate: '2024-08-01', serviceDate: '2024-09-01', title: 'Xe Đà Nẵng - Hội An', details: 'Ghế ngồi • 10:00', passengers: 2, total: 200000 },
-	{ id: 'TRV123456795', type: 'flight', status: 'cancelled', bookingDate: '2024-07-15', serviceDate: '2024-08-20', title: 'HN - TP.HCM', details: 'VJ110 • 20:00 - 21:30', passengers: 1, total: 1200000 },
-	{ id: 'TRV123456796', type: 'tour', status: 'confirmed', bookingDate: '2025-04-01', serviceDate: '2025-09-10', title: 'Tour Miền Tây 3N2Đ', details: 'Khách sạn 3* • 4 khách', passengers: 4, total: 8400000, canCancel: true, canChange: true },
-	],
+        {
+            id: 'TRV123456789',
+            type: 'flight',
+            status: 'confirmed',
+            bookingDate: (() => { const d = new Date(); d.setDate(d.getDate() - 2); return d.toISOString().slice(0, 10); })(),
+            serviceDate: (() => { const d = new Date(); d.setDate(d.getDate() + 15); return d.toISOString().slice(0, 10); })(),
+            title: 'Chuyến bay TP.HCM - Hà Nội',
+            details: 'VN1546 • 06:15 - 08:30',
+            passengers: 2,
+            total: 4460000,
+            canCancel: true,
+            canChange: true,
+        },
+        { id: 'TRV123456790', type: 'flight', status: 'confirmed', bookingDate: '2025-01-10', serviceDate: '2025-06-10', title: 'TP.HCM - Nha Trang', details: 'VJ221 • 08:00 - 09:10', passengers: 1, total: 900000, canCancel: true, canChange: true },
+        { id: 'TRV123456791', type: 'flight', status: 'pending', bookingDate: '2025-02-01', serviceDate: '2025-07-01', title: 'HN - Đà Lạt', details: 'VN330 • 12:00 - 13:30', passengers: 2, total: 1800000 },
+        {
+            id: 'TRV123456792',
+            type: 'bus',
+            status: 'confirmed',
+            bookingDate: '2025-03-05',
+            serviceDate: '2025-08-15',
+            title: 'Xe Sài Gòn - Vũng Tàu',
+            details: 'Ghế ngồi thường • 07:00',
+            passengers: 3,
+            total: 450000,
+            canCancel: true,
+            canChange: true,
+        },
+        {
+            id: 'TRV123456787',
+            type: 'bus',
+            status: 'confirmed',
+            bookingDate: '2024-10-15',
+            serviceDate: '2025-12-20',
+            title: 'Xe TP.HCM - Đà Lạt',
+            details: 'Giường nằm VIP • 22:30',
+            passengers: 2,
+            total: 700000,
+            canCancel: true,
+            canChange: true,
+        },
+        {
+            id: 'TRV123456788',
+            type: 'tour',
+            status: 'confirmed',
+            bookingDate: '2024-11-20',
+            serviceDate: '2025-12-05',
+            title: 'Tour Đà Nẵng - Hội An 3N2Đ',
+            details: 'Khách sạn 4* • 4 khách',
+            passengers: 4,
+            total: 15960000,
+            canReview: true,
+            rating: 5,
+            canCancel: true,
+            canChange: true,
+        },
+        { id: 'TRV123456793', type: 'tour', status: 'cancelled', bookingDate: '2024-09-12', serviceDate: '2024-10-01', title: 'Tour Sapa 2N1Đ', details: 'Khách sạn 3* • 2 khách', passengers: 2, total: 3200000 },
+        { id: 'TRV123456794', type: 'bus', status: 'completed', bookingDate: '2024-08-01', serviceDate: '2024-09-01', title: 'Xe Đà Nẵng - Hội An', details: 'Ghế ngồi • 10:00', passengers: 2, total: 200000 },
+        { id: 'TRV123456795', type: 'flight', status: 'cancelled', bookingDate: '2024-07-15', serviceDate: '2024-08-20', title: 'HN - TP.HCM', details: 'VJ110 • 20:00 - 21:30', passengers: 1, total: 1200000 },
+        { id: 'TRV123456796', type: 'tour', status: 'confirmed', bookingDate: '2025-04-01', serviceDate: '2025-09-10', title: 'Tour Miền Tây 3N2Đ', details: 'Khách sạn 3* • 4 khách', passengers: 4, total: 8400000, canCancel: true, canChange: true },
+    ],
     savedTravelers: [
         {
             id: 1,
@@ -354,6 +355,57 @@ function RequestsTab({ formatPrice }: { formatPrice: (n: number) => string }) {
         </div>
     );
 }
+function mapOrderToBooking(order) {
+    const snap = order.metadata?.bookingDataSnapshot;
+    const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+    const pax = (() => {
+        if (snap?.passengers?.counts) {
+            const c = snap.passengers.counts;
+            return Number(c.adults || 0) + Number(c.children || 0) + Number(c.infants || 0);
+        }
+        if (Array.isArray(snap?.details?.passengers)) return snap.details.passengers.length;
+        if (item?.quantity) return Number(item.quantity) || 1;
+        return 1;
+    })();
+    // compute serviceDate and days until service
+    const serviceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : (order.createdAt ? new Date(order.createdAt) : null);
+    const serviceDate = serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '';
+    let daysUntilService = null;
+    if (serviceDateObj) {
+        const today = new Date();
+        // normalize to midnight to count full days
+        const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+        const t1 = Date.UTC(serviceDateObj.getFullYear(), serviceDateObj.getMonth(), serviceDateObj.getDate());
+        daysUntilService = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+    }
+
+    const paymentStatus = order.paymentStatus || 'pending';
+    // cancel only when paymentStatus === 'paid'
+    const canCancel = paymentStatus === 'paid';
+    // allow change only when daysUntilService is defined and > 3
+    const canChange = typeof daysUntilService === 'number' ? (daysUntilService > 3) : false;
+    const canReview = (order.orderStatus === 'confirmed' || order.orderStatus === 'completed');
+
+    return {
+        id: order.orderNumber || order._id,
+        type: item?.type || 'tour',
+        status: order.orderStatus || order.status || 'pending',
+        paymentStatus,
+        bookingDate: order.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : '',
+        serviceDate,
+        daysUntilService,
+        title: item?.name || snap?.details?.route || 'Đặt dịch vụ',
+        details: item ? `${item.name} • x${item.quantity}` : (snap?.details?.route || ''),
+        passengers: pax,
+        total: Number(order.total || 0),
+        canCancel,
+        canChange,
+        canReview,
+        refunded: order.refundedAmount || 0,
+        rating: null
+    };
+}
 
 export default function TaiKhoan() {
     const [activeTab, setActiveTab] = useState<string>('overview');
@@ -370,7 +422,33 @@ export default function TaiKhoan() {
 
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState(userData.profile);
+    const [bookings, setBookings] = useState(null);
+    const [loadingBookings, setLoadingBookings] = useState(false);
+    const [bookingsError, setBookingsError] = useState(null);
+    useEffect(() => {
+        let mounted = true;
+        async function loadBookings() {
+            setLoadingBookings(true);
+            setBookingsError(null);
+            try {
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/customer/${encodeURIComponent(FAKE_CUSTOMER_ID)}?page=1&pageSize=50`);
+                if (!res.ok) throw new Error(`${res.status}`);
+                const json = await res.json();
+                const data = Array.isArray(json.data) ? json.data : (json.data?.data || []);
+                const mapped = data.map(mapOrderToBooking);
+                if (mounted) setBookings(mapped);
+            } catch (err) {
+                console.error('Failed to load bookings:', err);
+                if (mounted) setBookingsError(err.message || 'load_failed');
+            } finally {
+                if (mounted) setLoadingBookings(false);
+            }
+        }
+        loadBookings();
+        return () => { mounted = false; };
+    }, []);
 
+    const displayBookings = Array.isArray(bookings) ? bookings : userData.bookings;
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -682,16 +760,18 @@ export default function TaiKhoan() {
                                 </div>
 
                                 <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
-                                    {userData.bookings.map((booking) => (
+                                    {/* {userData.bookings.map((booking) => ( */}
+                                    {displayBookings.map((booking) => (
+
                                         <Card key={booking.id}>
                                             <CardContent className="p-6">
-                                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                                                     <div className="flex items-start gap-4">
                                                         <div className="p-3 bg-primary/10 rounded-lg">
                                                             {getServiceIcon(booking.type)}
                                                         </div>
                                                         <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-2">
+                                                            <div className="flex items-start gap-2 mb-2">
                                                                 <h3 className="font-semibold">{booking.title}</h3>
                                                                 <Badge className={getStatusColor(booking.status)}>
                                                                     {getStatusText(booking.status)}
@@ -699,13 +779,13 @@ export default function TaiKhoan() {
                                                             </div>
                                                             <div className="text-sm text-muted-foreground space-y-1">
                                                                 <div>Mã đơn hàng: {booking.id}</div>
-                                                                <div>Chi tiết: {booking.details}</div>
+                                                                {/* <div>Chi tiết: {booking.details}</div> */}
                                                                 <div>Ngày đặt: {booking.bookingDate}</div>
                                                                 <div>Ngày sử dụng: {booking.serviceDate}</div>
                                                                 <div>Số khách: {booking.passengers}</div>
-                                                                {booking.refunded && (
-                                                                    <div className="text-green-600">Đã hoàn: {formatPrice(booking.refunded)}</div>
-                                                                )}
+                                                                {/* {booking.refunded && (
+                                                                        <div className="text-green-600">Đã hoàn: {formatPrice(booking.refunded)}</div>
+                                                                    )} */}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -719,22 +799,46 @@ export default function TaiKhoan() {
                                                                 <Eye className="h-3 w-3 mr-1" />
                                                                 Xem chi tiết
                                                             </Button>
-                                                         {booking.canCancel && (
-                                                             <Button size="sm" variant="outline" asChild>
-                                                                 <a href={`/tai-khoan/huy-don/${booking.id}`}>
-                                                                     <XCircle className="h-3 w-3 mr-1" />
-                                                                     Hủy đơn
-                                                                 </a>
-                                                             </Button>
-                                                         )}
-                                                         {booking.canChange && (
-                                                             <Button size="sm" variant="outline" asChild>
-                                                                 <a href={`/tai-khoan/doi-lich/${booking.id}`}>
-                                                                     <Edit className="h-3 w-3 mr-1" />
-                                                                     Đổi lịch
-                                                                 </a>
-                                                             </Button>
-                                                         )}
+                                                            {booking.paymentStatus === 'paid' && (
+                                                                <Button size="sm" variant="outline" asChild>
+                                                                    <a href={`/tai-khoan/huy-don/${booking.id}`}>
+                                                                        <XCircle className="h-3 w-3 mr-1" />
+                                                                        Hủy đơn
+                                                                    </a>
+                                                                </Button>
+                                                            )}
+                                                            {/* Always render change button but disable with tooltip when not allowed */}
+                                                            {booking.canChange ? (
+                                                                <Button size="sm" variant="outline" asChild>
+                                                                    <a href={`/tai-khoan/doi-lich/${booking.id}`}>
+                                                                        <Edit className="h-3 w-3 mr-1" />
+                                                                        Đổi lịch
+                                                                    </a>
+                                                                </Button>
+                                                            ) : (
+                                                                <Tooltip.Provider>
+                                                                    <Tooltip.Root>
+                                                                        <Tooltip.Trigger asChild>
+                                                                            <Button
+                                                                                disabled
+                                                                                variant={'outline'}
+                                                                                className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                            >
+                                                                                <Edit className="h-3 w-3 mr-1" />
+                                                                                Đổi lịch
+                                                                            </Button>
+                                                                        </Tooltip.Trigger>
+                                                                        <Tooltip.Portal>
+                                                                            <Tooltip.Content
+                                                                                className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                sideOffset={5}
+                                                                            >
+                                                                                Khả dụng trước ngày sử dụng 3 ngày
+                                                                            </Tooltip.Content>
+                                                                        </Tooltip.Portal>
+                                                                    </Tooltip.Root>
+                                                                </Tooltip.Provider>
+                                                            )}
                                                             {booking.canReview && (
                                                                 <Button size="sm" variant="outline">
                                                                     <Star className="h-3 w-3 mr-1" />
@@ -902,7 +1006,7 @@ export default function TaiKhoan() {
                         )}
                     </div>
                 </div>
-            </div>
+            </div >
         </>
     );
 }

@@ -18,6 +18,7 @@ import {
     Send,
     Paperclip,
     Star,
+    Trash,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -41,7 +42,7 @@ interface SupportTicket {
     customerName: string;
     customerEmail: string;
     customerAvatar?: string;
-    category: "technical" | "billing" | "account" | "general" | "complaint";
+    category: "technical" | "billing" | "account" | "general" | "complaint" | "cancel";
     priority: "low" | "medium" | "high" | "urgent";
     status: "new" | "open" | "pending" | "resolved" | "closed";
     assignedTo?: string;
@@ -675,7 +676,83 @@ const mockTickets: SupportTicket[] = [
         satisfaction: 4,
     },
 ];
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
 
+// map server ticket -> SupportTicket (UI)
+function mapApiTicketToSupportTicket(t: any): SupportTicket {
+    const id = t.ticketNumber || t._id || String(t.id || t._id || "").toString();
+    const customerId = t.customerId || t.customer || null;
+    // derive customer name/email from payload or fallback to mockCustomers
+    let customerName = t.customerName || (t.customer && t.customer.name) || "";
+    let customerEmail = t.customerEmail || (t.customer && t.customer.email) || "";
+    if (!customerName && customerId) {
+        const c = mockCustomers.find(c => c.id === customerId);
+        if (c) {
+            customerName = c.name;
+            customerEmail = c.email;
+        }
+    }
+    const messages = Array.isArray(t.messages) ? t.messages.map((m: any, idx: number) => ({
+        id: m._id || `MSG${idx}`,
+        content: m.text || m.text || "",
+        isInternal: (m.authorType === 'agent' || m.authorType === 'admin') ? true : false,
+        authorId: m.authorId || null,
+        authorName: m.authorName || (m.authorId ? (mockAdmins.find(a => a.id === m.authorId)?.name) : customerName) || "",
+        authorType: m.authorType === 'agent' ? 'admin' : (m.authorType === 'customer' ? 'customer' : (m.authorType || 'customer')),
+        createdAt: m.createdAt || m.ts || new Date().toISOString(),
+        attachments: Array.isArray(m.attachments) ? m.attachments : []
+    })) : [];
+
+    const responses = (t.responses && Array.isArray(t.responses)) ? t.responses.map((r: any, idx: number) => ({
+        id: r._id || `RESP${idx}`,
+        content: r.text || r.content || "",
+        isInternal: !!r.isInternal,
+        authorId: r.authorId || (r.author && r.author.id) || "agent",
+        authorName: r.authorName || r.author?.name || mockAdmins[0]?.name || "Agent",
+        authorType: r.authorType === 'admin' ? 'admin' : 'customer',
+        createdAt: r.createdAt || new Date().toISOString(),
+        attachments: Array.isArray(r.attachments) ? r.attachments : []
+    })) : messages; // fallback use messages as responses
+
+    // map refundInfo if backend provided it
+    const refundInfo = t.refundInfo ? {
+        orderRef: t.refundInfo.orderRef ?? null,
+        transId: t.refundInfo.transId ?? null,
+        zp_trans_id: t.refundInfo.zp_trans_id ?? null,
+        paymentReference: t.refundInfo.paymentReference ?? null,
+        airlinePenalty: Number(t.refundInfo.airlinePenalty || 0),
+        taxes: Number(t.refundInfo.taxes || 0),
+        platformFee: Number(t.refundInfo.platformFee || 0),
+        refundAmount: Number(t.refundInfo.refundAmount || 0),
+        currency: t.refundInfo.currency || 'VND'
+    } : undefined;
+
+    return {
+        id,
+        title: t.title || t.description || (t.messages && t.messages[0] && t.messages[0].text) || "Ticket",
+        content: t.description || (t.messages && t.messages[0] && t.messages[0].text) || "",
+        customerId,
+        customerName: customerName || "",
+        customerEmail: customerEmail || "",
+        customerAvatar: t.customerAvatar || "",
+        category: (t.type || t.category) || "general",
+        priority: t.priority || "medium",
+        status: t.status || "new",
+        assignedTo: t.assignee?.id || t.assignedTo || undefined,
+        assignedToName: t.assignee?.name || t.assignedToName || undefined,
+        createdAt: t.createdAt || t.created_at || new Date().toISOString(),
+        updatedAt: t.updatedAt || t.updated_at || new Date().toISOString(),
+        closedAt: t.closedAt || null,
+        tags: Array.isArray(t.tags) ? t.tags : (t.metadata?.tags || []),
+        attachments: Array.isArray(t.attachments) ? t.attachments : [],
+        responses,
+        satisfaction: t.satisfaction || undefined,
+        orderId: t.orderRef || (refundInfo && refundInfo.orderRef) || t.orderId || undefined,
+        serviceType: t.serviceType || undefined,
+        // attach refundInfo for UI to read (cast to any where needed)
+        ...(refundInfo ? { refundInfo } : {})
+    };
+}
 const Support: React.FC = () => {
     const [modalOpen, setModalOpen] = useState(false);
     const [editTicket, setEditTicket] = useState<SupportTicket | null>(null);
@@ -704,34 +781,55 @@ const Support: React.FC = () => {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-    // Fetch tickets
+    // replace tickets queryFn to call API with fallback to mockTickets
     const { data: tickets = { data: [], total: 0 }, isLoading } = useQuery({
         queryKey: ["tickets", filters, searchTerm, pagination],
         queryFn: async () => {
-            const filteredTickets = mockTickets.filter((ticket) => {
-                const matchesSearch =
-                    ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    ticket.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    ticket.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
+            try {
+                const qs = new URLSearchParams();
+                qs.set("page", String(pagination.current));
+                qs.set("pageSize", String(pagination.pageSize));
+                if (filters.status && filters.status !== "all") qs.set("status", filters.status);
+                if (filters.category && filters.category !== "all") qs.set("type", filters.category);
+                if (filters.assignedTo && filters.assignedTo !== "all") qs.set("assignedTo", filters.assignedTo);
+                if (searchTerm) qs.set("q", searchTerm);
+                const url = `${API_BASE}/api/support?${qs.toString()}`;
+                const res = await fetch(url);
+                if (!res.ok) throw new Error(`server ${res.status}`);
+                const json = await res.json();
+                // server returns { ok: true, data: [...], pagination: { total, page, pageSize } }
+                const payload = Array.isArray(json.data) ? json.data : (json.data?.data || []);
+                const mapped = payload.map(mapApiTicketToSupportTicket);
+                const total = (json.pagination && json.pagination.total) || (json.total) || mapped.length;
+                return { data: mapped, total };
+            } catch (err) {
+                console.warn("Support API fetch failed, using mockTickets", err);
+                // fallback: filter mockTickets similarly
+                const filteredTickets = mockTickets.filter((ticket) => {
+                    const matchesSearch =
+                        ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        ticket.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        ticket.customerEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
 
-                const matchesStatus = filters.status === "all" || ticket.status === filters.status;
-                const matchesPriority = filters.priority === "all" || ticket.priority === filters.priority;
-                const matchesCategory = filters.category === "all" || ticket.category === filters.category;
-                const matchesAssignedTo =
-                    filters.assignedTo === "all" ||
-                    (filters.assignedTo === "unassigned" && !ticket.assignedTo) ||
-                    ticket.assignedTo === filters.assignedTo;
+                    const matchesStatus = filters.status === "all" || ticket.status === filters.status;
+                    const matchesPriority = filters.priority === "all" || ticket.priority === filters.priority;
+                    const matchesCategory = filters.category === "all" || ticket.category === filters.category;
+                    const matchesAssignedTo =
+                        filters.assignedTo === "all" ||
+                        (filters.assignedTo === "unassigned" && !ticket.assignedTo) ||
+                        ticket.assignedTo === filters.assignedTo;
 
-                return matchesSearch && matchesStatus && matchesPriority && matchesCategory && matchesAssignedTo;
-            });
+                    return matchesSearch && matchesStatus && matchesPriority && matchesCategory && matchesAssignedTo;
+                });
 
-            const start = (pagination.current - 1) * pagination.pageSize;
-            const end = start + pagination.pageSize;
-            return {
-                data: filteredTickets.slice(start, end),
-                total: filteredTickets.length,
-            };
+                const start = (pagination.current - 1) * pagination.pageSize;
+                const end = start + pagination.pageSize;
+                return {
+                    data: filteredTickets.slice(start, end),
+                    total: filteredTickets.length,
+                };
+            }
         },
     });
 
@@ -748,162 +846,209 @@ const Support: React.FC = () => {
     });
 
     // Create ticket mutation
+    // Mutations: call server endpoints, fallback to mock behavior on error
     const createTicketMutation = useMutation({
         mutationFn: async (data: TicketFormData) => {
-            const newTicket: SupportTicket = {
-                id: `TICKET${mockTickets.length + 1}`.padStart(8, "0"),
-                title: data.title,
-                content: data.content,
-                customerId: data.customerId!,
-                customerName: mockCustomers.find((c) => c.id === data.customerId)?.name || "",
-                customerEmail: mockCustomers.find((c) => c.id === data.customerId)?.email || "",
-                customerAvatar: mockCustomers.find((c) => c.id === data.customerId)?.avatar || "",
-                category: data.category,
-                priority: data.priority,
-                status: "new",
-                assignedTo: data.assignedTo,
-                assignedToName: mockAdmins.find((a) => a.id === data.assignedTo)?.name,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                tags: data.tags,
-                attachments: [],
-                responses: [],
-                orderId: `ORDER${mockTickets.length + 1}`.padStart(8, "0"),
-                serviceType:
-                    data.category === "billing" || data.category === "technical"
-                        ? "flight"
-                        : data.category === "complaint"
-                            ? "bus"
-                            : "tour",
-            };
-            mockTickets.push(newTicket);
-            return newTicket;
+            try {
+                const res = await fetch(`${API_BASE}/api/support`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        customerId: data.customerId,
+                        serviceType: data.category === "complaint" ? "bus" : (data.category === "billing" || data.category === "technical" ? "flight" : "tour"),
+                        type: data.category,
+                        title: data.title,
+                        description: data.content,
+                        message: data.content,
+                        orderRef: data.tags && data.tags.length ? data.tags[0] : undefined
+                    }),
+                });
+                if (!res.ok) {
+                    const txt = await res.text().catch(() => "");
+                    throw new Error(txt || `status ${res.status}`);
+                }
+                const json = await res.json();
+                const ticket = json.ticket || json.data || json;
+                return mapApiTicketToSupportTicket(ticket);
+            } catch (err) {
+                // fallback: create locally (mock)
+                const newTicket: SupportTicket = {
+                    id: `TICKET${mockTickets.length + 1}`.padStart(8, "0"),
+                    title: data.title,
+                    content: data.content,
+                    customerId: data.customerId || mockCustomers[0].id,
+                    customerName: mockCustomers.find((c) => c.id === data.customerId)?.name || mockCustomers[0].name,
+                    customerEmail: mockCustomers.find((c) => c.id === data.customerId)?.email || mockCustomers[0].email,
+                    customerAvatar: "",
+                    category: data.category,
+                    priority: data.priority,
+                    status: "new",
+                    assignedTo: data.assignedTo,
+                    assignedToName: mockAdmins.find((a) => a.id === data.assignedTo)?.name,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                    tags: data.tags,
+                    attachments: [],
+                    responses: [],
+                    orderId: undefined,
+                    serviceType: undefined,
+                };
+                mockTickets.push(newTicket);
+                return newTicket;
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tickets"] });
             setModalOpen(false);
             resetForm();
-            toast({
-                title: "Tạo ticket thành công",
-                description: "Ticket mới đã được tạo trong hệ thống",
-            });
+            toast({ title: "Tạo ticket thành công", description: "Ticket mới đã được tạo" });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi tạo ticket",
-                description: error.message,
-                variant: "destructive",
-            });
+            toast({ title: "Lỗi khi tạo ticket", description: String(error?.message || "error"), variant: "destructive" });
         },
     });
 
-    // Update ticket mutation
     const updateTicketMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<TicketFormData> }) => {
-            const index = mockTickets.findIndex((ticket) => ticket.id === id);
-            if (index === -1) throw new Error("Ticket not found");
-
-            mockTickets[index] = {
-                ...mockTickets[index],
-                ...data,
-                customerName: data.customerId
-                    ? mockCustomers.find((c) => c.id === data.customerId)?.name || mockTickets[index].customerName
-                    : mockTickets[index].customerName,
-                customerEmail: data.customerId
-                    ? mockCustomers.find((c) => c.id === data.customerId)?.email || mockTickets[index].customerEmail
-                    : mockTickets[index].customerEmail,
-                customerAvatar: data.customerId
-                    ? mockCustomers.find((c) => c.id === data.customerId)?.avatar || mockTickets[index].customerAvatar
-                    : mockTickets[index].customerAvatar,
-                assignedToName: data.assignedTo
-                    ? mockAdmins.find((a) => a.id === data.assignedTo)?.name || mockTickets[index].assignedToName
-                    : data.assignedTo === "unassigned"
-                        ? undefined
-                        : mockTickets[index].assignedToName,
-                updatedAt: new Date().toISOString(),
-                closedAt: data.status === "closed" ? new Date().toISOString() : mockTickets[index].closedAt,
-            };
-            return mockTickets[index];
+            try {
+                const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(id)}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        status: data.category === undefined ? undefined : undefined,
+                        title: data.title,
+                        description: data.content,
+                        assignee: data.assignedTo ? { id: data.assignedTo, name: mockAdmins.find(a => a.id === data.assignedTo)?.name } : undefined,
+                        metadata: {}
+                    }),
+                });
+                if (!res.ok) throw new Error(`status ${res.status}`);
+                const json = await res.json();
+                const ticket = json.ticket || json;
+                return mapApiTicketToSupportTicket(ticket);
+            } catch (err) {
+                // fallback update mock
+                const index = mockTickets.findIndex(t => t.id === id);
+                if (index === -1) throw err;
+                mockTickets[index] = { ...mockTickets[index], ...data, updatedAt: new Date().toISOString() } as any;
+                return mockTickets[index];
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tickets"] });
             setModalOpen(false);
             setEditTicket(null);
             resetForm();
-            toast({
-                title: "Cập nhật ticket thành công",
-                description: "Thông tin ticket đã được cập nhật",
-            });
+            toast({ title: "Cập nhật ticket thành công", description: "Thông tin ticket đã được cập nhật" });
         },
         onError: (error: any) => {
-            toast({
-                title: "Lỗi khi cập nhật ticket",
-                description: error.message,
-                variant: "destructive",
-            });
+            toast({ title: "Lỗi khi cập nhật ticket", description: String(error?.message || "error"), variant: "destructive" });
         },
     });
 
     // Add response mutation
     const addResponseMutation = useMutation({
         mutationFn: async ({ ticketId, content, isInternal }: { ticketId: string; content: string; isInternal: boolean }) => {
-            const index = mockTickets.findIndex((ticket) => ticket.id === ticketId);
-            if (index === -1) throw new Error("Ticket not found");
-
-            const newResponse: TicketResponse = {
-                id: `RESP${mockTickets[index].responses.length + 1}`.padStart(8, "0"),
-                content,
-                isInternal,
-                authorId: "admin_001",
-                authorName: "Trần Văn Hùng",
-                authorType: "admin",
-                createdAt: new Date().toISOString(),
-                attachments: [],
-            };
-            mockTickets[index].responses.push(newResponse);
-            mockTickets[index].updatedAt = new Date().toISOString();
-            return newResponse;
+            try {
+                const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: content, authorType: isInternal ? "agent" : "customer", authorId: "admin_001" }),
+                });
+                if (!res.ok) throw new Error(`status ${res.status}`);
+                const json = await res.json();
+                return json.message || json;
+            } catch (err) {
+                // fallback: append to mock
+                const index = mockTickets.findIndex(t => t.id === ticketId);
+                if (index === -1) throw err;
+                const newResp: TicketResponse = {
+                    id: `RESP${mockTickets[index].responses.length + 1}`.padStart(8, "0"),
+                    content,
+                    isInternal,
+                    authorId: "admin_001",
+                    authorName: "Admin",
+                    authorType: "admin",
+                    createdAt: new Date().toISOString(),
+                    attachments: [],
+                };
+                mockTickets[index].responses.push(newResp);
+                mockTickets[index].updatedAt = new Date().toISOString();
+                return newResp;
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tickets"] });
             setResponseContent("");
             setIsInternal(false);
-            toast({
-                title: "Phản hồi thành công",
-                description: "Phản hồi đã được gửi cho khách hàng",
-            });
+            toast({ title: "Phản hồi thành công", description: "Phản hồi đã được gửi" });
         },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi thêm phản hồi",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+        onError: (err: any) => {
+            toast({ title: "Lỗi khi thêm phản hồi", description: String(err?.message || 'error'), variant: "destructive" });
+        }
     });
 
     // Delete ticket mutation
+    // const deleteTicketMutation = useMutation({
+    //     mutationFn: async (id: string) => {
+    //         try {
+    //             // server does not provide hard delete; mark closed via PUT
+    //             const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(id)}`, {
+    //                 method: "PUT",
+    //                 headers: { "Content-Type": "application/json" },
+    //                 body: JSON.stringify({ status: "closed" }),
+    //             });
+    //             if (!res.ok) throw new Error(`status ${res.status}`);
+    //             const json = await res.json();
+    //             return json.ticket || json;
+    //         } catch (err) {
+    //             const index = mockTickets.findIndex(t => t.id === id);
+    //             if (index === -1) throw err;
+    //             mockTickets.splice(index, 1);
+    //             return { ok: true };
+    //         }
+    //     },
+    //     onSuccess: () => {
+    //         queryClient.invalidateQueries({ queryKey: ["tickets"] });
+    //         setDeleteId(null);
+    //         toast({ title: "Xóa ticket thành công", description: "Ticket đã được đóng/xóa" });
+    //     },
+    //     onError: (err: any) => {
+    //         toast({ title: "Lỗi khi xóa ticket", description: String(err?.message || 'error'), variant: "destructive" });
+    //     }
+    // });
+
     const deleteTicketMutation = useMutation({
         mutationFn: async (id: string) => {
-            const index = mockTickets.findIndex((ticket) => ticket.id === id);
-            if (index === -1) throw new Error("Ticket not found");
-            mockTickets.splice(index, 1);
+            try {
+                // call DELETE endpoint on server
+                const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(id)}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                if (!res.ok) {
+                    const txt = await res.text().catch(() => '');
+                    throw new Error(txt || `status ${res.status}`);
+                }
+                const json = await res.json();
+                // server returns { ok: true, id: ... } or the deleted ticket
+                return json;
+            } catch (err) {
+                // fallback: remove from mockTickets
+                const index = mockTickets.findIndex(t => t.id === id);
+                if (index === -1) throw err;
+                mockTickets.splice(index, 1);
+                return { ok: true };
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tickets"] });
             setDeleteId(null);
-            toast({
-                title: "Xóa ticket thành công",
-                description: "Ticket đã được xóa khỏi hệ thống",
-            });
+            toast({ title: "Xóa ticket thành công", description: "Ticket đã được đóng/xóa" });
         },
-        onError: (error: any) => {
-            toast({
-                title: "Lỗi khi xóa ticket",
-                description: error.message,
-                variant: "destructive",
-            });
-        },
+        onError: (err: any) => {
+            toast({ title: "Lỗi khi xóa ticket", description: String(err?.message || 'error'), variant: "destructive" });
+        }
     });
 
     const resetForm = () => {
@@ -921,6 +1066,11 @@ const Support: React.FC = () => {
     };
 
     const handleDelete = (id: string) => {
+        // quick confirm + call mutation immediately to avoid ConfirmModal issues
+        console.log('handleDelete called', id);
+        if (!confirm('Bạn có chắc chắn muốn xóa ticket này?')) return;
+        deleteTicketMutation.mutate(id);
+        // keep deleteId for compatibility with existing ConfirmModal state if needed
         setDeleteId(id);
     };
 
@@ -944,16 +1094,89 @@ const Support: React.FC = () => {
         });
     };
 
-    const handleAddResponse = () => {
+    // const handleAddResponse = () => {
+    //     if (!selectedTicket || !responseContent.trim()) return;
+
+    //     addResponseMutation.mutate({
+    //         ticketId: selectedTicket.id,
+    //         content: responseContent.trim(),
+    //         isInternal,
+    //     });
+    // };
+    const handleAddResponse = async () => {
         if (!selectedTicket || !responseContent.trim()) return;
 
-        addResponseMutation.mutate({
-            ticketId: selectedTicket.id,
-            content: responseContent.trim(),
-            isInternal,
-        });
-    };
+        const ticketId = selectedTicket.id;
+        const isCancel = selectedTicket.category === "cancel";
 
+        try {
+            // If cancel ticket and there's a transId -> call momo refund first
+            if (isCancel && (selectedTicket as any).refundInfo?.transId) {
+                const refundInfo = (selectedTicket as any).refundInfo;
+                const refundBody = {
+                    orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
+                    // amount: Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0),
+                    amount: 10000,
+                    transId: refundInfo.transId,
+                    description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
+                };
+
+                const momoResp = await fetch("http://localhost:7000/momo/refund", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(refundBody),
+                });
+
+                if (!momoResp.ok) {
+                    const txt = await momoResp.text().catch(() => "");
+                    throw new Error(`Refund API lỗi: ${momoResp.status} ${txt}`);
+                }
+                const momoJson = await momoResp.json();
+
+                // Add agent message with refund result
+                await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        text: `Xử lý hoàn tiền:\n${responseContent.trim()}\n\nKết quả refund: ${JSON.stringify(momoJson)}`,
+                        authorType: "agent",
+                        authorId: "admin_001",
+                    }),
+                });
+
+                // Update ticket status to resolved and attach refund result to metadata/refundInfo if backend supports it
+                await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        status: "resolved",
+                        metadata: { refundResult: momoJson, handledBy: "admin_001" },
+                    }),
+                });
+
+                toast({ title: "Hoàn tiền đã xử lý", description: `Kết quả: ${momoJson?.message || "OK"}` });
+                queryClient.invalidateQueries({ queryKey: ["tickets"] });
+                setResponseContent("");
+                setIsInternal(false);
+                return;
+            }
+
+            // Normal reply flow
+            addResponseMutation.mutate({
+                ticketId,
+                content: responseContent.trim(),
+                isInternal,
+            });
+
+            setViewModalOpen(false);
+            setSelectedTicket(null);
+            setResponseContent("");
+            setIsInternal(false);
+        } catch (err: any) {
+            console.error("handleAddResponse error", err);
+            toast({ title: "Lỗi khi xử lý", description: String(err?.message || err), variant: "destructive" });
+        }
+    };
     const getStatusBadge = (status: string) => {
         const variants = {
             new: "bg-blue-100 text-blue-800",
@@ -1007,6 +1230,7 @@ const Support: React.FC = () => {
             account: "Tài khoản",
             general: "Chung",
             complaint: "Khiếu nại",
+            cancel: "Hủy Đơn",
         };
         return labels[category as keyof typeof labels] || category;
     };
@@ -1071,7 +1295,7 @@ const Support: React.FC = () => {
                     <SelectTrigger className="w-40">
                         <SelectValue
                             placeholder="Chọn phân công"
-                            // Hiển thị đúng label theo giá trị select
+                        // Hiển thị đúng label theo giá trị select
                         >
                             {
                                 record.assignedTo
@@ -1126,11 +1350,21 @@ const Support: React.FC = () => {
                             <SelectItem value="closed">Đã đóng</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(record.id)}
+                        title="Xóa"
+                        type="button"
+                    >
+                        <Trash className="h-4 w-4" />
+                    </Button>
                 </div>
             ),
         },
     ];
-
+    const formatVND = (n?: number | null) =>
+        typeof n === "number" ? n.toLocaleString("vi-VN") + " ₫" : "-";
     return (
         <div className="p-6 space-y-6 bg-gray-50">
             <div className="flex flex-col gap-6">
@@ -1399,7 +1633,7 @@ const Support: React.FC = () => {
                                     </div>
                                 </div>
                                 <Separator />
-                                <div>
+                                {/* <div>
                                     <h4 className="font-medium mb-4">Lịch sử trả lời ({selectedTicket.responses.length})</h4>
                                     <div className="space-y-4 max-h-60 overflow-y-auto">
                                         {selectedTicket.responses.map((response) => (
@@ -1432,38 +1666,95 @@ const Support: React.FC = () => {
                                             </div>
                                         ))}
                                     </div>
-                                </div>
+                                </div> */}
                                 <Separator />
                                 <div>
-                                    <h4 className="font-medium mb-4">Thêm phản hồi</h4>
-                                    <div className="space-y-4">
-                                        <Textarea
-                                            value={responseContent}
-                                            onChange={(e) => setResponseContent(e.target.value)}
-                                            placeholder="Nhập phản hồi..."
-                                            rows={4}
-                                        />
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center space-x-2">
-                                                <input
-                                                    type="checkbox"
-                                                    id="isInternal"
-                                                    checked={isInternal}
-                                                    onChange={(e) => setIsInternal(e.target.checked)}
-                                                    className="rounded"
-                                                />
-                                                <Label htmlFor="isInternal">Ghi chú nội bộ (không gửi cho khách hàng)</Label>
-                                            </div>
-                                            <Button
-                                                onClick={handleAddResponse}
-                                                disabled={!responseContent.trim() || addResponseMutation.isPending}
-                                                loading={addResponseMutation.isPending}
-                                            >
-                                                <Send className="h-4 w-4 mr-2" />
-                                                Gửi phản hồi
-                                            </Button>
-                                        </div>
-                                    </div>
+                                    {selectedTicket && (
+                                        <>
+                                            {/*
+                                If this is a cancel request show handler UI and refund details.
+                                Otherwise show normal reply UI.
+                            */}
+                                            {(() => {
+                                                const isCancel = selectedTicket.category === "cancel";
+                                                return (
+                                                    <>
+                                                        <h4 className="font-medium mb-4">{isCancel ? "Xử lý yêu cầu" : "Thêm phản hồi"}</h4>
+
+                                                        {/* show refund / cancel details for cancel tickets */}
+                                                        {isCancel && (selectedTicket as any).refundInfo && (
+                                                            <div className="mb-4 p-3 bg-gray-50 rounded">
+                                                                <div className="font-medium mb-2">Chi tiết hoàn / hủy</div>
+                                                                <div className="grid grid-cols-2 gap-2 text-sm">
+                                                                    <div>
+                                                                        <span className="font-medium">Order:</span>{" "}
+                                                                        {selectedTicket.orderId ?? "-"}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">TransId:</span>{" "}
+                                                                        {(selectedTicket as any).refundInfo?.transId ?? "-"}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">zp_trans_id:</span>{" "}
+                                                                        {(selectedTicket as any).refundInfo?.zp_trans_id ?? "-"}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Phí phạt:</span>{" "}
+                                                                        {formatVND((selectedTicket as any).refundInfo?.airlinePenalty)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Thuế/Phí không hoàn:</span>{" "}
+                                                                        {formatVND((selectedTicket as any).refundInfo?.taxes)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Phí nền tảng:</span>{" "}
+                                                                        {formatVND((selectedTicket as any).refundInfo?.platformFee)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Hoàn dự kiến:</span>{" "}
+                                                                        {formatVND((selectedTicket as any).refundInfo?.refundAmount)}
+                                                                    </div>
+                                                                    <div>
+                                                                        <span className="font-medium">Tiền tệ:</span>{" "}
+                                                                        {(selectedTicket as any).refundInfo?.currency ?? "VND"}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="space-y-4">
+                                                            <Textarea
+                                                                value={responseContent}
+                                                                onChange={(e) => setResponseContent(e.target.value)}
+                                                                placeholder={isCancel ? "Ghi rõ kết quả xử lý (ví dụ: chấp nhận hoàn, yêu cầu thêm thông tin...)" : "Nhập phản hồi..."}
+                                                                rows={4}
+                                                            />
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center space-x-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id="isInternal"
+                                                                        checked={isInternal}
+                                                                        onChange={(e) => setIsInternal(e.target.checked)}
+                                                                        className="rounded"
+                                                                    />
+                                                                    <Label htmlFor="isInternal">Ghi chú nội bộ (không gửi cho khách hàng)</Label>
+                                                                </div>
+                                                                <Button
+                                                                    onClick={handleAddResponse}
+                                                                    disabled={!responseContent.trim() || addResponseMutation.isPending}
+                                                                    loading={addResponseMutation.isPending}
+                                                                >
+                                                                    {isCancel ? <CheckCircle className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                                                                    {isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi"}
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -1474,8 +1765,10 @@ const Support: React.FC = () => {
                     isOpen={!!deleteId}
                     onClose={() => setDeleteId(null)}
                     onConfirm={() => {
-                        if (deleteId) {
-                            deleteTicketMutation.mutate(deleteId);
+                        const idToDelete = deleteId;
+                        if (idToDelete) {
+                            // invoke mutation with captured id before clearing state
+                            deleteTicketMutation.mutate(idToDelete);
                             setDeleteId(null);
                         }
                     }}
