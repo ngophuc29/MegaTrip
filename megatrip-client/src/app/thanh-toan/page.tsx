@@ -947,9 +947,9 @@ export default function ThanhToan() {
             alert('Lỗi khi tạo đơn hàng. Vui lòng thử lại.');
             return;
         }
-        // build human-friendly payment description including order ref
+        // build human-friendly payment description including order ref (no item name)
         const paymentLabel = `Thanh toán cho đơn ${createdOrder?.orderNumber || createdOrder?._id || ''}`;
-        const paymentDescription = `${paymentLabel} — ${itemName}`;
+        const paymentDescription = paymentLabel;
 
         // Proceed to payment flows - include order reference so backend/payment gateways can reconcile
         try {
@@ -1189,47 +1189,47 @@ export default function ThanhToan() {
         }
     }, [bookingData]);
 
-     // airport lookup map loaded from public/airport.json (client-side)
-        const [airportsMap, setAirportsMap] = useState<Record<string, any> | null>(null);
-        useEffect(() => {
-            let mounted = true;
-            (async () => {
-                try {
-                    const r = await fetch('/airport.json');
-                    if (!r.ok) return;
-                    const j = await r.json();
-                    // build lookup by IATA code for quick access (some JSON keys are ICAO)
-                    const byIata: Record<string, any> = {};
-                    Object.values(j || {}).forEach((entry: any) => {
-                        const iata = entry?.iata;
-                        if (iata && String(iata).trim()) byIata[String(iata).toUpperCase()] = entry;
+    // airport lookup map loaded from public/airport.json (client-side)
+    const [airportsMap, setAirportsMap] = useState<Record<string, any> | null>(null);
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const r = await fetch('/airport.json');
+                if (!r.ok) return;
+                const j = await r.json();
+                // build lookup by IATA code for quick access (some JSON keys are ICAO)
+                const byIata: Record<string, any> = {};
+                Object.values(j || {}).forEach((entry: any) => {
+                    const iata = entry?.iata;
+                    if (iata && String(iata).trim()) byIata[String(iata).toUpperCase()] = entry;
+                });
+                // also merge any direct iata -> entry if JSON already keyed by iata
+                if (typeof j === 'object') {
+                    Object.entries(j).forEach(([k, v]: any) => {
+                        const maybeIata = (v && v.iata) ? String(v.iata).toUpperCase() : null;
+                        if (maybeIata) byIata[maybeIata] = v;
                     });
-                    // also merge any direct iata -> entry if JSON already keyed by iata
-                    if (typeof j === 'object') {
-                        Object.entries(j).forEach(([k, v]: any) => {
-                            const maybeIata = (v && v.iata) ? String(v.iata).toUpperCase() : null;
-                            if (maybeIata) byIata[maybeIata] = v;
-                        });
-                    }
-                    if (mounted) setAirportsMap(byIata);
-                } catch (e) { /* ignore */ }
-            })();
-            return () => { mounted = false; };
-        }, []);
-    
-        const getAirportLabel = (iata: string | undefined | null, fallbackCity?: string) => {
-            if (!iata) return fallbackCity || '';
-            const code = String(iata).toUpperCase();
-            const entry = airportsMap?.[code] ?? null;
-            // prefer nice city name, then state, then fallbackCity, finally iata
-            if (entry) return entry.city || entry.state || fallbackCity || code;
-            // some sources send IATA in city field (like "DAD"), detect and try map too
-            if ((fallbackCity ?? '').length === 3 && airportsMap?.[fallbackCity?.toUpperCase()]) {
-                const e2 = airportsMap[fallbackCity!.toUpperCase()];
-                return e2.city || e2.state || code;
-            }
-            return fallbackCity || code;
-        };
+                }
+                if (mounted) setAirportsMap(byIata);
+            } catch (e) { /* ignore */ }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
+    const getAirportLabel = (iata: string | undefined | null, fallbackCity?: string) => {
+        if (!iata) return fallbackCity || '';
+        const code = String(iata).toUpperCase();
+        const entry = airportsMap?.[code] ?? null;
+        // prefer nice city name, then state, then fallbackCity, finally iata
+        if (entry) return entry.city || entry.state || fallbackCity || code;
+        // some sources send IATA in city field (like "DAD"), detect and try map too
+        if ((fallbackCity ?? '').length === 3 && airportsMap?.[fallbackCity?.toUpperCase()]) {
+            const e2 = airportsMap[fallbackCity!.toUpperCase()];
+            return e2.city || e2.state || code;
+        }
+        return fallbackCity || code;
+    };
     return (
         <>
             {/* Breadcrumb */}
