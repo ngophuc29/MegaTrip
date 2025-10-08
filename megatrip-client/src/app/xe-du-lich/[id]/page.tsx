@@ -178,8 +178,56 @@ export default function ChiTietXeDuLich() {
     const { id } = useParams();
     const searchParams = useSearchParams();
     const [remoteBus, setRemoteBus] = useState<any | null>(null);
+    const [busSlotsMap, setBusSlotsMap] = useState<Record<string, any>>({});
+    const [derivedSeatLayout, setDerivedSeatLayout] = useState<any[]>([]);
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+    // prefer local Y-M-D string (avoid UTC shift from toISOString)
+    const toLocalYMD = (d: Date | null) => {
+        if (!d) return null;
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+    // helper: build rows from flat seatmapFill returned by bus-slot
+    const normalizeNum = (v: any): number | null => {
+        if (v == null) return null;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
+        if (typeof v === 'object') {
+            if (v.$numberInt) return Number(v.$numberInt);
+            if (v.$numberLong) return Number(v.$numberLong);
+            if (v.$date && v.$date.$numberLong) return Number(v.$date.$numberLong);
+            // fallback: try numeric coercion
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        }
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
 
+    const buildLayoutFromSlot = (seatmapFill: any[] = []) => {
+        const rowsMap: Record<string, any[]> = {};
+        for (const s of seatmapFill || []) {
+            const rawR = s?.pos?.r ?? s?.pos;
+            const rawC = s?.pos?.c ?? null;
+            const rNum = normalizeNum(rawR);
+            const cNum = normalizeNum(rawC);
+            const rowKey = rNum !== null ? String(rNum) : '0';
+            rowsMap[rowKey] = rowsMap[rowKey] || [];
+            rowsMap[rowKey].push({
+                id: s.seatId || s.label,
+                label: s.label || s.seatId,
+                type: s.type || 'seat',
+                status: (s.status === 'booked' || s.status === 'blocked') ? 'booked' : (s.status || 'available'),
+                floor: (String(s.type || '').toLowerCase().includes('upper') ? 'upper' : 'lower'),
+                pos: { r: rNum, c: cNum },
+            });
+        }
+        return Object.keys(rowsMap)
+            .sort((a, b) => Number(a) - Number(b))
+            .map(k => rowsMap[k]);
+    };
     useEffect(() => {
         if (!id) return;
         let mounted = true;
@@ -200,6 +248,27 @@ export default function ChiTietXeDuLich() {
             } catch (err) {
                 console.error('Failed to load bus detail', err);
                 if (mounted) setRemoteBus(null);
+            }
+        })();
+        // fetch slots for this bus (to get per-date seatmap/seatsAvailable)
+        (async () => {
+            try {
+                const r = await fetch(`${API_BASE}/api/bus-slots/${id}`);
+                if (r.ok) {
+                    const json = await r.json();
+                    // map dateIso -> booking entry
+                    const map: Record<string, any> = {};
+                    for (const db of (json.dateBookings || [])) {
+                        if (!db || !db.dateIso) continue;
+                        map[String(db.dateIso).trim()] = db;
+                    }
+                    if (mounted) setBusSlotsMap(map);
+                } else {
+                    setBusSlotsMap({});
+                }
+            } catch (e) {
+                console.warn('fetch bus slots failed', e);
+                setBusSlotsMap({});
             }
         })();
         return () => { mounted = false; };
@@ -263,23 +332,56 @@ export default function ChiTietXeDuLich() {
     const isDeparturePast = !!selectedDepartureDateObj && (selectedDepartureDateObj.getTime() < now.getTime());
 
     // helper list for rendering date buttons
-    const dateOptions = departureDatesArr.map((d, i) => ({
-        idx: i,
-        date: d,
-        labelDate: fmtDate(d),
-        labelTime: fmtTime(d),
-        isPast: isDatePast(d)
-    }));
-
+    // const dateOptions = departureDatesArr.map((d, i) => ({
+    //     idx: i,
+    //     date: d,
+    //     labelDate: fmtDate(d),
+    //     labelTime: fmtTime(d),
+    //     isPast: isDatePast(d)
+    // }));
+    const dateOptions = departureDatesArr.map((d, i) => {
+        const dateStr = toLocalYMD(d);
+        const slot = dateStr ? busSlotsMap[dateStr] : null;
+        return {
+            idx: i,
+            date: d,
+            dateStr,
+            labelDate: fmtDate(d),
+            labelTime: fmtTime(d),
+            isPast: isDatePast(d),
+            seatsAvailable: slot?.seatsAvailable ?? (bus.availableSeats ?? undefined)
+        };
+    });
+    // keep derived seat layout in sync when selectedIndex or busSlotsMap changes
+    useEffect(() => {
+        const sel = departureDatesArr[selectedIndex] ?? null;
+        const dateStr = toLocalYMD(sel);
+        if (dateStr && busSlotsMap[dateStr]) {
+            setDerivedSeatLayout(buildLayoutFromSlot(busSlotsMap[dateStr].seatmapFill || []));
+        } else if (remoteBus && Array.isArray(remoteBus.seatLayout) && remoteBus.seatLayout.length) {
+            setDerivedSeatLayout(remoteBus.seatLayout);
+        } else {
+            setDerivedSeatLayout([]);
+        }
+    }, [selectedIndex, busSlotsMap, remoteBus]);
     // log for debugging
+    // debug: check keys and mapped date strings (remove after verification)
+    useEffect(() => {
+        console.log('[BusDetail] busSlotsMap keys:', Object.keys(busSlotsMap || {}));
+        console.log('[BusDetail] dateOptions keys:', dateOptions.map(o => o.dateStr));
+    }, [busSlotsMap, dateOptions.length]);
     useEffect(() => {
         console.log('[BusDetail] selected date index:', selectedIndex, 'departure:', selectedDepartureDateObj, 'isPast:', isDeparturePast);
     }, [selectedIndex, selectedDepartureDateObj, isDeparturePast]);
     // resolved seat layout: prefer mapped remoteBus.seatLayout else fallback
-    const resolvedSeatLayout: any[] = (remoteBus && Array.isArray(remoteBus.seatLayout) && remoteBus.seatLayout.length)
-        ? remoteBus.seatLayout
-        : sampleSeatLayout;
-
+    // const resolvedSeatLayout: any[] = (remoteBus && Array.isArray(remoteBus.seatLayout) && remoteBus.seatLayout.length)
+    //     ? remoteBus.seatLayout
+    //     : sampleSeatLayout;
+    // resolved seat layout: prefer derivedSeatLayout (per-date) else mapped remoteBus.seatLayout else fallback sample
+    const resolvedSeatLayout: any[] = (derivedSeatLayout && derivedSeatLayout.length)
+        ? derivedSeatLayout
+        : (remoteBus && Array.isArray(remoteBus.seatLayout) && remoteBus.seatLayout.length ? remoteBus.seatLayout : sampleSeatLayout);
+    // ...existing code...
     // flatten/group by floor for UI (upper / lower)
     const upperSeats = resolvedSeatLayout.map((row: any[]) => row.filter(s => s.floor === 'upper')).flat();
     const lowerSeats = resolvedSeatLayout.map((row: any[]) => row.filter(s => s.floor === 'lower')).flat();
@@ -600,7 +702,11 @@ export default function ChiTietXeDuLich() {
                 `}
                                     >
                                         <div className="text-sm font-medium">{opt.labelDate}</div>
+                                        {/* <div className="text-xs text-[hsl(var(--muted-foreground))]">{opt.labelTime}</div> */}
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{opt.labelTime}</div>
+                                        {typeof opt.seatsAvailable === 'number' && (
+                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Còn {opt.seatsAvailable} chỗ</div>
+                                        )}
                                     </button>
                                 )) : (
                                     <div className="text-sm text-[hsl(var(--muted-foreground))]">Không có lịch khởi hành</div>
@@ -1125,8 +1231,8 @@ export default function ChiTietXeDuLich() {
                                                 selectedIndex: String(selectedIndex),
                                                 time: `${displayDepartureTime} - ${displayArrivalTime}`,
                                                 seats: selectedSeats.join(','),
-                                                 // include selectedPickup so ThanhToan receives it
-                                                 selectedPickup: selectedPickup,
+                                                // include selectedPickup so ThanhToan receives it
+                                                selectedPickup: selectedPickup,
                                                 selectedDropoff: selectedDropoff,
                                                 passengerInfo: leadJson,
                                                 passengers: passengersJson,

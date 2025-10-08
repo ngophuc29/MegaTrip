@@ -261,7 +261,11 @@ function computeSuggestedOriginal(basePrice: number | undefined) {
 function stripHtml(html = '') {
     return (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
 }
-
+// NEW: local date helper that returns YYYY-MM-DD for a Date in local timezone
+function toLocalYMD(d?: Date | null) {
+    if (!d) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 export default function ChiTietTour() {
     const router = useRouter();
     const { id } = useParams();
@@ -515,12 +519,16 @@ export default function ChiTietTour() {
         };
     };
 
+    // const getSelectedDateInfo = () => {
+    //     if (!selectedDate) return null;
+    //     const dateStr = selectedDate.toISOString().split('T')[0];
+    //     return tourDetails.availableDates.find(d => d.date === dateStr);
+    // };
     const getSelectedDateInfo = () => {
         if (!selectedDate) return null;
-        const dateStr = selectedDate.toISOString().split('T')[0];
+        const dateStr = toLocalYMD(selectedDate);
         return tourDetails.availableDates.find(d => d.date === dateStr);
     };
-
     const totalParticipants = participants.adults + participants.children + participants.infants;
     const [slotInfo, setSlotInfo] = useState<{ dateIso?: string, capacity?: number, reserved?: number, available?: number } | null>(null);
 
@@ -555,7 +563,7 @@ export default function ChiTietTour() {
                 }
                 else {
                     console.log("fuck");
-                    
+
                 }
                 // fetch slot info for each start date and merge into mapped.availableDates
                 const TOUR_SERVICE = 'http://localhost:8080';
@@ -580,8 +588,8 @@ export default function ChiTietTour() {
                     const slot = slotResults.find((s: any) => s && String(s.dateIso) === String(d.date));
                     if (slot) {
                         // prefer full datetime from DB (d.startIso). If slot.dateIso is only YYYY-MM-DD,
-                        // use end-of-day to avoid marking today's trip as past too early.
-                        const startIsoCandidate = d.startIso ?? (slot.dateIso && slot.dateIso.length === 10 ? `${slot.dateIso}T23:59:59.999Z` : slot.dateIso) ?? null;
+                        // prefer any explicit startIso from BE; if slot.dateIso is YYYY-MM-DD use local start-of-day
+                        const startIsoCandidate = d.startIso ?? (slot.dateIso && slot.dateIso.length === 10 ? `${slot.dateIso}T00:00:00` : slot.dateIso) ?? null;
                         let isPast = false;
                         if (startIsoCandidate) {
                             const startMs = Number(new Date(startIsoCandidate).getTime());
@@ -596,11 +604,23 @@ export default function ChiTietTour() {
                 });
 
                 // set default selectedDate to first available (not soldout) if none chosen
+                // if (!selectedDate) {
+                //     const firstAvailable = mapped.availableDates.find((x: any) => !x.isPast && ((x.available ?? 0) > 0) && x.status !== 'soldout');
+                //     if (firstAvailable) setSelectedDate(new Date(firstAvailable.startIso ?? `${firstAvailable.date}T00:00:00`));
+                // }
                 if (!selectedDate) {
                     const firstAvailable = mapped.availableDates.find((x: any) => !x.isPast && ((x.available ?? 0) > 0) && x.status !== 'soldout');
-                    if (firstAvailable) setSelectedDate(new Date(firstAvailable.startIso ?? `${firstAvailable.date}T00:00:00`));
+                    if (firstAvailable) {
+                        // build a local-midnight Date from date part to avoid UTC shift
+                        const datePart = (firstAvailable.startIso ?? firstAvailable.date).split('T')[0];
+                        const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
+                        if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
+                            setSelectedDate(new Date(yy, mm - 1, dd));
+                        } else {
+                            setSelectedDate(new Date(firstAvailable.date));
+                        }
+                    }
                 }
-
                 // Merge mapped into sample tourDetails but preserve policies & reviews from sample if BE not ready
                 const keepPolicies = tourDetails.policies;
                 const keepReviews = tourDetails.reviews;
@@ -794,7 +814,7 @@ export default function ChiTietTour() {
                             <CardContent>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     {tourDetails.availableDates.map((dateInfo, index) => {
-                                        const isSelected = selectedDate && (new Date(dateInfo.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]);
+                                        const isSelected = selectedDate && (dateInfo.date === toLocalYMD(selectedDate));
                                         return (
                                             <div
                                                 key={index}
@@ -806,9 +826,16 @@ export default function ChiTietTour() {
                                                         : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
                                                     }`}
                                                 onClick={() => {
-                                                    if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
-                                                        setSelectedDate(new Date(dateInfo.startIso ?? `${dateInfo.date}T00:00:00`));
-                                                    }
+                                                                                            if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
+                                                                                                    // build local midnight Date from date part to avoid timezone shift
+                                                                                                        const datePart = (dateInfo.startIso ?? dateInfo.date).split('T')[0];
+                                                                                                    const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
+                                                                                                    if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
+                                                                                                            setSelectedDate(new Date(yy, mm - 1, dd));
+                                                                                                        } else {
+                                                                                                            setSelectedDate(new Date(dateInfo.startIso ?? dateInfo.date));
+                                                                                                        }
+                                                                                                }
                                                 }}
                                             >
                                                 <div className="flex items-center justify-between">
