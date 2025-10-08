@@ -822,7 +822,7 @@ export default function XeDuLich() {
                 </div>
             </section>
 
-            {/* Date Selector */}
+            {/* Date Selector
             {hasSearched && selectedRoute && (
                 <section className="py-6 bg-[hsl(var(--orange-50))]">
                     <div className="container">
@@ -864,7 +864,7 @@ export default function XeDuLich() {
                         </div>
                     </div>
                 </section>
-            )}
+            )} */}
 
             {/* Toggle Promotions Button */}
             {hasSearched && (

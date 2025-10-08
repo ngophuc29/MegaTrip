@@ -665,7 +665,7 @@ export default function ChiTietXeDuLich() {
                                         <h4 className="font-medium mb-2">Thông tin xe</h4>
                                         <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
                                             <div>Tổng ghế: {bus.seats}</div>
-                                            <div>Còn trống: {bus.availableSeats} ghế</div>
+                                            {/* <div>Còn trống: {bus.availableSeats} ghế</div> */}
                                             <div>Loại xe: {bus.type}</div>
                                         </div>
                                     </div>
@@ -673,7 +673,8 @@ export default function ChiTietXeDuLich() {
                                     <div>
                                         <h4 className="font-medium mb-2">Chính sách</h4>
                                         <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                            <div>{bus.cancellable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div>
+                                            {/* <div>{bus.cancellable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div> */}
+                                            <div> ✓ Có hoàn hủy</div>
                                             <div>✓ Hành lý 20kg</div>
                                             <div>✓ WiFi miễn phí</div>
                                         </div>
@@ -685,7 +686,7 @@ export default function ChiTietXeDuLich() {
                         {/* Date selector: show available departureDates for user to pick */}
                         <div className="px-6 pb-4">
                             <div className="flex items-center justify-between mb-2">
-                                <div className="text-sm font-medium">Chọn ngày khởi hành</div>
+                                <div className="text-lg font-bold">Chọn ngày khởi hành</div>
                             </div>
                             <div className="flex space-x-2 overflow-x-auto pb-2">
                                 {dateOptions.length ? dateOptions.map(opt => (
