@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@radix-ui/react-dialog';
 import { DialogFooter, DialogHeader } from '../components/ui/dialog';
+import Modal, { ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '../components/ui/Modal';
 const FAKE_CUSTOMER_ID = '64e65e8d3d5e2b0c8a3e9f12';
 // Sample user data
 const userData = {
@@ -190,19 +191,75 @@ function getRequests(): RequestItem[] {
     }
 }
 
-function RequestsTab({ formatPrice }: { formatPrice: (n: number) => string }) {
+function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => string, customerId: string }) {
     const [items, setItems] = useState<RequestItem[]>(getRequests());
     const [detailOpen, setDetailOpen] = useState(false);
     const [selected, setSelected] = useState<RequestItem | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     const openDetail = (r: RequestItem) => { setSelected(r); setDetailOpen(true); };
+
+    async function loadSupport() {
+        setLoading(true);
+        setError(null);
+        try {
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const res = await fetch(`${base}/api/support?customerId=${encodeURIComponent(customerId)}&page=1&pageSize=50`);
+            if (!res.ok) throw new Error(String(res.status));
+            const json = await res.json();
+            // server returns { ok: true, data: [...] } or { data: [...] }
+            const arr = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+            const mapped: RequestItem[] = (arr || []).map((t: any) => {
+                const refund = t.refundInfo || {};
+                const type = t.type === 'cancel' ? 'refund' : (t.type === 'change' ? 'change' : 'refund');
+                const statusMap: Record<string, RequestItem['status']> = {
+                    new: 'submitted',
+                    open: 'processing',
+                    pending: 'processing',
+                    resolved: 'approved',
+                    closed: 'rejected'
+                };
+                return {
+                    id: t.ticketNumber || t._id || String(Math.random()).slice(2, 10),
+                    type,
+                    bookingId: refund.orderRef || t.metadata?.orderRef || '',
+                    title: t.title || (refund.orderRef ? `Yêu cầu ${refund.orderRef}` : 'Yêu cầu hỗ trợ'),
+                    status: statusMap[t.status] || 'submitted',
+                    createdAt: t.createdAt || t.createdAt || new Date().toISOString(),
+                    amountRefund: Number(refund.refundAmount || 0),
+                    extraPay: undefined,
+                    method: refund.paymentReference || refund.transId || refund.zp_trans_id || undefined,
+                    details: refund || t.metadata || {}
+                };
+            });
+            if (mapped.length) setItems(mapped);
+            else setItems(getRequests()); // fallback to localStorage if empty
+        } catch (err: any) {
+            console.error('Failed to load support requests:', err);
+            setError(err?.message || 'load_failed');
+            setItems(getRequests());
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    useEffect(() => {
+        // load on mount
+        if (customerId) loadSupport();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customerId]);
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold">Yêu cầu hủy đơn (hoàn tiền) & đổi lịch</h1>
-                <Button variant="outline" onClick={() => setItems(getRequests())}>Làm mới</Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={loadSupport} disabled={loading}>{loading ? 'Đang tải...' : 'Làm mới'}</Button>
+                    {error && <div className="text-sm text-red-500">{error}</div>}
+                </div>
             </div>
+
             {items.length === 0 ? (
                 <Card>
                     <CardContent className="p-6 text-sm text-muted-foreground">Chưa có yêu cầu nào.</CardContent>
@@ -257,20 +314,20 @@ function RequestsTab({ formatPrice }: { formatPrice: (n: number) => string }) {
                 </div>
             )}
 
-            <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Chi tiết yêu cầu</DialogTitle>
-                        <DialogDescription>
+            <Modal open={detailOpen} onOpenChange={setDetailOpen}>
+                <ModalContent>
+                    <ModalHeader>
+                        <ModalTitle>Chi tiết yêu cầu</ModalTitle>
+                        <ModalDescription>
                             {selected ? (
                                 <span>
                                     {selected.type === 'refund' ? 'Yêu cầu hủy đơn (hoàn tiền)' : 'Yêu cầu đổi lịch'} • Mã: {selected.id}
                                 </span>
                             ) : '—'}
-                        </DialogDescription>
-                    </DialogHeader>
+                        </ModalDescription>
+                    </ModalHeader>
                     {selected && (
-                        <div className="space-y-3">
+                        <div className="p-4 space-y-3">
                             <div className="flex items-center gap-2">
                                 <div className="font-medium">{selected.title}</div>
                                 <Badge variant="secondary">{selected.bookingId}</Badge>
@@ -347,15 +404,15 @@ function RequestsTab({ formatPrice }: { formatPrice: (n: number) => string }) {
                             )}
                         </div>
                     )}
-                    <DialogFooter>
+                    <ModalFooter>
                         <Button variant="outline" onClick={() => setDetailOpen(false)}>Đóng</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </div>
     );
 }
-function mapOrderToBooking(order) {
+function mapOrderToBooking(order:any) {
     const snap = order.metadata?.bookingDataSnapshot;
     const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
     const pax = (() => {
@@ -709,7 +766,7 @@ export default function TaiKhoan() {
                                     </CardHeader>
                                     <CardContent>
                                         <div className="space-y-4">
-                                            {userData.bookings.slice(0, 3).map((booking) => (
+                                            {displayBookings.slice(0, 3).map((booking) => (
                                                 <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
                                                     <div className="flex items-center gap-3">
                                                         <div className="p-2 bg-primary/10 rounded">
@@ -782,7 +839,7 @@ export default function TaiKhoan() {
                                                                 {/* <div>Chi tiết: {booking.details}</div> */}
                                                                 <div>Ngày đặt: {booking.bookingDate}</div>
                                                                 <div>Ngày sử dụng: {booking.serviceDate}</div>
-                                                                <div>Số khách: {booking.passengers}</div>
+                                                                {/* <div>Số khách: {booking.passengers}</div> */}
                                                                 {/* {booking.refunded && (
                                                                         <div className="text-green-600">Đã hoàn: {formatPrice(booking.refunded)}</div>
                                                                     )} */}
@@ -863,7 +920,7 @@ export default function TaiKhoan() {
 
                         {/* Requests Tab */}
                         {activeTab === 'requests' && (
-                            <RequestsTab formatPrice={formatPrice} />
+                            <RequestsTab formatPrice={formatPrice} customerId={FAKE_CUSTOMER_ID} />
                         )}
 
                         {/* Travelers Tab */}
