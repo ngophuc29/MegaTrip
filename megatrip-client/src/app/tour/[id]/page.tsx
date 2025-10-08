@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useRouter } from 'next/navigation';
+import { log } from 'console';
 
 // Sample tour data with enhanced information
 const tourDetails = {
@@ -288,11 +289,18 @@ export default function ChiTietTour() {
         const availableDates = startDates.map((sd: any, idx: number) => {
             const rawStart = sd.$date ?? sd;
             const rawEnd = endDates?.[idx] ? (endDates[idx].$date ?? endDates[idx]) : null;
-            const date = toIsoDate(sd);
+            const startIso = rawStart ? (new Date(rawStart).toISOString()) : null;
+            const endIso = rawEnd ? (new Date(rawEnd).toISOString()) : null;
+            const date = startIso ? startIso.split('T')[0] : toIsoDate(sd);
+            const now = Date.now();
+            // consider "đã khởi hành" when start time is <= now
+            const isPast = startIso ? (new Date(startIso).getTime() <= now) : false;
+            console.log('[tour page] map startDate', { idx, rawStart, startIso, date, startMs: startIso ? new Date(startIso).getTime() : null, now, isPast });
             return {
                 date,
-                startIso: rawStart ? (new Date(rawStart).toISOString()) : null,
-                endIso: rawEnd ? (new Date(rawEnd).toISOString()) : null,
+                startIso,
+                endIso,
+                isPast,
                 available: (sd.available ?? sd.seats ?? 20),
                 price: db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom,
                 status: (sd.available === 0 || sd.seats === 0) ? 'soldout' : (sd.available <= 5 || sd.seats <= 5 ? 'limited' : 'available')
@@ -531,40 +539,68 @@ export default function ChiTietTour() {
                 if (!db) return;
 
                 const mapped = mapDbTourToClient(db);
-
-                     // fetch slot info for each start date and merge into mapped.availableDates
-                         const TOUR_SERVICE = 'http://localhost:8080';
-                     async function fetchSlotForDate(tourId: string, dateIso: string) {
-                             try {
-                                     const r = await fetch(`${TOUR_SERVICE}/api/tours/${encodeURIComponent(tourId)}/slots/${encodeURIComponent(dateIso)}`);
-                                     if (!r.ok) return null;
-                                     const j = await r.json();
-                                     return j.data?.slot ?? j.slot ?? j;
-                                 } catch (e) {
-                                         return null;
-                                     }
-                         }
+                // DEBUG: log comparison of each startDate vs current time (ISO, ms, now, isPast)
+                if (Array.isArray(mapped.startDates)) {
+                    const nowIso = new Date().toISOString();
+                    const nowMs = Date.now();
+                    console.log('[tour page] startDates comparison start', { nowIso, nowMs });
+                    mapped.startDates.forEach((sd: any, i: number) => {
+                        const raw = sd.$date ?? sd;
+                        const iso = raw ? new Date(raw).toISOString() : null;
+                        const ms = iso ? new Date(iso).getTime() : NaN;
+                        const isPast = Number.isFinite(ms) ? (ms <= nowMs) : null;
+                        console.log(`[tour page] startDates[${i}]`, { raw, iso, ms, nowMs, isPast });
+                    });
+                    console.log('[tour page] startDates comparison end');
+                }
+                else {
+                    console.log("fuck");
                     
-                         // collect dates to query (from mapped.availableDates -> .date)
-                         const tourId = String(mapped.id || id);
-                     const dates = (mapped.availableDates || []).map((d: any) => d.date).filter(Boolean);
-                     const slotResults = await Promise.all(dates.map((dt: string) => fetchSlotForDate(tourId, dt)));
-                
-                         // merge slot info into mapped.availableDates
-                         mapped.availableDates = (mapped.availableDates || []).map((d: any) => {
-                                 const slot = slotResults.find((s: any) => s && String(s.dateIso) === String(d.date));
-                                 if (slot) {
-                                         return { ...d, capacity: slot.capacity ?? d.capacity, reserved: slot.reserved ?? 0, available: (typeof slot.available === 'number' ? slot.available : ((slot.capacity ?? d.capacity) - (slot.reserved ?? 0))) };
-                                     }
-                                 return d;
-                             });
-                
-                         // set default selectedDate to first available (not soldout) if none chosen
-                         if (!selectedDate) {
-                                 const firstAvailable = mapped.availableDates.find((x: any) => (x.available ?? x.available === 0) ? (x.available > 0) : x.status !== 'soldout');
-                                 if (firstAvailable) setSelectedDate(new Date(firstAvailable.date));
-                             }
-                
+                }
+                // fetch slot info for each start date and merge into mapped.availableDates
+                const TOUR_SERVICE = 'http://localhost:8080';
+                async function fetchSlotForDate(tourId: string, dateIso: string) {
+                    try {
+                        const r = await fetch(`${TOUR_SERVICE}/api/tours/${encodeURIComponent(tourId)}/slots/${encodeURIComponent(dateIso)}`);
+                        if (!r.ok) return null;
+                        const j = await r.json();
+                        return j.data?.slot ?? j.slot ?? j;
+                    } catch (e) {
+                        return null;
+                    }
+                }
+
+                // collect dates to query (from mapped.availableDates -> .date)
+                const tourId = String(mapped.id || id);
+                const dates = (mapped.availableDates || []).map((d: any) => d.date).filter(Boolean);
+                const slotResults = await Promise.all(dates.map((dt: string) => fetchSlotForDate(tourId, dt)));
+
+                // merge slot info into mapped.availableDates
+                mapped.availableDates = (mapped.availableDates || []).map((d: any) => {
+                    const slot = slotResults.find((s: any) => s && String(s.dateIso) === String(d.date));
+                    if (slot) {
+                        // prefer full datetime from DB (d.startIso). If slot.dateIso is only YYYY-MM-DD,
+                        // use end-of-day to avoid marking today's trip as past too early.
+                        const startIsoCandidate = d.startIso ?? (slot.dateIso && slot.dateIso.length === 10 ? `${slot.dateIso}T23:59:59.999Z` : slot.dateIso) ?? null;
+                        let isPast = false;
+                        if (startIsoCandidate) {
+                            const startMs = Number(new Date(startIsoCandidate).getTime());
+                            if (!Number.isNaN(startMs)) isPast = startMs <= Date.now();
+                        } else {
+                            isPast = !!d.isPast;
+                        }
+                        console.log('[tour page] merge slot', { dDate: d.date, slotDateIso: slot.dateIso, startIsoCandidate, startMs: startIsoCandidate ? new Date(startIsoCandidate).getTime() : null, now: Date.now(), isPast });
+                        return { ...d, startIso: startIsoCandidate, isPast, capacity: slot.capacity ?? d.capacity, reserved: slot.reserved ?? 0, available: (typeof slot.available === 'number' ? slot.available : ((slot.capacity ?? d.capacity) - (slot.reserved ?? 0))) };
+                    }
+                    return d;
+                });
+
+                // set default selectedDate to first available (not soldout) if none chosen
+                if (!selectedDate) {
+                    const firstAvailable = mapped.availableDates.find((x: any) => !x.isPast && ((x.available ?? 0) > 0) && x.status !== 'soldout');
+                    if (firstAvailable) setSelectedDate(new Date(firstAvailable.startIso ?? `${firstAvailable.date}T00:00:00`));
+                }
+
                 // Merge mapped into sample tourDetails but preserve policies & reviews from sample if BE not ready
                 const keepPolicies = tourDetails.policies;
                 const keepReviews = tourDetails.reviews;
@@ -582,9 +618,22 @@ export default function ChiTietTour() {
         return () => { mounted = false; };
     }, [id]);
     const getCurrentAvailable = () => {
-        if (slotInfo && typeof slotInfo.available === 'number') return slotInfo.available;
-        const sel = getSelectedDateInfo();
-        return sel?.available ?? null;
+        // if (slotInfo && typeof slotInfo.available === 'number') return slotInfo.available;
+        // const sel = getSelectedDateInfo();
+        // return sel?.available ?? null;
+        // prefer explicit slotInfo.available (if you set slotInfo elsewhere)
+        // prefer explicit slotInfo.available (if you set slotInfo elsewhere)
+        const selRaw = (slotInfo && typeof slotInfo.available === 'number') ? slotInfo : getSelectedDateInfo();
+        if (!selRaw) return null;
+        // narrow/cast to any to handle the two possible shapes returned by BE / local data
+        const sel: any = selRaw;
+        // prefer backend-provided available
+        if (typeof sel.available === 'number') return Math.max(0, sel.available);
+        // fallback compute from capacity - reserved (reserved should be sum of confirmed pax)
+        const capacity = Number(sel.capacity ?? sel.seats ?? 0) || 0;
+        const reserved = Number(sel.reserved ?? 0) || 0;
+        if (capacity > 0) return Math.max(0, capacity - reserved);
+        return null;
     };
     return (
         <>
@@ -740,7 +789,7 @@ export default function ChiTietTour() {
                         {/* Available Dates Calendar */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Lịch khởi hành & Giá tour</CardTitle>
+                                <CardTitle>Lịch khởi hành & Giá tour1212</CardTitle>
                             </CardHeader>
                             <CardContent>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -750,14 +799,15 @@ export default function ChiTietTour() {
                                             <div
                                                 key={index}
                                                 className={`p-3 rounded-lg cursor-pointer transition-colors relative border ${dateInfo.status === 'soldout'
+                                                    || dateInfo.isPast
                                                     ? 'bg-[hsl(var(--muted))] cursor-not-allowed opacity-60'
                                                     : isSelected
                                                         ? 'border-2 border-[hsl(var(--primary))] bg-primary/10 ring-2 ring-[hsl(var(--primary))]'
                                                         : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
                                                     }`}
                                                 onClick={() => {
-                                                    if (dateInfo.status !== 'soldout') {
-                                                        setSelectedDate(new Date(dateInfo.date));
+                                                    if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
+                                                        setSelectedDate(new Date(dateInfo.startIso ?? `${dateInfo.date}T00:00:00`));
                                                     }
                                                 }}
                                             >
@@ -767,7 +817,13 @@ export default function ChiTietTour() {
                                                 </div>
                                                 <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
                                                 <div className="mt-1">
-                                                    {getStatusBadge(dateInfo.status, dateInfo.available)}
+                                                    {/* {getStatusBadge(dateInfo.status, dateInfo.available)} */}
+                                                    <div className="flex items-center gap-2">
+                                                        {dateInfo.isPast
+                                                            ? <Badge variant="destructive">Đã khởi hành</Badge>
+                                                            : getStatusBadge(dateInfo.status, dateInfo.available)
+                                                        }
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -1456,7 +1512,7 @@ export default function ChiTietTour() {
                                                 const days = m ? Number(m[1]) : 1;
                                                 if (selectedDateInfo?.date) {
                                                     const sd = new Date(selectedDateInfo.date);
-                                                    sd.setDate(sd.getDate()+ Math.max(0, days - 1));
+                                                    sd.setDate(sd.getDate() + Math.max(0, days - 1));
                                                     sd.setHours(23, 59, 0, 0);
                                                     endIso = sd.toISOString();
                                                 }
