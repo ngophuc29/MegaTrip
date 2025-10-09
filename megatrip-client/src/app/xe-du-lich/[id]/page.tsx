@@ -684,11 +684,15 @@ export default function ChiTietXeDuLich() {
                         </Card>
 
                         {/* Date selector: show available departureDates for user to pick */}
-                        <div className="px-6 pb-4">
+                        <div className="px-6 pb-4"
+                        
+                            style={{width:'55vw',overflow:'auto'}}
+                        >
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-lg font-bold">Chọn ngày khởi hành</div>
                             </div>
-                            <div className="flex space-x-2 overflow-x-auto pb-2">
+                            <div className="flex space-x-2 overflow-x-auto pb-2"
+                            >
                                 {dateOptions.length ? dateOptions.map(opt => (
                                     <button
                                         key={opt.idx}
