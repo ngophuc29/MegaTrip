@@ -250,8 +250,41 @@ export default function Tour() {
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 6000000]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-    const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
+    // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
+    // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
+    // selectedDurations stores numeric days (1..7+)
+    const [selectedDurations, setSelectedDurations] = useState<number[]>([]);
+    // departures loaded from public/provinces.json (use province.name)
     const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
+    const [provincesList, setProvincesList] = useState<string[]>([]);
+
+    // duration options (value = days)
+    const durationOptions = [
+        { value: 1, label: "1 ngày 0 đêm" },
+        { value: 2, label: "2 ngày 1 đêm" },
+        { value: 3, label: "3 ngày 2 đêm" },
+        { value: 4, label: "4 ngày 3 đêm" },
+        { value: 5, label: "5 ngày 4 đêm" },
+        { value: 6, label: "6 ngày 5 đêm" },
+        { value: 7, label: "7 ngày 6 đêm" },
+    ];
+
+    // load provinces for "Điểm khởi hành"
+    useEffect(() => {
+        fetch('/provinces.json').then(r => {
+            if (!r.ok) throw new Error('Failed to load provinces');
+            return r.json();
+        }).then((j) => {
+            if (Array.isArray(j)) {
+                // use the province.name as shown to users
+                const names = j.map((p: any) => String(p.name).trim()).filter(Boolean);
+                setProvincesList(names);
+            }
+        }).catch(() => {
+            // fallback from sample tours if file not available
+            setProvincesList(Array.from(new Set(sampleTours.map(t => t.departure))).slice(0, 20));
+        });
+    }, []);
     const [sortBy, setSortBy] = useState('featured');
     const [favorites, setFavorites] = useState<number[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
@@ -259,6 +292,37 @@ export default function Tour() {
     const [selectedTour, setSelectedTour] = useState<{ destination: string, price?: string } | null>(null);
     const [selectedDate, setSelectedDate] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
+
+    // Promotions for tours
+    const [tourPromotions, setTourPromotions] = useState<any[]>([]);
+    const [tourPromotionsLoading, setTourPromotionsLoading] = useState(false);
+    const [tourPromotionsError, setTourPromotionsError] = useState<string | null>(null);
+    const PROM_API_BASE = 'http://localhost:7700';
+
+    useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+            try {
+                setTourPromotionsLoading(true);
+                setTourPromotionsError(null);
+                const url = `${PROM_API_BASE}/api/promotions?status=active&appliesTo=tours&page=1&pageSize=3`;
+                const r = await fetch(url);
+                if (!r.ok) throw new Error(`Server lỗi ${r.status}`);
+                const j = await r.json();
+                const list = Array.isArray(j.data) ? j.data : (Array.isArray(j) ? j : []);
+                if (mounted) setTourPromotions(list);
+            } catch (err: any) {
+                if (mounted) {
+                    setTourPromotions([]);
+                    setTourPromotionsError(String(err?.message || err));
+                }
+            } finally {
+                if (mounted) setTourPromotionsLoading(false);
+            }
+        };
+        load();
+        return () => { mounted = false; };
+    }, []);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -309,12 +373,36 @@ export default function Tour() {
     const destinationTours = selectedTour ? generateDestinationTours() : [];
     const baseTours = apiTours.length ? apiTours : sampleTours; // use API when available
     const allTours = selectedTour ? [...destinationTours, ...baseTours] : baseTours;
+    // const filteredTours = allTours.filter(tour => {
+    //     const matchesPrice = tour.priceFrom >= priceRange[0] && tour.priceFrom <= priceRange[1];
+    //     const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tour.category);
+    //     const matchesDuration = selectedDurations.length === 0 || selectedDurations.includes(tour.duration);
+    //     const matchesDeparture = selectedDepartures.length === 0 || selectedDepartures.includes(tour.departure);
+    const getDurationDays = (tour: any) => {
+        if (typeof tour.duration === 'number' && !Number.isNaN(tour.duration)) return Math.max(1, Math.floor(tour.duration));
+        if (typeof tour.duration === 'string') {
+            const m = tour.duration.match(/(\d+)/);
+            if (m) return Number(m[1]);
+        }
+        // try fallback fields
+        if (typeof tour.durationDays === 'number') return tour.durationDays;
+        return undefined;
+    };
     const filteredTours = allTours.filter(tour => {
         const matchesPrice = tour.priceFrom >= priceRange[0] && tour.priceFrom <= priceRange[1];
         const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(tour.category);
-        const matchesDuration = selectedDurations.length === 0 || selectedDurations.includes(tour.duration);
-        const matchesDeparture = selectedDepartures.length === 0 || selectedDepartures.includes(tour.departure);
-
+        // duration: compare numeric days
+        const tourDays = getDurationDays(tour);
+        const matchesDuration = selectedDurations.length === 0 || (typeof tourDays === 'number' && selectedDurations.includes(tourDays));
+        // departure: flexible partial match between tour.departure / departureFrom and selected province name
+        const rawDeparture = (tour.departure || tour.departureFrom || '').toString().trim();
+        const matchesDeparture = selectedDepartures.length === 0 || selectedDepartures.some(sel => {
+            const a = String(sel || '').toLowerCase();
+            const b = String(rawDeparture || '').toLowerCase();
+            if (!a || !b) return false;
+            // allow contains both ways to handle "Thành phố Hà Nội" vs "Hà Nội"
+            return a === b || a.includes(b) || b.includes(a);
+        });
         // If tour destination is selected, prioritize matching tours
         if (selectedTour) {
             const matchesDestination = tour.name.toLowerCase().includes(selectedTour.destination.toLowerCase());
@@ -361,9 +449,14 @@ export default function Tour() {
         setSelectedDate(nextWeek.toISOString().split('T')[0]);
     };
 
-    const durations = [...new Set(sampleTours.map(tour => tour.duration))];
-    const departures = [...new Set(sampleTours.map(tour => tour.departure))];
+    // const durations = [...new Set(sampleTours.map(tour => tour.duration))];
+    // const departures = [...new Set(sampleTours.map(tour => tour.departure))];
+    // helpers to detect tour duration in days (support API numeric duration or string)
+    
 
+    // UI options
+    const durations = durationOptions.map(d => d.label);
+    const departures = provincesList.length ? provincesList : [...new Set(sampleTours.map(tour => tour.departure))];
 
     const [copied, setCopied] = useState<{ [code: string]: boolean }>({});
 
@@ -435,70 +528,104 @@ export default function Tour() {
                             </Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Card className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">TOUR500</div>
-                                            <div className="text-sm opacity-90">Giảm 500K tour nội địa</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-orange-600"
-                                            onClick={() => handleCopy('TOUR500')}
-                                        >
-                                            {copied['TOUR500'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">FAMILY25</div>
-                                            <div className="text-sm opacity-90">Giảm 25% tour gia đình</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 15/02/2025</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-orange-600"
-                                            onClick={() => handleCopy('FAMILY25')}
-                                        >
-                                            {copied['FAMILY25'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-teal-500 to-green-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">WEEKEND30</div>
-                                            <div className="text-sm opacity-90">Giảm 30% tour cuối tuần</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-teal-600"
-                                            onClick={() => handleCopy('WEEKEND30')}
-                                        >
-                                            {copied['WEEKEND30'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            {tourPromotionsLoading ? (
+                                [0, 1, 2].map(i => (
+                                    <Card key={i} className="animate-pulse">
+                                        <CardContent className="p-4">
+                                            <div className="h-6 w-24 bg-gray-200 rounded mb-2" />
+                                            <div className="h-4 w-40 bg-gray-200 rounded mb-2" />
+                                            <div className="h-3 w-20 bg-gray-200 rounded" />
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            ) : tourPromotionsError ? (
+                                <Card className="col-span-3 text-center">
+                                    <CardContent>
+                                        <div className="text-sm text-red-600 mb-2">Không tải được khuyến mãi</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mb-3">{tourPromotionsError}</div>
+                                    </CardContent>
+                                </Card>
+                            ) : tourPromotions.length === 0 ? (
+                                // keep original hardcoded cards/colors when no promos from server
+                                <>
+                                    <Card className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white">
+                                        <CardContent className="p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-lg font-bold">TOUR500</div>
+                                                    <div className="text-sm opacity-90">Giảm 500K tour nội địa</div>
+                                                    <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
+                                                </div>
+                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('TOUR500')}>
+                                                    {copied['TOUR500'] ? 'Đã copy!' : 'Copy mã'}
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
+                                        <CardContent className="p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-lg font-bold">FAMILY25</div>
+                                                    <div className="text-sm opacity-90">Giảm 25% tour gia đình</div>
+                                                    <div className="text-xs opacity-75 mt-1">HSD: 15/02/2025</div>
+                                                </div>
+                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('FAMILY25')}>
+                                                    {copied['FAMILY25'] ? 'Đã copy!' : 'Copy mã'}
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="bg-gradient-to-r from-teal-500 to-green-500 text-white">
+                                        <CardContent className="p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-lg font-bold">WEEKEND30</div>
+                                                    <div className="text-sm opacity-90">Giảm 30% tour cuối tuần</div>
+                                                    <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
+                                                </div>
+                                                <Button size="sm" variant="secondary" className="text-teal-600" onClick={() => handleCopy('WEEKEND30')}>
+                                                    {copied['WEEKEND30'] ? 'Đã copy!' : 'Copy mã'}
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </>
+                            ) : (
+                                // show up to 3 server promotions but keep card color scheme
+                                tourPromotions.slice(0, 3).map((p: any, idx: number) => {
+                                    const colors = [
+                                        'from-purple-500 to-indigo-500',
+                                        'from-orange-500 to-red-500',
+                                        'from-teal-500 to-green-500'
+                                    ];
+                                    const color = colors[idx % colors.length];
+                                    return (
+                                        <Card key={p.id || p._id || p.code} className={`bg-gradient-to-r ${color} text-white`}>
+                                            <CardContent className="p-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className="text-lg font-bold">{p.code ?? `PROMO-${String(p._id || '').slice(0, 6)}`}</div>
+                                                        <div className="text-sm opacity-90">{p.title ?? p.description}</div>
+                                                        <div className="text-xs opacity-75 mt-1">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                    </div>
+                                                    <Button size="sm" variant="secondary" className={idx === 2 ? 'text-teal-600' : 'text-orange-600'} onClick={() => {
+                                                        const code = p.code || '';
+                                                        if (code) handleCopy(code);
+                                                    }}>
+                                                        {copied[p.code] ? 'Đã copy!' : 'Copy mã'}
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                })
+                            )}
                         </div>
                     </div>
 
                     {/* Popular Tours */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">🏝️ Tour phổ biến</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleTourSelect('Đà Nẵng - Hội An', '3.990.000₫')}>
@@ -533,10 +660,10 @@ export default function Tour() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Great Tour Deals */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">🔥 Tour giá tốt</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <Card className="hover:shadow-md transition-shadow">
@@ -599,7 +726,7 @@ export default function Tour() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </div> */}
                 </div>
             </section>
 
@@ -716,24 +843,26 @@ export default function Tour() {
                                         <Separator />
 
                                         {/* Duration */}
+                                        {/* Duration */}
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Thời lượng</Label>
                                             <div className="space-y-3">
-                                                {durations.map((duration) => (
-                                                    <div key={duration} className="flex items-center space-x-2">
+                                                {durationOptions.map((opt) => (
+                                                    <div key={opt.value} className="flex items-center space-x-2">
                                                         <Checkbox
-                                                            id={duration}
-                                                            checked={selectedDurations.includes(duration)}
+                                                            id={`dur-${opt.value}`}
+                                                            checked={selectedDurations.includes(opt.value)}
                                                             onCheckedChange={(checked) => {
-                                                                if (checked) {
-                                                                    setSelectedDurations([...selectedDurations, duration]);
-                                                                } else {
-                                                                    setSelectedDurations(selectedDurations.filter(d => d !== duration));
-                                                                }
+                                                                setSelectedDurations(prev => {
+                                                                    const found = prev.includes(opt.value);
+                                                                    if (checked && !found) return [...prev, opt.value];
+                                                                    if (!checked && found) return prev.filter(d => d !== opt.value);
+                                                                    return prev;
+                                                                });
                                                             }}
                                                         />
-                                                        <label htmlFor={duration} className="text-sm cursor-pointer">
-                                                            {duration}
+                                                        <label htmlFor={`dur-${opt.value}`} className="text-sm cursor-pointer">
+                                                            {opt.label}
                                                         </label>
                                                     </div>
                                                 ))}
@@ -745,25 +874,27 @@ export default function Tour() {
                                         {/* Departure */}
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Điểm khởi hành</Label>
-                                            <div className="space-y-3">
+                                            <div className="space-y-3 max-h-48 overflow-auto pr-2">
                                                 {departures.map((departure) => (
                                                     <div key={departure} className="flex items-center space-x-2">
                                                         <Checkbox
-                                                            id={departure}
+                                                            id={`dep-${departure}`}
                                                             checked={selectedDepartures.includes(departure)}
                                                             onCheckedChange={(checked) => {
-                                                                if (checked) {
-                                                                    setSelectedDepartures([...selectedDepartures, departure]);
-                                                                } else {
-                                                                    setSelectedDepartures(selectedDepartures.filter(d => d !== departure));
-                                                                }
+                                                                setSelectedDepartures(prev => {
+                                                                    const found = prev.includes(departure);
+                                                                    if (checked && !found) return [...prev, departure];
+                                                                    if (!checked && found) return prev.filter(d => d !== departure);
+                                                                    return prev;
+                                                                });
                                                             }}
                                                         />
-                                                        <label htmlFor={departure} className="text-sm cursor-pointer">
+                                                        <label htmlFor={`dep-${departure}`} className="text-sm cursor-pointer">
                                                             {departure}
                                                         </label>
                                                     </div>
                                                 ))}
+                                                {departures.length === 0 && <div className="text-sm text-[hsl(var(--muted-foreground))]">Không có dữ liệu</div>}
                                             </div>
                                         </div>
 

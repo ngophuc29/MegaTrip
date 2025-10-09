@@ -594,7 +594,7 @@ export default function Buses() {
         queryKey: ['provinces_with_stations'],
         queryFn: async () => {
             // load local JSON from public folder
-            const res = await fetch('/cac_ben_xe_bus_chua_sat_nhap.json');
+            const res = await fetch('/cac_ben_xe_bus_sau_sat_nhap.json');
             if (!res.ok) throw new Error('Failed to load stations (local json)');
             return res.json();
         },

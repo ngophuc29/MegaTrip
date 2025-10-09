@@ -142,9 +142,42 @@ export default function XeDuLich() {
     const [isLoading, setIsLoading] = useState(false);
     const [fetchedBuses, setFetchedBuses] = useState<any[]>([]); // dữ liệu từ server
 
+    // New: API fetch state (when fetch attempted and error, don't fallback to sample)
+    const [fetchAttempted, setFetchAttempted] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+
+
     // base API (config bằng NEXT_PUBLIC_API_BASE hoặc fallback)
     const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+    // Promotions for bus
+    const [promotions, setPromotions] = useState<any[]>([]);
+    const [promotionsLoading, setPromotionsLoading] = useState(false);
+    const [promotionsError, setPromotionsError] = useState<string | null>(null);
 
+    useEffect(() => {
+        // load promotions applicable to bus
+        const loadPromos = async () => {
+            try {
+                setPromotionsLoading(true);
+                setPromotionsError(null);
+                const url = `${API_BASE}/api/promotions?status=active&appliesTo=buses&page=1&pageSize=10`;
+                const r = await fetch(url);
+                if (!r.ok) {
+                    const text = await r.text().catch(() => '');
+                    throw new Error(`Server lỗi ${r.status}${text ? `: ${text}` : ''}`);
+                }
+                const json = await r.json();
+                const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+                setPromotions(list);
+            } catch (err: any) {
+                setPromotions([]);
+                setPromotionsError(String(err?.message || err || 'Không thể tải khuyến mãi'));
+            } finally {
+                setPromotionsLoading(false);
+            }
+        };
+        loadPromos();
+    }, [API_BASE]);
     // helper: parse MongoDB extended JSON number wrappers into JS Number
     const parseNumber = (v: any): number => {
         if (v == null) return 0;
@@ -211,6 +244,7 @@ export default function XeDuLich() {
     const fetchBuses = async (from?: string, to?: string, departure?: string) => {
         try {
             setIsLoading(true);
+            setFetchError(null);
             const params = new URLSearchParams();
             if (from) params.append('from', from);
             if (to) params.append('to', to);
@@ -218,6 +252,8 @@ export default function XeDuLich() {
             // page & pageSize defaults (client listing)
             params.append('page', '1');
             params.append('pageSize', '50');
+            // request only scheduled trips for client listing
+            params.append('status', 'scheduled');
             // only add query string when there are meaningful params (avoid trailing '?')
             const qs = params.toString();
             const url = qs ? `${API_BASE}/api/client/buses?${qs}` : `${API_BASE}/api/client/buses`;
@@ -228,9 +264,14 @@ export default function XeDuLich() {
             const res = await fetch(url);
             if (!res.ok) {
                 const text = await res.text();
+                // console.warn('fetchBuses non-ok', { status: res.status, body: text });
+                // setFetchedBuses([]);
+                // setIsLoading(false);
+                // return;
+                const msg = `Server lỗi ${res.status}${text ? `: ${text}` : ''}`;
                 console.warn('fetchBuses non-ok', { status: res.status, body: text });
                 setFetchedBuses([]);
-                setIsLoading(false);
+                setFetchError(msg);
                 return;
             }
             const json = await res.json();
@@ -279,12 +320,19 @@ export default function XeDuLich() {
                 return {
                     // id used as key in UI
                     id: b._id?.['$oid'] || b._id || b.busCode || b.id || `srv-${idx}`,
+                    // company: b.operator?.name || b.company || (b.operator && b.operator.id) || (b.busCode || 'Nhà xe'),
+                    // keep structured operator info so filters can match by id / name / code
+                    operatorId: b.operator?.id || b.operator?.code || null,
+                    operatorCode: b.operator?.code || null,
                     company: b.operator?.name || b.company || (b.operator && b.operator.id) || (b.busCode || 'Nhà xe'),
                     route: (b.route && typeof b.route === 'string') ? b.route : `${routeFromName} - ${routeToName}`.trim(),
                     // include structured routeFrom/routeTo so client filters can match codes/cities/names
                     routeFrom: b.routeFrom || null,
                     routeTo: b.routeTo || null,
-                    type: Array.isArray(b.busType) ? (b.busType[0] || 'Ghế') : (b.type || (b.busType || 'Ghế ngồi')),
+                    // type: Array.isArray(b.busType) ? (b.busType[0] || 'Ghế') : (b.type || (b.busType || 'Ghế ngồi')),
+                    // keep original busType array plus a fallback `type` string for display
+                    busTypeArray: Array.isArray(b.busType) ? b.busType : (b.busType ? [b.busType] : (b.type ? [b.type] : [])),
+                    type: Array.isArray(b.busType) ? (b.busType[0] || 'Ghế') : (b.type || 'Ghế ngồi'),
                     departure: {
                         time: (b.departure && b.departure.time) || fmtTime(departureDate),
                         location: (b.departure && b.departure.location) || routeFromName || ''
@@ -317,7 +365,8 @@ export default function XeDuLich() {
             };
 
             const normalized = list.map((b: any, i: number) => normalizeServerBus(b, i));
-
+            setFetchedBuses(normalized);
+            setFetchError(null);
             // Adjust client priceRange immediately so newly-fetched buses aren't filtered out on first render.
             try {
                 if (Array.isArray(normalized) && normalized.length > 0) {
@@ -350,9 +399,12 @@ export default function XeDuLich() {
             }
             setFetchedBuses(normalized);
         } catch (err) {
+            const msg = String(err?.message || err || 'Không thể kết nối tới server');
             console.error('fetchBuses error', err);
             setFetchedBuses([]);
+            setFetchError(msg);
         } finally {
+            setFetchAttempted(true);
             setIsLoading(false);
         }
     };
@@ -496,17 +548,53 @@ export default function XeDuLich() {
         ];
     };
 
-    const routeBuses = selectedRoute ? generateRouteBuses() : [];
-    // nếu server trả dữ liệu dùng nó, ngược lại fallback về sampleBuses / generated
-    const sourceBuses = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0)
-        ? fetchedBuses
-        : (selectedRoute ? [...routeBuses, ...sampleBuses] : sampleBuses);
+    // const routeBuses = selectedRoute ? generateRouteBuses() : [];
+    // // nếu server trả dữ liệu dùng nó, ngược lại fallback về sampleBuses / generated
+    // const sourceBuses = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0)
+    //     ? fetchedBuses
+    //     : (selectedRoute ? [...routeBuses, ...sampleBuses] : sampleBuses);
 
+    const routeBuses = selectedRoute ? generateRouteBuses() : [];
+    // New logic:
+    // - If server returned data -> use it
+    // - If a fetch was attempted and failed or returned empty -> do NOT fallback to sample; show no-data / error UI
+    // - If no fetch attempted yet (initial dev mode) -> keep sample fallback for local dev convenience
+    let sourceBuses: any[] = [];
+    if (Array.isArray(fetchedBuses) && fetchedBuses.length > 0) {
+        sourceBuses = fetchedBuses;
+    } else if (!fetchAttempted) {
+        sourceBuses = selectedRoute ? [...routeBuses, ...sampleBuses] : sampleBuses;
+    } else {
+        // fetchAttempted && no server data -> empty list (UI will show "no data" or error)
+        sourceBuses = [];
+    }
+    // const filteredBuses = sourceBuses.filter(bus => {
+    //     const matchesPrice = bus.price >= priceRange[0] && bus.price <= priceRange[1];
+    //     const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.includes(bus.company);
+    //     const matchesType = selectedTypes.length === 0 || selectedTypes.includes(bus.type);
     const filteredBuses = sourceBuses.filter(bus => {
         const matchesPrice = bus.price >= priceRange[0] && bus.price <= priceRange[1];
-        const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.includes(bus.company);
-        const matchesType = selectedTypes.length === 0 || selectedTypes.includes(bus.type);
 
+        // Company filter: allow matching by selected label against operator name/id/code or displayed company
+        const matchesCompany = selectedCompanies.length === 0 || selectedCompanies.some(sel => {
+            const s = String(sel || '').toLowerCase();
+            if (!s) return false;
+            if (bus.company && String(bus.company).toLowerCase() === s) return true;
+            if (bus.operatorId && String(bus.operatorId).toLowerCase() === s) return true;
+            if (bus.operatorCode && String(bus.operatorCode).toLowerCase() === s) return true;
+            // partial contains match to be more forgiving
+            if (bus.company && String(bus.company).toLowerCase().includes(s)) return true;
+            return false;
+        });
+
+        // Type filter: match against busTypeArray (server) or fallback type string
+        const matchesType = selectedTypes.length === 0 || selectedTypes.some(sel => {
+            const s = String(sel || '').toLowerCase();
+            if (!s) return false;
+            if (Array.isArray(bus.busTypeArray) && bus.busTypeArray.some((t: any) => String(t || '').toLowerCase().includes(s))) return true;
+            if (bus.type && String(bus.type).toLowerCase().includes(s)) return true;
+            return false;
+        });
         // If route is selected, try several heuristics rather than strict string equality:
         // - match exact display route
         // - match if route string contains the provided values
@@ -598,6 +686,42 @@ export default function XeDuLich() {
 
     const busTypes = [...new Set(sampleBuses.map(bus => bus.type))];
 
+    // dynamic: load companies and bus types from public JSON files
+    const [busCompaniesData, setBusCompaniesData] = useState<{ id?: string; name: string; short_name?: string; rating?: number }[]>(
+        []
+    );
+    const [busTypeCategories, setBusTypeCategories] = useState<any[]>([]);
+    const [expandedTypeIds, setExpandedTypeIds] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        // load companies
+        fetch('/nhaxekhach.json').then(r => {
+            if (!r.ok) throw new Error('Failed to load companies');
+            return r.json();
+        }).then((j) => {
+            setBusCompaniesData(Array.isArray(j) ? j : []);
+        }).catch(() => {
+            // fallback to minimal inline list if file not available
+            setBusCompaniesData([
+                { name: 'Phương Trang', short_name: 'Phương Trang', rating: 4.5 },
+                { name: 'Sinh Tourist', short_name: 'Sinh Tourist', rating: 4.3 },
+                { name: 'Hoàng Long', short_name: 'Hoàng Long', rating: 4.4 },
+            ]);
+        });
+
+        // load bus type categories (parents -> subtypes)
+        fetch('/dsloaixevexere.json').then(r => {
+            if (!r.ok) throw new Error('Failed to load types');
+            return r.json();
+        }).then((j) => {
+            setBusTypeCategories(Array.isArray(j) ? j : []);
+        }).catch(() => {
+            // keep empty if not available
+            setBusTypeCategories([]);
+        });
+    }, []);
+
+
     // optional small UI debug flag
     const dataSourceLabel = (Array.isArray(fetchedBuses) && fetchedBuses.length > 0) ? `Server (${fetchedBuses.length})` : 'Fallback sample';
 
@@ -659,7 +783,7 @@ export default function XeDuLich() {
             {/* Vouchers & Promotions Section */}
             <section className={`py-8 bg-gray-50 ${hasSearched && !showPromotions ? 'hidden' : ''}`}>
                 <div className="container">
-                    {/* Vouchers */}
+                    {/* Vouchers (from server: only promotions that apply to 'bus') */}
                     <div className="mb-8">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-xl font-bold">🎫 Voucher & Mã giảm giá</h2>
@@ -668,56 +792,70 @@ export default function XeDuLich() {
                             </Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Card className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">BUS100</div>
-                                            <div className="text-sm opacity-90">Giảm 100K xe khách</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
-                                        </div>
-                                        <Button size="sm" variant="secondary" className="text-cyan-600" onClick={() => handleCopy('BUS100')}>
-                                            {copied['BUS100'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">NEWBUS50</div>
-                                            <div className="text-sm opacity-90">Giảm 50K lần đầu đặt</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 15/01/2025</div>
-                                        </div>
-                                        <Button size="sm" variant="secondary" className="text-emerald-600" onClick={() => handleCopy('NEWBUS50')}>
-                                            {copied['NEWBUS50'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-violet-500 to-purple-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">VIP15</div>
-                                            <div className="text-sm opacity-90">Giảm 15% xe VIP</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
-                                        </div>
-                                        <Button size="sm" variant="secondary" className="text-violet-600" onClick={() => handleCopy('VIP15')}>
-                                            {copied['VIP15'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            {promotionsLoading ? (
+                                [0, 1, 2].map(i => (
+                                    <Card key={i} className="animate-pulse">
+                                        <CardContent className="p-4">
+                                            <div className="h-6 w-24 bg-gray-200 rounded mb-2" />
+                                            <div className="h-4 w-40 bg-gray-200 rounded mb-2" />
+                                            <div className="h-3 w-20 bg-gray-200 rounded" />
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            ) : promotionsError ? (
+                                <Card className="col-span-3 text-center">
+                                    <CardContent>
+                                        <div className="text-sm text-red-600 mb-2">Không tải được khuyến mãi</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mb-3">{promotionsError}</div>
+                                        <Button onClick={() => {
+                                            setPromotionsError(null);
+                                            setPromotionsLoading(true);
+                                            fetch(`${API_BASE}/api/promotions?status=active&appliesTo=bus&page=1&pageSize=10`)
+                                                .then(r => r.ok ? r.json() : Promise.reject(r))
+                                                .then(j => setPromotions(Array.isArray(j.data) ? j.data : []))
+                                                .catch(e => setPromotionsError(String(e?.message || e)))
+                                                .finally(() => setPromotionsLoading(false));
+                                        }}>Thử lại</Button>
+                                    </CardContent>
+                                </Card>
+                            ) : promotions.length === 0 ? (
+                                <div className="col-span-3 text-sm text-[hsl(var(--muted-foreground))]">Hiện không có khuyến mãi cho chuyến xe</div>
+                            ) : (
+                                // show only first 3 promotions
+                                            promotions.slice(0, 3).map((p: any, idx: number) => {
+                                    const colors = [
+                                        'from-purple-500 to-indigo-500',
+                                        'from-orange-500 to-red-500',
+                                        'from-teal-500 to-green-500'
+                                    ];
+                                    const color = colors[idx % colors.length];
+                                    return (
+                                        <Card key={p.id || p._id || p.code} className={`bg-gradient-to-r ${color} text-white`}>
+                                            <CardContent className="p-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className="text-lg font-bold">{p.code ?? `PROMO-${p._id?.slice?.(0, 6)}`}</div>
+                                                        <div className="text-sm opacity-90">{p.title}</div>
+                                                        <div className="text-xs opacity-75 mt-1">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                    </div>
+                                                    <Button size="sm" variant="secondary" className="text-[hsl(var(--primary))]" onClick={() => {
+                                                        const code = p.code || '';
+                                                        if (code) handleCopy(code);
+                                                    }}>
+                                                        {copied[p.code] ? 'Đang lấy mã!' : 'Copy mã'}
+                                                    </Button>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })
+                            )}
                         </div>
                     </div>
 
 
                     {/* Popular Routes */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">🚌 Tuyến xe phổ biến</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                             <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Đà Lạt', '280.000₫')}>
@@ -752,10 +890,10 @@ export default function XeDuLich() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </div> */}
 
                     {/* Great Bus Deals */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">🔥 Xe giá tốt</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <Card className="hover:shadow-md transition-shadow">
@@ -818,7 +956,7 @@ export default function XeDuLich() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </div> */}
                 </div>
             </section>
 
@@ -936,80 +1074,116 @@ export default function XeDuLich() {
 
                                         <Separator />
 
-                                        {/* Bus Companies */}
+                                        {/* Bus Companies (loaded from /public/nhaxekhach.json) */}
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Nhà xe</Label>
-                                            <div className="space-y-3">
-                                                {busCompanies.map((company) => (
-                                                    <div key={company.name} className="flex items-center justify-between">
-                                                        <div className="flex items-center space-x-2">
-                                                            <Checkbox
-                                                                id={company.name}
-                                                                checked={selectedCompanies.includes(company.name)}
-                                                                onCheckedChange={(checked) => {
-                                                                    if (checked) {
-                                                                        setSelectedCompanies([...selectedCompanies, company.name]);
-                                                                    } else {
-                                                                        setSelectedCompanies(selectedCompanies.filter(c => c !== company.name));
-                                                                    }
-                                                                }}
-                                                            />
-                                                            <label htmlFor={company.name} className="text-sm cursor-pointer">
-                                                                {company.name}
-                                                            </label>
+                                            <div className="space-y-3" style={{ height: '20vh', overflowY: 'auto' }}>
+                                                {busCompaniesData.map((company) => {
+                                                    const key = company.id || company.short_name || company.name;
+                                                    const label = company.short_name || company.name;
+                                                    return (
+                                                        <div key={key} className="flex items-center justify-between">
+                                                            <div className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={String(key)}
+                                                                    checked={selectedCompanies.includes(String(label))}
+                                                                    onCheckedChange={(checked) => {
+                                                                        if (checked) {
+                                                                            setSelectedCompanies(prev => [...prev, String(label)]);
+                                                                        } else {
+                                                                            setSelectedCompanies(prev => prev.filter(c => c !== String(label)));
+                                                                        }
+                                                                    }}
+                                                                />
+                                                                <label htmlFor={String(key)} className="text-sm cursor-pointer">
+                                                                    {label}
+                                                                </label>
+                                                            </div>
+                                                            {/* <div className="flex items-center text-xs text-[hsl(var(--muted-foreground))]">
+                                                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
+                                                                {company.rating ?? '—'}
+                                                            </div> */}
                                                         </div>
-                                                        <div className="flex items-center text-xs text-[hsl(var(--muted-foreground))]">
-                                                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400 mr-1" />
-                                                            {company.rating}
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
+                                                {busCompaniesData.length === 0 && (
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">Không có dữ liệu nhà xe</div>
+                                                )}
                                             </div>
                                         </div>
 
                                         <Separator />
 
-                                        {/* Bus Types */}
+                                        {/* Bus Types (parent -> subtypes from /public/dsloaixevexere.json) */}
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Loại xe</Label>
-                                            <div className="space-y-3">
-                                                {busTypes.map((type) => (
-                                                    <div key={type} className="flex items-center space-x-2">
-                                                        <Checkbox
-                                                            id={type}
-                                                            checked={selectedTypes.includes(type)}
-                                                            onCheckedChange={(checked) => {
-                                                                if (checked) {
-                                                                    setSelectedTypes([...selectedTypes, type]);
-                                                                } else {
-                                                                    setSelectedTypes(selectedTypes.filter(t => t !== type));
-                                                                }
-                                                            }}
-                                                        />
-                                                        <label htmlFor={type} className="text-sm cursor-pointer flex items-center gap-1">
-                                                            {getTypeIcon(type)}
-                                                            {type}
-                                                        </label>
-                                                    </div>
-                                                ))}
+                                            <div className="space-y-2">
+                                                {busTypeCategories.length === 0 && (
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">Không có dữ liệu loại xe</div>
+                                                )}
+                                                {busTypeCategories.map((cat: any) => {
+                                                    const cid = cat.id || cat.name;
+                                                    const isOpen = !!expandedTypeIds[cid];
+                                                    return (
+                                                        <div key={cid} className="border rounded p-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="text-sm font-medium">{cat.name}</div>
+                                                                </div>
+                                                                <div>
+                                                                    <button type="button" onClick={() => setExpandedTypeIds(prev => ({ ...prev, [cid]: !prev[cid] }))} className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                        {isOpen ? 'Ẩn' : 'Xem'} {Array.isArray(cat.subtypes) ? `(${cat.subtypes.length})` : ''}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            {isOpen && Array.isArray(cat.subtypes) && (
+                                                                <div className="mt-2 space-y-2">
+                                                                    {cat.subtypes.map((st: any) => {
+                                                                        const label = st.name || st.id;
+                                                                        const value = label;
+                                                                        const sid = `${cid}::${st.id || label}`;
+                                                                        return (
+                                                                            <div key={sid} className="flex items-center space-x-2">
+                                                                                <Checkbox
+                                                                                    id={sid}
+                                                                                    checked={selectedTypes.includes(value)}
+                                                                                    onCheckedChange={(checked) => {
+                                                                                        setSelectedTypes(prev => {
+                                                                                            if (checked) return [...prev, value];
+                                                                                            return prev.filter(x => x !== value);
+                                                                                        });
+                                                                                    }}
+                                                                                />
+                                                                                <label htmlFor={sid} className="text-sm cursor-pointer flex items-center gap-1">
+                                                                                    {getTypeIcon(st.name || '')}
+                                                                                    <span>{label}</span>
+                                                                                </label>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 
-                                        <Separator />
+                                        {/* <Separator /> */}
 
                                         {/* Departure Time */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
                                                 <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
                                             </div>
-                                        </div>
+                                        </div> */}
 
-                                        <Separator />
+                                        {/* <Separator /> */}
 
                                         {/* Quick Filters */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
                                             <div className="space-y-2">
                                                 <div className="flex items-center space-x-2">
@@ -1031,7 +1205,7 @@ export default function XeDuLich() {
                                                     </label>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </div> */}
                                     </CardContent>
                                 </Card>
                             )}
@@ -1078,7 +1252,7 @@ export default function XeDuLich() {
                             </div>
 
                             {/* Bus Results */}
-                            <BusResults
+                            {/* <BusResults
                                 isLoading={isLoading}
                                 sortedBuses={sortedBuses}
                                 showDetails={showDetails}
@@ -1087,8 +1261,35 @@ export default function XeDuLich() {
                                 getTypeIcon={getTypeIcon}
                                 getAmenityIcon={getAmenityIcon}
                                 selectedDate={selectedDate}
-                            />
-
+                            /> */}
+                            {fetchAttempted && fetchError ? (
+                                <Card className="text-center py-12">
+                                    <CardContent>
+                                        <Bus className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                                        <h3 className="text-lg font-medium mb-2 text-red-600">Lỗi khi tải dữ liệu</h3>
+                                        <p className="text-[hsl(var(--muted-foreground))] mb-4">{fetchError}</p>
+                                        <div className="flex justify-center gap-2">
+                                            <Button onClick={() => {
+                                                setIsLoading(true);
+                                                setFetchError(null);
+                                                fetchBuses(selectedRoute?.from, selectedRoute?.to, selectedDate)
+                                                    .finally(() => setIsLoading(false));
+                                            }}>Thử lại</Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <BusResults
+                                    isLoading={isLoading}
+                                    sortedBuses={sortedBuses}
+                                    showDetails={showDetails}
+                                    setShowDetails={setShowDetails}
+                                    formatPrice={formatPrice}
+                                    getTypeIcon={getTypeIcon}
+                                    getAmenityIcon={getAmenityIcon}
+                                    selectedDate={selectedDate}
+                                />
+                            )}
                             {/* {sortedBuses.length === 0 && (
                                 <Card className="text-center py-12">
                                     <CardContent>
