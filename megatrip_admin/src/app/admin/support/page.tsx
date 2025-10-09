@@ -772,6 +772,7 @@ const Support: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [responseContent, setResponseContent] = useState("");
     const [isInternal, setIsInternal] = useState(false);
+    const [isProcessingResponse, setIsProcessingResponse] = useState(false);
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
@@ -1105,23 +1106,18 @@ const Support: React.FC = () => {
     // };
     const handleAddResponse = async () => {
         if (!selectedTicket || !responseContent.trim()) return;
-
+        setIsProcessingResponse(true);
         const ticketId = selectedTicket.id;
         const isCancel = selectedTicket.category === "cancel";
 
         try {
             if (isCancel && (selectedTicket as any).refundInfo) {
                 const refundInfo = (selectedTicket as any).refundInfo;
-                // const amount = Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0);
-                // const amount = Number(refundInfo.refundAmount || refundInfo.airlinePenalty || 0);
                 const amount = 10000;
 
-
-                // choose refund provider based on available transaction id
                 let refundResult: any = null;
 
                 if (refundInfo.transId) {
-                    // Momo refund
                     const refundBody = {
                         orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
                         amount,
@@ -1139,7 +1135,6 @@ const Support: React.FC = () => {
                     }
                     refundResult = await momoResp.json();
                 } else if (refundInfo.zp_trans_id) {
-                    // ZaloPay refund
                     const zaloBody = {
                         zp_trans_id: refundInfo.zp_trans_id,
                         amount,
@@ -1160,7 +1155,6 @@ const Support: React.FC = () => {
                     return;
                 }
 
-                // post agent message and update ticket status
                 await Promise.all([
                     fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
                         method: "POST",
@@ -1181,7 +1175,6 @@ const Support: React.FC = () => {
                     }),
                 ]);
 
-                // update related order (best-effort)
                 const orderRef = refundInfo.orderRef;
                 if (orderRef) {
                     try {
@@ -1204,7 +1197,6 @@ const Support: React.FC = () => {
                 toast({ title: "Hoàn tiền đã xử lý", description: `Kết quả: ${refundResult?.message || "OK"}` });
                 queryClient.invalidateQueries({ queryKey: ["tickets"] });
             } else {
-                // Normal reply flow
                 await addResponseMutation.mutateAsync({
                     ticketId,
                     content: responseContent.trim(),
@@ -1212,7 +1204,6 @@ const Support: React.FC = () => {
                 });
             }
 
-            // Close detail modal and reset state after success
             setViewModalOpen(false);
             setSelectedTicket(null);
             setResponseContent("");
@@ -1220,6 +1211,8 @@ const Support: React.FC = () => {
         } catch (err: any) {
             console.error("handleAddResponse error", err);
             toast({ title: "Lỗi khi xử lý", description: String(err?.message || err), variant: "destructive" });
+        } finally {
+            setIsProcessingResponse(false);
         }
     };
     const getStatusBadge = (status: string) => {
@@ -1787,11 +1780,14 @@ const Support: React.FC = () => {
                                                                 </div>
                                                                 <Button
                                                                     onClick={handleAddResponse}
-                                                                    disabled={!responseContent.trim() || addResponseMutation.isPending}
-                                                                    loading={addResponseMutation.isPending}
+                                                                    disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
+                                                                    loading={addResponseMutation.isPending || isProcessingResponse}
                                                                 >
                                                                     {isCancel ? <CheckCircle className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                                                    {isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi"}
+                                                                    {/* {isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi"} */}
+                                                                    {(addResponseMutation.isPending || isProcessingResponse)
+                                                                        ? "Đang xử lý"
+                                                                        : (isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi")}
                                                                 </Button>
                                                             </div>
                                                         </div>

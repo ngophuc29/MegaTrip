@@ -1422,6 +1422,42 @@ export default function Buses() {
         if (!isFormDirty) return true;
         return createBusMutation.isPending || updateBusMutation.isPending;
     };
+    const getStationLabel = (value: string, provincesDataParam?: any[], mockStationsParam?: any[]) => {
+        if (!value) return "";
+        const provinces = provincesDataParam || getGlobalProvinces();
+        const mock = mockStationsParam || mockStations;
+
+        // provCode||Station Name format
+        const parts = String(value).split('||');
+        if (parts.length === 2) {
+            const provCode = parts[0];
+            const stationName = parts[1];
+            if (Array.isArray(provinces)) {
+                const prov = provinces.find((p: any) => String(p.code) === String(provCode) || p.name === provCode);
+                if (prov && Array.isArray(prov.bus_stations)) {
+                    const st = prov.bus_stations.find((s: any) => s.name === stationName);
+                    if (st) return `${st.name}${st.address ? ' - ' + st.address : ''}`;
+                }
+            }
+            // fallback to mock stations by name
+            const m = mock.find(s => s.name === stationName || s.code === stationName);
+            if (m) return `${m.name}${m.address ? ' - ' + m.address : ''}`;
+            return stationName;
+        }
+
+        // otherwise try find by code or name in mockStations or provinces
+        const ms = mock.find(s => s.code === value || s.name === value);
+        if (ms) return `${ms.name}${ms.address ? ' - ' + ms.address : ''}`;
+        if (Array.isArray(provinces)) {
+            for (const prov of provinces) {
+                if (Array.isArray(prov.bus_stations)) {
+                    const st = prov.bus_stations.find((s: any) => s.name === value || s.code === value);
+                    if (st) return `${st.name}${st.address ? ' - ' + st.address : ''}`;
+                }
+            }
+        }
+        return String(value);
+    };
 
     const renderBusForm = () => {
         if (modalMode === "view" && selectedBus) {
@@ -1620,6 +1656,7 @@ export default function Buses() {
                             <p className="text-sm text-red-500 mt-1">{formErrors.routeFrom}</p>
                         )}
                     </div>
+
                     <div>
                         <Label htmlFor="routeTo">Điểm đến *</Label>
                         <Select
@@ -1630,24 +1667,46 @@ export default function Buses() {
                                 <SelectValue placeholder="Chọn điểm đến" />
                             </SelectTrigger>
                             <SelectContent>
-                                {Array.isArray(provincesData) ? (
-                                    provincesData.map((prov: any) => (
-                                        <div key={prov.code}>
-                                            <div className="px-3 py-1 text-sm font-semibold text-gray-700">{prov.name}</div>
-                                            {Array.isArray(prov.bus_stations) && prov.bus_stations.map((st: any, idx: number) => (
-                                                <SelectItem key={prov.code + '|' + idx} value={`${prov.code}||${st.name}`}>
-                                                    {st.name} {st.address ? `- ${st.address}` : ''}
-                                                </SelectItem>
-                                            ))}
-                                        </div>
-                                    ))
-                                ) : (
-                                    mockStations.map((station) => (
-                                        <SelectItem key={station.code} value={station.code}>
-                                            {station.code} - {station.name} ({station.city})
-                                        </SelectItem>
-                                    ))
-                                )}
+                                {(() => {
+                                    // exclude the province selected in routeFrom from routeTo options
+                                    const selFrom = parseRouteValue(formData.routeFrom);
+                                    const excludeProvCode = selFrom?.code ? String(selFrom.code) : null;
+                                    const excludeProvName = selFrom?.city || null;
+
+                                    if (Array.isArray(provincesData)) {
+                                        return provincesData.map((prov: any) => {
+                                            // skip whole province if it matches selected "from" province
+                                            if ((excludeProvCode && String(prov.code) === String(excludeProvCode)) ||
+                                                (excludeProvName && prov.name === excludeProvName)) {
+                                                return null;
+                                            }
+                                            return (
+                                                <div key={prov.code}>
+                                                    <div className="px-3 py-1 text-sm font-semibold text-gray-700">{prov.name}</div>
+                                                    {Array.isArray(prov.bus_stations) && prov.bus_stations.map((st: any, idx: number) => (
+                                                        <SelectItem key={prov.code + '|' + idx} value={`${prov.code}||${st.name}`}>
+                                                            {st.name} {st.address ? `- ${st.address}` : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                                </div>
+                                            );
+                                        });
+                                    }
+
+                                    // fallback: mockStations filter by city/code/name
+                                    return mockStations
+                                        .filter(s => {
+                                            if (!selFrom) return true;
+                                            if (excludeProvName && s.city === excludeProvName) return false;
+                                            if (excludeProvCode && (s.code === excludeProvCode || String(s.code) === String(excludeProvCode))) return false;
+                                            return true;
+                                        })
+                                        .map((station) => (
+                                            <SelectItem key={station.code} value={station.code}>
+                                                {station.code} - {station.name} ({station.city})
+                                            </SelectItem>
+                                        ));
+                                })()}
                             </SelectContent>
                         </Select>
                         {formErrors.routeTo && (
@@ -1658,6 +1717,7 @@ export default function Buses() {
 
                 {/* Replace single departureAt input with multi-date UI */}
                 <div className="grid grid-cols-3 gap-4">
+                    
                     <div className="col-span-2">
                         <Label>Lịch khởi hành *</Label>
 
@@ -1884,6 +1944,13 @@ export default function Buses() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-4">
+                    {/* Ghi chú cho người dùng về hai trường 'Tổng số ghế' và 'Ghế có sẵn' */}
+                    <div className="col-span-3">
+                        <p className="text-sm text-gray-500 mb-2">
+                            Lưu ý: "Tổng số ghế" và "Ghế có sẵn" được tự động thiết lập từ loại xe / layout đã chọn.
+                            Người dùng không thể nhập thủ công. Để thay đổi, hãy chọn loại xe khác hoặc chỉnh layout.
+                        </p>
+                    </div>
                     <div>
                         <Label htmlFor="adultPrice">Giá vé - Người lớn (VNĐ) *</Label>
                         <Input
@@ -1918,15 +1985,12 @@ export default function Buses() {
                             id="seatsTotal"
                             type="number"
                             value={formData.seatsTotal || ""}
-                            onChange={(e) => {
-                                const total = parseInt(e.target.value) || 0;
-                                handleFormChange('seatsTotal', total);
-                                if (modalMode === "create" && formData.seatsAvailable === 0) {
-                                    handleFormChange('seatsAvailable', total);
-                                }
-                            }}
-                            placeholder="45"
-                            className={formErrors.seatsTotal ? "border-red-500" : ""}
+                            // seatsTotal is auto-set from selected subtype / layout — disable manual edits
+                            disabled
+                            readOnly
+                            placeholder="Tự động đặt từ loại xe / layout"
+                            className={formErrors.seatsTotal ? "border-red-500 bg-gray-50" : "bg-gray-50"}
+                            aria-disabled="true"
                         />
                         {formErrors.seatsTotal && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.seatsTotal}</p>
@@ -1938,9 +2002,12 @@ export default function Buses() {
                             id="seatsAvailable"
                             type="number"
                             value={formData.seatsAvailable || ""}
-                            onChange={(e) => handleFormChange('seatsAvailable', parseInt(e.target.value) || 0)}
-                            placeholder="45"
-                            className={formErrors.seatsAvailable ? "border-red-500" : ""}
+                            // seatsAvailable is derived from seatsTotal / default booked — disable manual edits
+                            disabled
+                            readOnly
+                            placeholder="Tự động tính từ loại xe / layout"
+                            className={formErrors.seatsAvailable ? "border-red-500 bg-gray-50" : "bg-gray-50"}
+                            aria-disabled="true"
                         />
                         {formErrors.seatsAvailable && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.seatsAvailable}</p>

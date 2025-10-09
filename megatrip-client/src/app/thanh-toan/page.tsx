@@ -31,6 +31,7 @@ import {
     MapPin,
     ChevronDown,
     SeparatorVertical, // added icon for collapse
+    Loader2
 } from 'lucide-react';
 
 // Khai báo mảng phương thức thanh toán
@@ -484,6 +485,9 @@ export default function ThanhToan() {
     const [needInvoice, setNeedInvoice] = useState(false);
     const [agreeTerms, setAgreeTerms] = useState(false);
 
+    // New: processing state for payment button
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
     // New promo code UI state
     const [promoCode, setPromoCode] = useState('');
     const [discountAmount, setDiscountAmount] = useState(0); // in VND
@@ -852,6 +856,7 @@ export default function ThanhToan() {
     };
 
     const handlePayment = async () => {
+        setIsProcessingPayment(true);
         // validate all before proceed
         const ok1 = validateStep(1);
         const ok2 = validateStep(2);
@@ -1131,6 +1136,9 @@ export default function ThanhToan() {
         } catch (err) {
             console.error('Payment flow error:', err);
             alert('Lỗi khi chuyển tới cổng thanh toán. Vui lòng thử lại.');
+        }
+        finally {
+            setIsProcessingPayment(false);
         }
     };
 
@@ -1862,11 +1870,12 @@ export default function ThanhToan() {
                             ) : (
                                 <Button
                                     onClick={handlePayment}
-                                    disabled={!agreeTerms}
+                                        disabled={!agreeTerms || isProcessingPayment}
                                     className="bg-green-600 hover:bg-green-700"
                                 >
-                                    <Lock className="h-4 w-4 mr-2" />
-                                    Thanh toán ngay
+                                    {/* <Lock className="h-4 w-4 mr-2" /> */}
+                                        {isProcessingPayment ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+                                        {isProcessingPayment ? 'Đang xử lý...' : 'Thanh toán ngay'}
                                 </Button>
                             )}
                         </div>
