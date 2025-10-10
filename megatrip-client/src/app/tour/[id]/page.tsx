@@ -166,14 +166,14 @@ const tourDetails = {
             '3-6 ngày': '75% tổng tiền tour',
             'Trong 2 ngày': '100% tổng tiền tour',
         },
-        children: 'Dưới 2 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). 2-11 tuổi: 80% giá tour người lớn.',
+        children: 'Dưới 4 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). 2-11 tuổi: 80% giá tour người lớn.',
         documents: 'CCCD/CMND còn hạn ít nhất 6 tháng. Trẻ em dưới 14 tuổi: Giấy khai sinh.',
         megatrip: `Megatrip hủy trước 3 ngày do không đủ số lượng hành khách: Hoàn tiền 100%. Hoàn trả phần còn lại trong 14 ngày làm việc (trừ cuối tuần, lễ Tết). Đến trễ hoặc tự ý rời tour: mất 100%.`,
         reschedule: {
             rules: {
-                'Từ 5 ngày trước': 'Không phí.',
-                '3 ngày trước': '30% giá trị tour.',
-                '2 ngày trước': '50% giá trị tour.',
+                'Từ 5 ngày trước': '50% giá trị tour',
+                '3 ngày trước': '100% giá trị tour.',
+                // '2 ngày trước': '50% giá trị tour.',
             },
             notes: 'Chịu chi phí chênh lệch (nếu có). Chỉ chuyển 1 lần, phải tham gia trong 60 ngày. Không áp dụng lễ/Tết. Chuyển cho người khác: miễn phí (trừ vé máy bay theo hãng). Bảo lưu khoản thanh toán: 6 tháng; sau đó từ bỏ, không hoàn.'
         }
@@ -280,6 +280,9 @@ export default function ChiTietTour() {
         if (isNaN(dt.getTime())) return null;
         return dt.toISOString().split('T')[0];
     };
+
+
+
 
     // Map server tour doc -> client tour shape (partial, only fields we need)
     function mapDbTourToClient(db: any) {
@@ -453,6 +456,7 @@ export default function ChiTietTour() {
     const [showImageModal, setShowImageModal] = useState(false);
     const [modalImageIndex, setModalImageIndex] = useState(0);
 
+
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
             style: 'currency',
@@ -485,10 +489,38 @@ export default function ChiTietTour() {
     };
 
     const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
-        setParticipants(prev => ({
-            ...prev,
-            [type]: Math.max(0, prev[type] + (increment ? 1 : -1))
-        }));
+        const avail = getCurrentAvailable();
+        const max = (typeof avail === 'number' && !Number.isNaN(avail)) ? Math.max(0, avail) : Infinity;
+
+        setParticipants(prev => {
+            const next = { ...prev };
+            if (increment) {
+                if (type === 'infants') {
+                    // allow at most 1 infant per adult
+                    if (prev.infants >= prev.adults) return prev;
+                    next.infants = prev.infants + 1;
+                    return next;
+                }
+                // for adults/children check seat-consuming total (infants don't consume seats)
+                const seatTotal = prev.adults + prev.children;
+                if (seatTotal >= max) return prev; // cannot increase beyond available seats
+                next[type] = Math.max(0, prev[type] + 1);
+                return next;
+            } else {
+                // decrement
+                if (type === 'adults') {
+                    const newAdults = Math.max(1, prev.adults - 1);
+                    next.adults = newAdults;
+                    // reduce infants if they now exceed adults
+                    if (next.infants > newAdults) next.infants = newAdults;
+                } else if (type === 'children') {
+                    next.children = Math.max(0, prev.children - 1);
+                } else if (type === 'infants') {
+                    next.infants = Math.max(0, prev.infants - 1);
+                }
+                return next;
+            }
+        });
     };
 
     const updateSingleRooms = (increment: boolean) => {
@@ -655,6 +687,31 @@ export default function ChiTietTour() {
         if (capacity > 0) return Math.max(0, capacity - reserved);
         return null;
     };
+    // format selectedDate as dd/MM/yyyy
+    const formatDateShort = (d?: Date | null) => {
+        if (!d) return '';
+        return d.toLocaleDateString('vi-VN');
+    };
+
+    // When selected date or availability changes, ensure participants do not exceed available seats
+    useEffect(() => {
+        const avail = getCurrentAvailable();
+        if (avail == null) return;
+        const max = Number(avail);
+        setParticipants(prev => {
+            // count only seat-consuming pax (adults + children). infants DO NOT consume seat.
+            const seatCount = prev.adults + prev.children;
+            if (seatCount <= max && prev.infants <= prev.adults) return prev;
+            // reduce children first, then adults (preserve at least 1 adult if possible)
+            let remain = max;
+            const adults = Math.min(prev.adults, Math.max(1, remain));
+            remain -= adults;
+            const children = Math.min(prev.children, Math.max(0, remain));
+            // Ensure infants do not exceed adults (1 infant per adult)
+            const infants = Math.min(prev.infants, adults);
+            return { adults, children, infants };
+        });
+    }, [selectedDate, slotInfo, tourDetails.availableDates]);
     return (
         <>
             {/* Breadcrumb */}
@@ -826,16 +883,16 @@ export default function ChiTietTour() {
                                                         : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
                                                     }`}
                                                 onClick={() => {
-                                                                                            if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
-                                                                                                    // build local midnight Date from date part to avoid timezone shift
-                                                                                                        const datePart = (dateInfo.startIso ?? dateInfo.date).split('T')[0];
-                                                                                                    const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
-                                                                                                    if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
-                                                                                                            setSelectedDate(new Date(yy, mm - 1, dd));
-                                                                                                        } else {
-                                                                                                            setSelectedDate(new Date(dateInfo.startIso ?? dateInfo.date));
-                                                                                                        }
-                                                                                                }
+                                                    if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
+                                                        // build local midnight Date from date part to avoid timezone shift
+                                                        const datePart = (dateInfo.startIso ?? dateInfo.date).split('T')[0];
+                                                        const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
+                                                        if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
+                                                            setSelectedDate(new Date(yy, mm - 1, dd));
+                                                        } else {
+                                                            setSelectedDate(new Date(dateInfo.startIso ?? dateInfo.date));
+                                                        }
+                                                    }
                                                 }}
                                             >
                                                 <div className="flex items-center justify-between">
@@ -1289,7 +1346,9 @@ export default function ChiTietTour() {
                                     )}>
                                         <CalendarIcon className="mr-2 h-4 w-4" />
                                         {selectedDate ? (
-                                            selectedDate.toLocaleDateString('vi-VN')
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{formatDateShort(selectedDate)}</span>
+                                            </div>
                                         ) : (
                                             <span>Chọn ngày</span>
                                         )}
@@ -1327,7 +1386,9 @@ export default function ChiTietTour() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
+                                                    // onClick={() => updateParticipantCount('adults', true)}
                                                     onClick={() => updateParticipantCount('adults', true)}
+                                                    disabled={(participants.adults + participants.children + participants.infants) >= (getCurrentAvailable() ?? Infinity)}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                 </Button>
@@ -1353,6 +1414,7 @@ export default function ChiTietTour() {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => updateParticipantCount('children', true)}
+                                                    disabled={(participants.adults + participants.children + participants.infants) >= (getCurrentAvailable() ?? Infinity)}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                 </Button>
@@ -1362,7 +1424,7 @@ export default function ChiTietTour() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Em bé</div>
-                                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">&lt; 4 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button
@@ -1378,214 +1440,219 @@ export default function ChiTietTour() {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => updateParticipantCount('infants', true)}
+                                                    // disable if infants already equal to adults (infant = adult rule)
+                                                    disabled={participants.infants >= participants.adults}
+                                                
                                                 >
-                                                    <Plus className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Single Room Supplement */}
-                                <div>
-                                    <Label className="text-base font-medium   block">Phụ thu phòng đơn</Label>
-                                    <div className="text-xs text-muted-foreground mb-2 text-shadow-gray-200">
-                                        <i>
-                                            Phụ thu phòng đơn dành cho khách đi một mình hoặc có nhu cầu sử dụng phòng đơn. Số phòng đơn ≤ số người lớn.
-                                        </i>                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <div className="font-medium">Số phòng đơn</div>
-                                            <div className="text-sm text-muted-foreground">+{formatPrice(tourDetails.pricing.singleSupplement)}/phòng</div>
-                                        </div>
-                                        <div className="flex items-center space-x-2">
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => updateSingleRooms(false)}
-                                                disabled={singleRooms <= 0}
-                                            >
-                                                <Minus className="h-4 w-4" />
-                                            </Button>
-                                            <span className="w-8 text-center">{singleRooms}</span>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => updateSingleRooms(true)}
-                                                disabled={singleRooms >= Math.max(1, participants.adults)}
-                                            >
                                                 <Plus className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <Separator />
+                            {/* Single Room Supplement */}
+                            <div>
+                                <Label className="text-base font-medium   block">Phụ thu phòng đơn</Label>
+                                <div className="text-xs text-muted-foreground mb-2 text-shadow-gray-200">
+                                    <i>
+                                        Phụ thu phòng đơn dành cho khách đi một mình hoặc có nhu cầu sử dụng phòng đơn. Số phòng đơn ≤ số người lớn.
+                                    </i>                                    </div>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="font-medium">Số phòng đơn</div>
+                                        <div className="text-sm text-muted-foreground">+{formatPrice(tourDetails.pricing.singleSupplement)}/phòng</div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => updateSingleRooms(false)}
+                                            disabled={singleRooms <= 0}
+                                        >
+                                            <Minus className="h-4 w-4" />
+                                        </Button>
+                                        <span className="w-8 text-center">{singleRooms}</span>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => updateSingleRooms(true)}
+                                            disabled={singleRooms >= Math.max(1, participants.adults)}
+                                        >
+                                            <Plus className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
 
-                                {/* Pricing Breakdown */}
-                                <div className="space-y-2">
-                                    {(() => {
-                                        const unit = getUnitPrices();
-                                        return (
-                                            <>
+                            <Separator />
+
+                            {/* Pricing Breakdown */}
+                            <div className="space-y-2">
+                                {(() => {
+                                    const unit = getUnitPrices();
+                                    return (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span>Người lớn ({participants.adults} × {formatPrice(unit.adult)})</span>
+                                                <span>{formatPrice(participants.adults * unit.adult)}</span>
+                                            </div>
+
+                                            {participants.children > 0 && (
                                                 <div className="flex justify-between">
-                                                    <span>Người lớn ({participants.adults} × {formatPrice(unit.adult)})</span>
-                                                    <span>{formatPrice(participants.adults * unit.adult)}</span>
+                                                    <span>Trẻ em ({participants.children} × {formatPrice(unit.child)})</span>
+                                                    <span>{formatPrice(participants.children * unit.child)}</span>
                                                 </div>
+                                            )}
 
-                                                {participants.children > 0 && (
-                                                    <div className="flex justify-between">
-                                                        <span>Trẻ em ({participants.children} × {formatPrice(unit.child)})</span>
-                                                        <span>{formatPrice(participants.children * unit.child)}</span>
-                                                    </div>
-                                                )}
-
-                                                {participants.infants > 0 && (
-                                                    <div className="flex justify-between">
-                                                        <span>Em bé ({participants.infants} × {formatPrice(unit.infant)})</span>
-                                                        <span>{formatPrice(participants.infants * unit.infant)}</span>
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
+                                            {participants.infants > 0 && (
+                                                <div className="flex justify-between">
+                                                    <span>Em bé ({participants.infants} × {formatPrice(unit.infant)})</span>
+                                                    <span>{formatPrice(participants.infants * unit.infant)}</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
 
 
 
-                                    {singleRooms > 0 && (
-                                        <div className="flex justify-between">
-                                            <span>Phụ thu phòng đơn ({singleRooms})</span>
-                                            <span>{formatPrice(singleRooms * tourDetails.pricing.singleSupplement)}</span>
-                                        </div>
-                                    )}
-
-                                    <Separator />
-
-                                    <div className="flex justify-between font-bold text-lg">
-                                        <span>Tổng cộng</span>
-                                        <span className="text-primary">{formatPrice(calculateTotal())}</span>
+                                {singleRooms > 0 && (
+                                    <div className="flex justify-between">
+                                        <span>Phụ thu phòng đơn ({singleRooms})</span>
+                                        <span>{formatPrice(singleRooms * tourDetails.pricing.singleSupplement)}</span>
                                     </div>
-
-                                    <div className="text-xs text-muted-foreground">
-                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
-                                    </div>
-                                </div>
+                                )}
 
                                 <Separator />
 
-                                {/* Important Notes */}
-                                <div className="space-y-2">
-                                    <div className="flex items-start gap-2">
-                                        <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá tour có thể thay đổi tùy theo ngày khởi hành</div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Tour sẽ được xác nhận sau khi thanh toán</div>
-                                    </div>
+                                <div className="flex justify-between font-bold text-lg">
+                                    <span>Tổng cộng</span>
+                                    <span className="text-primary">{formatPrice(calculateTotal())}</span>
                                 </div>
 
-                                {/* Action Buttons */}
-                                <div className="space-y-2 ">
-                                    <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
-                                        if (!selectedDate) return;
-                                        const selectedDateInfo = getSelectedDateInfo();
-                                        const unit = getUnitPrices();
-                                        const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
-                                        const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
-                                        const addOns = 0; // tour chưa có dịch vụ thêm
-                                        const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
-                                        const total = basePrice + taxes + addOns - discount;
+                                <div className="text-xs text-muted-foreground">
+                                    Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
+                                </div>
+                            </div>
 
-                                        // breakdown per passenger type
-                                        const passengers: any[] = [];
-                                        if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
-                                        if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
-                                        if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
+                            <Separator />
 
-                                        const params = new URLSearchParams();
-                                        params.set('type', 'tour');
-                                        params.set('route', tourDetails.name);
-                                        params.set('date', selectedDateInfo?.date || '');
-                                        params.set('time', '');
-                                        params.set('basePrice', String(basePrice));
-                                        params.set('taxes', String(taxes));
-                                        params.set('addOns', String(addOns));
-                                        params.set('discount', String(discount));
-                                        params.set('total', String(total));
-                                        params.set('adults', String(participants.adults));
-                                        params.set('children', String(participants.children));
-                                        params.set('infants', String(participants.infants));
-                                        // additional requested fields
-                                        params.set('unitAdult', String(unit.adult));
-                                        params.set('unitChild', String(unit.child));
-                                        params.set('unitInfant', String(unit.infant));
-                                        params.set('singleRooms', String(singleRooms));
-                                        params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
-                                        params.set('breakdown', JSON.stringify(passengers));
+                            {/* Important Notes */}
+                            <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                    <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
+                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá tour có thể thay đổi tùy theo ngày khởi hành</div>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                    <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
+                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">Tour sẽ được xác nhận sau khi thanh toán</div>
+                                </div>
+                            </div>
 
-                                        // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
-                                        // tourCode: use db id or fallback to generated id
-                                        const tourCode = String(tourDetails.id ?? id ?? '');
-                                        params.set('tourCode', tourCode);
-                                        // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
-                                        const startIso = selectedDateInfo?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
-                                        params.set('startDateTime', startIso);
-                                        // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
-                                        let endIso = selectedDateInfo?.endIso ?? '';
-                                        if (!endIso) {
-                                            try {
-                                                const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
-                                                const days = m ? Number(m[1]) : 1;
-                                                if (selectedDateInfo?.date) {
-                                                    const sd = new Date(selectedDateInfo.date);
-                                                    sd.setDate(sd.getDate() + Math.max(0, days - 1));
-                                                    sd.setHours(23, 59, 0, 0);
-                                                    endIso = sd.toISOString();
-                                                }
-                                            } catch (e) { endIso = ''; }
-                                        }
-                                        params.set('endDateTime', endIso);
-                                        router.push(`/thanh-toan?${params.toString()}`);
-                                    }}>
-                                        Đặt tour ngay
-                                    </Button>
-                                    {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>
+                            {/* Action Buttons */}
+                            <div className="space-y-2 ">
+                                <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
+                                    if (!selectedDate) return;
+                                    const selectedDateInfo = getSelectedDateInfo();
+                                    const unit = getUnitPrices();
+                                    const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
+                                    const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
+                                    const addOns = 0; // tour chưa có dịch vụ thêm
+                                    const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
+                                    const total = basePrice + taxes + addOns - discount;
+
+                                    // breakdown per passenger type
+                                    const passengers: any[] = [];
+                                    if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
+                                    if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
+                                    if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
+
+                                    const params = new URLSearchParams();
+                                    params.set('type', 'tour');
+                                    params.set('route', tourDetails.name);
+                                    params.set('date', selectedDateInfo?.date || '');
+                                    params.set('time', '');
+                                    params.set('basePrice', String(basePrice));
+                                    params.set('taxes', String(taxes));
+                                    params.set('addOns', String(addOns));
+                                    params.set('discount', String(discount));
+                                    params.set('total', String(total));
+                                    params.set('adults', String(participants.adults));
+                                    params.set('children', String(participants.children));
+                                    params.set('infants', String(participants.infants));
+                                    // additional requested fields
+                                    params.set('unitAdult', String(unit.adult));
+                                    params.set('unitChild', String(unit.child));
+                                    params.set('unitInfant', String(unit.infant));
+                                    params.set('singleRooms', String(singleRooms));
+                                    params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
+                                    params.set('breakdown', JSON.stringify(passengers));
+
+                                    // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
+                                    // tourCode: use db id or fallback to generated id
+                                    const tourCode = String(tourDetails.id ?? id ?? '');
+                                    params.set('tourCode', tourCode);
+                                    // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
+                                    const startIso = selectedDateInfo?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
+                                    params.set('startDateTime', startIso);
+                                    // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
+                                    let endIso = selectedDateInfo?.endIso ?? '';
+                                    if (!endIso) {
+                                        try {
+                                            const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
+                                            const days = m ? Number(m[1]) : 1;
+                                            if (selectedDateInfo?.date) {
+                                                const sd = new Date(selectedDateInfo.date);
+                                                sd.setDate(sd.getDate() + Math.max(0, days - 1));
+                                                sd.setHours(23, 59, 0, 0);
+                                                endIso = sd.toISOString();
+                                            }
+                                        } catch (e) { endIso = ''; }
+                                    }
+                                    params.set('endDateTime', endIso);
+                                    router.push(`/thanh-toan?${params.toString()}`);
+                                }}>
+                                    Đặt tour ngay
+                                </Button>
+                                {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         Thêm vào giỏ hàng
                                     </Button> */}
-                                </div>
+                            </div>
 
-                                {/* Contact */}
-                                <div className="pt-4 border-t text-center">
-                                    <div className="text-sm font-medium mb-1">Cần tư vấn?</div>
-                                    <div className="flex items-center justify-center gap-1 text-sm text-primary">
-                                        <Phone className="h-3 w-3" />
-                                        <span>1900 1234</span>
-                                    </div>
+                            {/* Contact */}
+                            <div className="pt-4 border-t text-center">
+                                <div className="text-sm font-medium mb-1">Cần tư vấn?</div>
+                                <div className="flex items-center justify-center gap-1 text-sm text-primary">
+                                    <Phone className="h-3 w-3" />
+                                    <span>1900 1234</span>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
+        </div >
 
-            {/* Image Modal */}
-            {showImageModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowImageModal(false)}>
-                    <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-                        <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow" onClick={() => setShowImageModal(false)}>
-                            <XCircle className="h-6 w-6 text-black" />
-                        </button>
-                        <img
-                            src={tourDetails.images[modalImageIndex].url}
-                            alt={tourDetails.images[modalImageIndex].title}
-                            className="w-full max-h-[80vh] object-contain rounded"
-                        />
-                        <div className="text-center text-white mt-2">{tourDetails.images[modalImageIndex].title}</div>
-                    </div>
+            {/* Image Modal */ }
+    {
+        showImageModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowImageModal(false)}>
+                <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                    <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow" onClick={() => setShowImageModal(false)}>
+                        <XCircle className="h-6 w-6 text-black" />
+                    </button>
+                    <img
+                        src={tourDetails.images[modalImageIndex].url}
+                        alt={tourDetails.images[modalImageIndex].title}
+                        className="w-full max-h-[80vh] object-contain rounded"
+                    />
+                    <div className="text-center text-white mt-2">{tourDetails.images[modalImageIndex].title}</div>
                 </div>
-            )}
+            </div>
+        )
+    }
         </>
     );
 }

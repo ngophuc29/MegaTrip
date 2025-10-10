@@ -516,29 +516,38 @@ export default function ChiTietXeDuLich() {
         // otherwise (full, no replace target) do nothing — user should click a selected seat first to mark replace
     };
 
-    // Hàm cập nhật số lượng khách
+    // Hàm cập nhật số lượng khách với ràng buộc seats (adults + children)
     const updateParticipantCount = (type: keyof typeof participants, increment: boolean) => {
+        const avail = getCurrentAvailable();
         setParticipants(prev => {
             const next = { ...prev };
-            const delta = increment ? 1 : -1;
-            // minimum: adults >= 1, others >= 0
-            const min = type === 'adults' ? 1 : 0;
-            next[type] = Math.max(min, (prev[type] || 0) + delta);
-
-            // ensure children/infants not negative
-            if (next.children < 0) next.children = 0;
-            if (next.infants < 0) next.infants = 0;
-
-            // enforce infants <= adults (each infant must have an adult)
-            if (next.infants > next.adults) next.infants = next.adults;
-
-            // ensure at least one adult
-            if (next.adults < 1) {
-                next.adults = 1;
-                if (next.infants > next.adults) next.infants = next.adults;
+            if (increment) {
+                if (type === 'infants') {
+                    // infants must be <= adults
+                    if (prev.infants >= prev.adults) return prev;
+                    next.infants = prev.infants + 1;
+                    return next;
+                }
+                // for adults/children check seat-consuming total (infants don't consume seats)
+                const seatTotal = prev.adults + prev.children;
+                if (!isFinite(avail) || seatTotal < avail) {
+                    next[type] = Math.max(type === 'adults' ? 1 : 0, prev[type] + 1);
+                    return next;
+                }
+                return prev; // cannot increase beyond available seats
+            } else {
+                // decrement
+                if (type === 'adults') {
+                    const newAdults = Math.max(1, prev.adults - 1);
+                    next.adults = newAdults;
+                    if (next.infants > newAdults) next.infants = newAdults;
+                } else if (type === 'children') {
+                    next.children = Math.max(0, prev.children - 1);
+                } else if (type === 'infants') {
+                    next.infants = Math.max(0, prev.infants - 1);
+                }
+                return next;
             }
-
-            return next;
         });
     };
 
@@ -561,6 +570,34 @@ export default function ChiTietXeDuLich() {
         if (p) setSelectedPickup(p);
         if (d) setSelectedDropoff(d);
     }, [remoteBus]);
+    const getCurrentAvailable = () => {
+        const sel = dateOptions[selectedIndex];
+        if (sel && typeof sel.seatsAvailable === 'number') return Number(sel.seatsAvailable);
+        if (typeof bus.availableSeats === 'number') return Number(bus.availableSeats);
+        return Infinity;
+    };
+
+    // clamp participants (adults+children) when selected date changes
+    useEffect(() => {
+        const avail = getCurrentAvailable();
+        if (!isFinite(avail)) return;
+        setParticipants(prev => {
+            let adults = prev.adults;
+            let children = prev.children;
+            // infants do not consume seats but must be <= adults
+            let seatCount = adults + children;
+            if (seatCount <= avail && prev.infants <= adults) return prev;
+            // reduce children first then adults, keep at least 1 adult
+            let remain = Math.max(0, avail);
+            const newAdults = Math.max(1, Math.min(adults, remain));
+            remain -= newAdults;
+            const newChildren = Math.max(0, Math.min(children, remain));
+            const newInfants = Math.min(prev.infants, newAdults);
+            return { adults: newAdults, children: newChildren, infants: newInfants };
+        });
+    }, [selectedIndex, busSlotsMap, remoteBus]);
+
+
     return (
         <>
             {/* Breadcrumb */}
@@ -685,8 +722,8 @@ export default function ChiTietXeDuLich() {
 
                         {/* Date selector: show available departureDates for user to pick */}
                         <div className="px-6 pb-4"
-                        
-                            style={{width:'55vw',overflow:'auto'}}
+
+                            style={{ width: '55vw', overflow: 'auto' }}
                         >
                             <div className="flex items-center justify-between mb-2">
                                 <div className="text-lg font-bold">Chọn ngày khởi hành</div>
@@ -950,6 +987,34 @@ export default function ChiTietXeDuLich() {
                                 <CardTitle>Đặt vé xe</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
+
+                                {/* Date list (show date, time, seats available) */}
+                                {/* <div>
+                                    <Label className="text-base font-medium mb-2 block">Chọn ngày khởi hành</Label>
+                                    <div className="space-y-2">
+                                        {dateOptions.map(opt => (
+                                            <button
+                                                key={opt.idx}
+                                                onClick={() => { if (!opt.isPast) setSelectedIndex(opt.idx); }}
+                                                disabled={opt.isPast}
+                                                className={`w-full text-left p-3 rounded-lg transition-colors ${selectedIndex === opt.idx ? 'border border-[hsl(var(--primary))] bg-primary/10 text-[hsl(var(--primary))]' : 'border border-gray-200 hover:bg-gray-50'}`}
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        <div className="font-medium">{opt.labelDate}</div>
+                                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">{opt.labelTime}</div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm">Còn {opt.seatsAvailable ?? '—'} chỗ</div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Separator /> */}
+
                                 {/* Số lượng khách */}
                                 <div>
                                     <Label className="text-base font-medium mb-3 block">Số lượng khách</Label>
@@ -973,6 +1038,8 @@ export default function ChiTietXeDuLich() {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => updateParticipantCount('adults', true)}
+                                                    // disable if adults+children reached available seats
+                                                    disabled={(participants.adults + participants.children) >= getCurrentAvailable()}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                 </Button>
@@ -997,6 +1064,7 @@ export default function ChiTietXeDuLich() {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => updateParticipantCount('children', true)}
+                                                    disabled={(participants.adults + participants.children) >= getCurrentAvailable()}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                 </Button>
@@ -1021,6 +1089,8 @@ export default function ChiTietXeDuLich() {
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() => updateParticipantCount('infants', true)}
+                                                    // infants limited by adults (one infant per adult)
+                                                    disabled={participants.infants >= participants.adults}
                                                 >
                                                     <Plus className="h-4 w-4" />
                                                 </Button>
