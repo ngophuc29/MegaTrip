@@ -872,10 +872,12 @@ export default function ChiTietTour() {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     {tourDetails.availableDates.map((dateInfo, index) => {
                                         const isSelected = selectedDate && (dateInfo.date === toLocalYMD(selectedDate));
+                                        const seats = Number(dateInfo.available ?? 0);
+                                        const isSoldOut = seats <= 0 || dateInfo.status === 'soldout';
                                         return (
                                             <div
                                                 key={index}
-                                                className={`p-3 rounded-lg cursor-pointer transition-colors relative border ${dateInfo.status === 'soldout'
+                                                className={`p-3 rounded-lg cursor-pointer transition-colors relative border ${isSoldOut
                                                     || dateInfo.isPast
                                                     ? 'bg-[hsl(var(--muted))] cursor-not-allowed opacity-60'
                                                     : isSelected
@@ -883,8 +885,7 @@ export default function ChiTietTour() {
                                                         : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
                                                     }`}
                                                 onClick={() => {
-                                                    if (dateInfo.status !== 'soldout' && !dateInfo.isPast) {
-                                                        // build local midnight Date from date part to avoid timezone shift
+                                                    if (!isSoldOut && !dateInfo.isPast) {
                                                         const datePart = (dateInfo.startIso ?? dateInfo.date).split('T')[0];
                                                         const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
                                                         if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
@@ -901,11 +902,13 @@ export default function ChiTietTour() {
                                                 </div>
                                                 <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
                                                 <div className="mt-1">
-                                                    {/* {getStatusBadge(dateInfo.status, dateInfo.available)} */}
                                                     <div className="flex items-center gap-2">
                                                         {dateInfo.isPast
                                                             ? <Badge variant="destructive">Đã khởi hành</Badge>
-                                                            : getStatusBadge(dateInfo.status, dateInfo.available)
+                                                            : (isSoldOut
+                                                                ? <Badge variant="destructive">Hết chỗ</Badge>
+                                                                : getStatusBadge(dateInfo.status, dateInfo.available)
+                                                            )
                                                         }
                                                     </div>
                                                 </div>
