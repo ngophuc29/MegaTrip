@@ -1,5 +1,5 @@
 "use client"
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Layout from '../../../components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
@@ -98,44 +98,332 @@ function useBookingFromRoute(): Booking | null {
 }
 
 function ServiceIcon({ type }: { type: string }) {
-	if (type === 'flight') return <Plane className="h-4 w-4" />;
-	if (type === 'bus') return <Bus className="h-4 w-4" />;
-	if (type === 'tour') return <MapPin className="h-4 w-4" />;
-	return <Plane className="h-4 w-4" />;
+    if (type === 'flight') return <Plane className="h-4 w-4" />;
+    if (type === 'bus') return <Bus className="h-4 w-4" />;
+    if (type === 'tour') return <MapPin className="h-4 w-4" />;
+    return <Plane className="h-4 w-4" />;
 }
 
 export default function DoiLichPage() {
-    const booking = useBookingFromRoute();
+    // const booking = useBookingFromRoute();
+    const params = useParams() as any;
+    const routeId = params?.id as string | undefined;
     const router = useRouter();
 
-    const [selectedDate, setSelectedDate] = useState<Date | undefined>(() => {
-        if (!booking) return undefined;
-        const d = new Date(booking.serviceDate + 'T00:00:00');
-        d.setDate(d.getDate() + 1);
-        return d;
-    });
-    const [selectedOptionId, setSelectedOptionId] = useState<string>('');
-    const [otpOpen, setOtpOpen] = useState(false);
-    const [otp, setOtp] = useState('');
+    // real order loaded from server (fallback to SAMPLE_BOOKINGS for dev)
+    const [order, setOrder] = useState<any | null>(null);
+    const [loadingOrder, setLoadingOrder] = useState(false);
+    useEffect(() => {
+        if (!routeId) return;
+        let mounted = true;
+        (async () => {
+            setLoadingOrder(true);
+            try {
+                const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+                const r = await fetch(`${base}/api/orders/${encodeURIComponent(routeId)}`);
+                if (!r.ok) throw new Error(String(r.status));
+                const json = await r.json();
+                const ord = json && json.data ? json.data : json;
+                if (mounted) setOrder(ord);
+            } catch (e) {
+                console.warn('Failed to load order', e);
+            } finally { if (mounted) setLoadingOrder(false); }
+        })();
+        return () => { mounted = false; };
+    }, [routeId]);
 
-    const canChange = booking && booking.status === 'confirmed';
-    const options = useMemo(() => {
-        if (!booking || !selectedDate) return [] as Option[];
-        return generateOptions(booking.total, selectedDate);
-    }, [booking, selectedDate]);
+    // selected date / option for change
+    const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+
+
+    const [selectedOptionId, setSelectedOptionId] = useState<string>('');
+
+    const [ackChecked, setAckChecked] = useState<boolean>(false);
+    const [options, setOptions] = useState<Option[]>([]);
+    const [loadingOptions, setLoadingOptions] = useState<boolean>(false);
     const selectedOption = options.find((o) => o.id === selectedOptionId);
-    const changeFeePerPax = 100000;
-    const fareDiff = selectedOption ? selectedOption.fare - (booking?.total ?? 0) : 0;
-    const extraPay = selectedOption ? Math.max(0, fareDiff) + changeFeePerPax * (booking?.passengers ?? 1) : 0;
-    const refundBack = selectedOption ? Math.max(0, -(fareDiff)) : 0;
+
+    const changeFeePerPax = 100000; // show but NOT added to final auto-pay (per your note)
+    // derived totals (updated below when order or selection changes)
+    const [newTotal, setNewTotal] = useState<number>(0);
+    const [fareDiff, setFareDiff] = useState<number>(0);
+    const [extraPay, setExtraPay] = useState<number>(0);
+    const [refundBack, setRefundBack] = useState<number>(0);
+    const [penaltyPercent, setPenaltyPercent] = useState<number>(0);
+    const [penaltyAmount, setPenaltyAmount] = useState<number>(0);
+    // helper: extract pax counts from order snapshot (adults/children/infants)
+    function paxCountsFromOrder(ord: any) {
+        const snap = ord?.metadata?.bookingDataSnapshot || ord?.metadata || {};
+        let adults = 0, children = 0, infants = 0;
+        if (Array.isArray(snap?.details?.passengers) && snap.details.passengers.length) {
+            for (const p of snap.details.passengers) {
+                const t = String(p?.type || 'adult').toLowerCase();
+                if (t === 'infant') infants++;
+                else if (t === 'child') children++;
+                else adults++;
+            }
+        } else if (snap?.passengers?.counts) {
+            const c = snap.passengers.counts;
+            adults = Number(c.adults || 0);
+            children = Number(c.children || 0);
+            infants = Number(c.infants || 0);
+        } else {
+            const item = Array.isArray(ord?.items) && ord.items[0] ? ord.items[0] : null;
+            const q = Number(item?.quantity || 1);
+            adults = q;
+        }
+        // ensure at least 1 adult if unknown
+        if (adults + children + infants === 0) adults = 1;
+        const seatCount = Math.max(1, adults + children); // infants don't consume seats
+        return { adults, children, infants, seatCount };
+    }
+
+    // when order loads, prefill selectedDate/options based on product type
+    // set initial selectedDate once when order loads (guard to avoid infinite loop)
+    useEffect(() => {
+        if (!order) return;
+        try {
+            const snap = order.metadata?.bookingDataSnapshot || order.metadata || {};
+            const serviceRaw = snap?.details?.startDateTime ?? snap?.details?.date ?? order.createdAt;
+            if (!serviceRaw) return;
+            const d = new Date(serviceRaw);
+            const iso = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+            const curIso = selectedDate ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString() : null;
+            if (curIso !== iso) setSelectedDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+        } catch (e) { /* ignore */ }
+    }, [order]);
+
+    // load product options (depends on order and selectedDate) - DOES NOT set selectedDate
+    useEffect(() => {
+        async function loadProductOptions() {
+            if (!order) { setOptions([]); return; }
+            setLoadingOptions(true);
+            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+            const { adults, children, infants, seatCount } = paxCountsFromOrder(order);
+            const type = (item?.type || '').toLowerCase();
+
+            if (type === 'flight') {
+                const baseFare = Math.round((order.total || 0) / Math.max(1, adults + children + infants));
+                const dates: Date[] = [];
+                const start = selectedDate || new Date();
+                for (let i = 0; i < 7; i++) dates.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+                const opts: Option[] = [];
+                for (const d of dates) {
+                    const gen = generateOptions(baseFare, d);
+                    for (const g of gen) opts.push({ ...g });
+                }
+                setOptions(opts);
+                return;
+            }
+
+            const productId = item?.productId || item?.itemId;
+            if (!productId) return setOptions([]);
+            try {
+                if (type === 'tour') {
+                    const r = await fetch(`${Tourbase}/api/tours/${encodeURIComponent(productId)}`);
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const tour = j && j.data ? j.data : j;
+                    const dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
+                    const adultUnit = Number(tour?.adultPrice ?? tour?.pricing?.perPax?.adultUnit ?? tour?.price ?? 0);
+                    const childUnit = Number(tour?.childPrice ?? tour?.pricing?.perPax?.childUnit ?? 0);
+                    const infantUnit = Number(tour?.infantPrice ?? tour?.pricing?.perPax?.infantUnit ?? 0);
+                    const perPax = { adult: adultUnit, child: childUnit, infant: infantUnit };
+
+                    // fetch slot info for each date in parallel to get accurate availability
+                    const dateList = (dates || []).map((d: any) => {
+                        try { return new Date(d).toISOString(); } catch { return String(d); }
+                    });
+                    const slotPromises = dateList.map(async (dtIso, idx) => {
+                        const dateIso = dtIso.split('T')[0];
+                        const slotUrl = `${Tourbase}/api/tours/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
+                        try {
+                            const sr = await fetch(slotUrl);
+                            if (!sr.ok) return { dateIso, slot: null };
+                            const sj = await sr.json();
+                            return { dateIso, slot: sj?.slot ?? sj };
+                        } catch {
+                            return { dateIso, slot: null };
+                        }
+                    });
+                    const slotResults = await Promise.all(slotPromises);
+
+                    const opts = slotResults.map((res: any, idx: number) => {
+                        const dateIso = res.dateIso;
+                        const time = tour?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        // seatsAvailable from slot API else fallback to tour.maxGroupSize or capacity or 0
+                        let seatsAvailable = null;
+                        if (res.slot) {
+                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
+                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
+                        }
+                        if (seatsAvailable == null) seatsAvailable = Number(tour?.maxGroupSize ?? tour?.capacity ?? 0);
+                        const fareTotal = (adultUnit * adults) + (childUnit * children) + (infantUnit * infants);
+                        return {
+                            id: `tour-${idx}-${dateIso}`,
+                            time,
+                            fare: fareTotal,
+                            notes: undefined,
+                            labelDate: dateIso,
+                            seatsAvailable,
+                            perPax
+                        } as any;
+                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
+                    setOptions(opts);
+                } else if (type === 'bus') {
+                    const r = await fetch(`${base}/api/buses/${encodeURIComponent(productId)}`);
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const bus = j && j.data ? j.data : j;
+                    const dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
+                    const adultUnit = Number(bus?.adultPrice || bus?.price || 0);
+                    const childUnit = Number(bus?.childPrice || 0);
+                    const infantUnit = 0;
+
+                    // try fetch slot info per date from bus slot endpoint if available
+                    const dateList = (dates || []).map((d: any) => {
+                        try { return new Date(d).toISOString(); } catch { return String(d); }
+                    });
+                    const slotPromises = dateList.map(async (dtIso) => {
+                        const dateIso = dtIso.split('T')[0];
+                        const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
+                        try {
+                            const sr = await fetch(slotUrl);
+                            if (!sr.ok) return { dateIso, slot: null };
+                            const sj = await sr.json();
+                            return { dateIso, slot: sj?.slot ?? sj };
+                        } catch {
+                            return { dateIso, slot: null };
+                        }
+                    });
+                    const slotResults = await Promise.all(slotPromises);
+
+                    const opts = slotResults.map((res: any, idx: number) => {
+                        const dateIso = res.dateIso;
+                        const time = bus?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        let seatsAvailable = null;
+                        if (res.slot) {
+                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
+                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
+                        }
+                        if (seatsAvailable == null) seatsAvailable = Number(bus?.seatsAvailable ?? bus?.seatsTotal ?? 0);
+                        return {
+                            id: `bus-${idx}-${dateIso}`,
+                            time,
+                            fare: adultUnit * (adults + children) + infantUnit * infants,
+                            notes: undefined,
+                            labelDate: dateIso,
+                            seatsAvailable,
+                            perPax: { adult: adultUnit, child: childUnit, infant: infantUnit }
+                        } as any;
+                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
+                    setOptions(opts);
+                } else {
+                    setOptions([]);
+                }
+            } catch (e) {
+                console.warn('load product options failed', e);
+                setOptions([]);
+            } finally {
+                setLoadingOptions(false);
+            }
+        }
+        loadProductOptions();
+    }, [order, selectedDate]);
+
+
+    // recompute totals when selection or order/options change
+    useEffect(() => {
+        if (!order) { setNewTotal(0); setFareDiff(0); setExtraPay(0); setRefundBack(0); return; }
+        const { adults, children, infants } = paxCountsFromOrder(order);
+        // compute new total base (sum of pax * unit) then add proportional tax from original order
+        let computedNewTotalBase = 0;
+        if (selectedOption && (selectedOption as any).perPax) {
+            const pp = (selectedOption as any).perPax;
+            computedNewTotalBase = (Number(pp.adult || 0) * adults) + (Number(pp.child || 0) * children) + (Number(pp.infant || 0) * infants);
+        } else if (selectedOption) {
+            const totalPax = adults + children + infants;
+            computedNewTotalBase = Number(selectedOption.fare || 0) * Math.max(1, totalPax);
+        } else {
+            computedNewTotalBase = 0;
+        }
+        // original order base & tax (prefer snapshot pricing)
+        const origBase = Number(order?.metadata?.bookingDataSnapshot?.pricing?.basePrice ?? order?.subtotal ?? (order?.total ? (Number(order.total || 0) - Number(order.tax || 0)) : 0));
+        const origTax = Number(order?.metadata?.bookingDataSnapshot?.pricing?.taxes ?? order?.tax ?? 0);
+        const computedNewTax = origBase > 0 ? Math.round(origTax * (computedNewTotalBase / Math.max(1, origBase))) : origTax;
+        const computedNewTotal = computedNewTotalBase + computedNewTax;
+        const currentTotal = Number(order.total || 0);
+        const diff = computedNewTotal - currentTotal;
+        // compute days until original service date (used to pick penalty policy)
+        let daysUntilService = Infinity;
+        try {
+            const sdRaw = order?.metadata?.bookingDataSnapshot?.details?.startDateTime ?? order?.metadata?.bookingDataSnapshot?.details?.date ?? booking?.serviceDate ?? order?.createdAt;
+            if (sdRaw) {
+                const sd = new Date(sdRaw);
+                const today = new Date();
+                const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+                const t1 = Date.UTC(sd.getFullYear(), sd.getMonth(), sd.getDate());
+                daysUntilService = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+            }
+        } catch { daysUntilService = Infinity; }
+
+        // penalty policy:
+        // days > 5 => 30%
+        // 3 < days <= 5 => 50%
+        // days <= 3 => 100%
+        let pp = 0;
+        if (typeof daysUntilService === 'number') {
+            if (daysUntilService > 5) pp = 0.30;
+            else if (daysUntilService > 3) pp = 0.50;
+            else pp = 1.00;
+        }
+        const penAmount = Math.round(Number(currentTotal) * pp);
+
+        // determine final pay / refund after applying penalty
+        let amountDue = 0;
+        let refund = 0;
+        if (diff >= 0) {
+            // customer needs to pay fare difference + penalty
+            amountDue = Math.max(0, diff) + penAmount;
+            refund = 0;
+        } else {
+            // there is a refund gross; penalty reduces refund (if penalty > refund, customer pays difference)
+            const refundGross = Math.max(0, -diff);
+            if (refundGross > penAmount) {
+                refund = refundGross - penAmount;
+                amountDue = 0;
+            } else {
+                refund = 0;
+                amountDue = penAmount - refundGross;
+            }
+        }
+
+
+        // per your request: do NOT include change fee into automatic total; show fee separately
+        // const pay = Math.max(0, diff);
+        // const refund = Math.max(0, -diff);
+        // setNewTotal(computedNewTotal);
+        // setFareDiff(diff);
+        // setExtraPay(pay);
+        // setRefundBack(refund);
+        setNewTotal(computedNewTotal);
+        setFareDiff(diff);
+        setExtraPay(amountDue);
+        setRefundBack(refund);
+        setPenaltyPercent(pp);
+        setPenaltyAmount(penAmount);
+    }, [order, selectedOption, options]);
 
     function saveRequest() {
-        if (!booking || !selectedDate || !selectedOption) return '';
+        if (!booking || !selectedDateLabel || !selectedOption) return '';
         const id = 'RQ-' + Date.now();
         const req = {
             id, type: 'change', bookingId: booking.id, title: booking.title, status: 'submitted', createdAt: new Date().toISOString(),
             extraPay: extraPay > 0 ? extraPay : -refundBack,
-            details: { newDate: selectedDate.toISOString().slice(0, 10), time: selectedOption.time, changeFeePerPax, passengers: booking.passengers, fareDiff },
+            details: { newDate: selectedDateLabel, time: selectedOption.time, changeFeePerPax, passengers: booking.passengers, fareDiff },
         } as any;
         try {
             const arr = JSON.parse(localStorage.getItem('userRequests') || '[]');
@@ -147,26 +435,301 @@ export default function DoiLichPage() {
         return id;
     }
 
-    const handleConfirm = () => { if (!booking || !selectedDate || !selectedOption) return; setOtp(''); setOtpOpen(true); };
-
-    const confirmOtp = () => {
-        if (otp.trim().length !== 6) { toast({ title: 'Mã OTP chưa hợp lệ', description: 'Nhập đủ 6 số để xác nhận' }); return; }
+    // const handleConfirm = () => { if (!booking || !selectedDate || !selectedOption) return; setOtp(''); setOtpOpen(true); };
+    const handleConfirm = () => {
+        if (!booking || !selectedDateLabel || !selectedOption) {
+            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày và chuyến mới' });
+            return;
+        }
+        if (!ackChecked) {
+            toast({ title: 'Chưa đồng ý', description: 'Bạn phải đồng ý chính sách trước khi xác nhận' });
+            return;
+        }
         const rid = saveRequest();
         toast({ title: 'Đã gửi yêu cầu đổi lịch', description: `Mã yêu cầu ${rid}` });
         if (typeof window !== 'undefined') window.history.replaceState({ activeTab: 'requests' }, '');
         router.push('/tai-khoan');
     };
+    // Map server Order shape -> booking summary used by this page
+    function mapOrderToBooking(order: any): Booking {
+        if (!order) return null as any;
+        const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+        const snapshot = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+        // determine service date
+        const serviceRaw = snapshot?.details?.startDateTime ?? snapshot?.details?.date ?? item?.travelDate ?? order?.createdAt;
+        let serviceDate = '';
+        try { serviceDate = new Date(serviceRaw).toISOString().slice(0, 10); } catch { serviceDate = String(serviceRaw || '').slice(0, 10); }
+        // booking date
+        const bookingDate = order?.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : (order?.bookingDate || new Date().toISOString().slice(0, 10));
+        // passengers count: fallback to snapshot counts or item.quantity
+        let passengers = 0;
+        if (Array.isArray(snapshot?.details?.passengers) && snapshot.details.passengers.length) {
+            passengers = snapshot.details.passengers.length;
+        } else if (snapshot?.passengers?.counts) {
+            const c = snapshot.passengers.counts;
+            passengers = Number(c.adults || 0) + Number(c.children || 0) + Number(c.infants || 0);
+        } else {
+            passengers = Number(item?.quantity || order?.passengers || 1);
+        }
+        // title/details fallback
+        const title = item?.title || item?.name || order?.title || (item ? `${item.type || ''} ${item.productId || item.itemId || ''}` : 'Đặt chỗ');
+        const details = item?.details || item?.description || order?.notes?.[0] || '';
 
+        // status mapping
+        const status = (order?.orderStatus || order?.status || order?.paymentStatus || 'pending');
+        // build Booking
+        return {
+            id: order.orderNumber || order._id || String(order.id || ''),
+            type: (item?.type || order?.type || 'tour') as any,
+            status: (status === 'cancelled' || status === 'completed' || status === 'confirmed') ? status : 'confirmed',
+            bookingDate: bookingDate,
+            serviceDate: serviceDate,
+            title,
+            details,
+            passengers,
+            total: Number(order.total || 0),
+        } as Booking;
+    }
+    // use loaded order -> map to booking shape for display; fallback to SAMPLE_BOOKINGS if order not found
+    const booking = order ? (mapOrderToBooking(order)) : (routeId ? null : useBookingFromRoute());
+    const groupedOptions = useMemo(() => {
+        const g: Record<string, Option[]> = {};
+        const excludeDate = booking?.serviceDate ?? null;
+        const now = new Date();
+        const todayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+        const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+        for (const o of options) {
+            const d = (o as any).labelDate || (o.id.split('-')[2] ?? null);
+            if (!d) continue;
+            // skip current service date
+            if (excludeDate && d === excludeDate) continue;
+            // skip past dates
+            if (d < todayIso) continue;
+
+            // if date is today, drop options that are already departed (compare HH:mm)
+            if (d === todayIso) {
+                const timeStr = String((o as any).time || '').trim();
+                const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+                if (m) {
+                    const hh = Number(m[1]);
+                    const mm = Number(m[2]);
+                    if (!Number.isNaN(hh) && !Number.isNaN(mm)) {
+                        const optMinutes = hh * 60 + mm;
+                        if (optMinutes <= nowMinutes) {
+                            // this option already departed — skip it
+                            continue;
+                        }
+                    }
+                }
+                // if no parsable time, keep the option (can't decide)
+            }
+
+            if (!g[d]) g[d] = [];
+            g[d].push(o);
+        }
+
+        // remove dates that have no remaining options (safety; should not be needed)
+        Object.keys(g).forEach(k => { if (!g[k] || g[k].length === 0) delete g[k]; });
+        return g;
+    }, [options, booking?.serviceDate]);
+    // selected date label (YYYY-MM-DD) chosen from right column
+    const [selectedDateLabel, setSelectedDateLabel] = useState<string | null>(null);
+    const optionsForSelectedDate = useMemo(() => {
+        if (!selectedDateLabel) return [] as Option[];
+        return groupedOptions[selectedDateLabel] ?? [];
+    }, [groupedOptions, selectedDateLabel]);
+
+    const canChange = (() => {
+        try {
+            const sd = booking?.serviceDate ? new Date(booking.serviceDate) : null;
+            if (!sd) return false;
+            const today = new Date();
+            const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+            const t1 = Date.UTC(sd.getFullYear(), sd.getMonth(), sd.getDate());
+            const days = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+            return typeof days === 'number' ? days > 3 : false;
+        } catch {
+            return false;
+        }
+    })();
+
+    // extract service time from order snapshot or parse from booking.details
+    // extract service time from order snapshot or parse from booking.details (guarded)
+    const serviceTime = (() => {
+        const snap = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+        const raw = snap?.details?.startDateTime ?? snap?.details?.startTime ?? snap?.details?.time ?? null;
+        if (raw) {
+            try {
+                const dt = new Date(raw);
+                if (!Number.isNaN(dt.getTime())) return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+            } catch { }
+        }
+        // booking may be null — guard before accessing details
+        const detailsStr = booking?.details ?? '';
+        const m = String(detailsStr).match(/(\d{1,2}:\d{2})/);
+        return m ? m[1] : '-';
+    })();
+
+    const [assignedSeats, setAssignedSeats] = useState<string[]>([]);
+    const [seatMap, setSeatMap] = useState<any[]>([]); // seat objects { seatId, label, status, reservationId, type, pos }
+    const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+    // Clear selected seats & current seatMap when user picks a different date (avoid stale selection)
+    useEffect(() => {
+        // only for bus bookings — no-op for others
+        if (!booking || booking.type !== 'bus') return;
+        // when selectedDateLabel changes reset selections before loading new map
+        setSelectedSeats((prev) => (prev && prev.length ? [] : prev));
+        setSeatMap((prev) => (prev && prev.length ? [] : prev));
+    }, [selectedDateLabel, booking?.type]);
+    // load assigned seats from order (try snapshot -> ticketIds)
+    useEffect(() => {
+        async function loadAssigned() {
+            if (!order) { setAssignedSeats([]); return; }
+            try {
+                const snap = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+                // snapshot passengers may include seat info
+                const paxArr = Array.isArray(snap?.details?.passengers) ? snap.details.passengers : [];
+                const seatsFromSnap: string[] = [];
+                for (const p of paxArr) {
+                    if (p?.seat || p?.seatId) seatsFromSnap.push(String(p.seat || p.seatId));
+                }
+                if (seatsFromSnap.length) { setAssignedSeats(seatsFromSnap); return; }
+
+                // fallback: fetch tickets by ticketIds if exists
+                const tIds = Array.isArray(order?.ticketIds) ? order.ticketIds : [];
+                if (tIds.length) {
+                    const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+                    const seatList: string[] = [];
+                    await Promise.all(tIds.map(async (tid: any) => {
+                        try {
+                            const id = String(tid && (tid.$oid || tid) || tid);
+                            const r = await fetch(`${base}/api/tickets/${encodeURIComponent(id)}`);
+                            if (!r.ok) return;
+                            const j = await r.json();
+                            const tk = j && j.data ? j.data : j;
+                            if (Array.isArray(tk?.seats) && tk.seats.length) {
+                                for (const s of tk.seats) seatList.push(String(s));
+                            } else if (tk?.seat) seatList.push(String(tk.seat));
+                        } catch (e) { /* ignore individual failures */ }
+                    }));
+                    if (seatList.length) { setAssignedSeats(seatList); return; }
+                }
+
+                setAssignedSeats([]); // nothing found
+            } catch (e) {
+                console.warn('loadAssignedSeats failed', e);
+                setAssignedSeats([]);
+            }
+        }
+        loadAssigned();
+    }, [order]);
+
+    // load seatmap for selected date when booking is bus
+    useEffect(() => {
+        async function loadSeatMapForDate() {
+            // clear only when nothing to load
+            if (!selectedDateLabel || !booking || booking.type !== 'bus') {
+                setSeatMap([]);
+                setSelectedSeats([]);
+                return;
+            }
+            const item = Array.isArray(order?.items) && order.items[0] ? order.items[0] : null;
+            const productId = item?.productId || item?.itemId;
+            if (!productId) {
+                setSeatMap([]);
+                setSelectedSeats([]);
+                return;
+            }
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            try {
+                // try slot endpoint first
+                const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(selectedDateLabel)}`;
+                const r = await fetch(slotUrl);
+                if (r.ok) {
+                    const j = await r.json();
+                    const slot = j?.slot ?? j;
+                    // prefer seatmapFill / seatMap / seatmap
+                    const sm = slot?.seatmapFill ?? slot?.seatMap ?? slot?.seatmap ?? slot?.seatMapFill ?? null;
+                    if (Array.isArray(sm) && sm.length) {
+                        setSeatMap(sm.map((s: any) => ({
+                            seatId: s.seatId || s.label || s.id || '',
+                            label: s.label || s.seatId || '',
+                            status: s.status || 'available',
+                            reservationId: s.reservationId || s.reservation || null,
+                            type: s.type || 'seat',
+                            pos: s.pos || null
+                        })));
+                        return;
+                    }
+                    // fallback to seatsTotal -> generate placeholders
+                    const seatsTotal = Number(slot?.seatsTotal ?? slot?.capacity ?? 0);
+                    if (seatsTotal > 0) {
+                        const arr = Array.from({ length: seatsTotal }).map((_, i) => ({ seatId: `S${i + 1}`, label: `S${i + 1}`, status: 'available', type: 'seat' }));
+                        setSeatMap(arr);
+                        return;
+                    }
+                }
+                // fallback: fetch bus entity to derive seatMap
+                const br = await fetch(`${base}/api/buses/${encodeURIComponent(productId)}`);
+                if (br.ok) {
+                    const bj = await br.json();
+                    const bus = bj && bj.data ? bj.data : bj;
+                    const sm2 = Array.isArray(bus?.seatMap) ? bus.seatMap : [];
+                    if (sm2.length) {
+                        setSeatMap(sm2.map((s: any) => ({
+                            seatId: s.seatId || s.label || '',
+                            label: s.label || s.seatId || '',
+                            status: s.status || 'available',
+                            reservationId: s.reservationId || null,
+                            type: s.type || 'seat',
+                            pos: s.pos || null
+                        })));
+                        return;
+                    }
+                }
+                // if nothing found, ensure empty map
+                setSeatMap([]);
+            } catch (e) {
+                console.warn('loadSeatMapForDate failed', e);
+                setSeatMap([]);
+            }
+        }
+        loadSeatMapForDate();
+        // depend on stable primitive fields to avoid loops caused by object identity changes
+    }, [booking?.type, selectedDateLabel, order?.items?.[0]?.productId]);
+
+    // toggle seat selection (only available seats allowed) - limit by seatCount
+    function toggleSeat(seatId: string) {
+        if (!seatId) return;
+        const pc = paxCountsFromOrder(order || ({} as any));
+        const max = pc.seatCount;
+        const existing = selectedSeats.includes(seatId);
+        if (existing) {
+            setSelectedSeats(selectedSeats.filter(s => s !== seatId));
+            return;
+        }
+        if (selectedSeats.length >= max) {
+            toast({ title: 'Giới hạn chỗ', description: `Bạn chỉ được chọn tối đa ${max} ghế` });
+            return;
+        }
+        // ensure seat exists and available
+        const seat = seatMap.find(s => s.seatId === seatId);
+        if (seat && seat.status !== 'available') {
+            toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
+            return;
+        }
+        setSelectedSeats([...selectedSeats, seatId]);
+    }
     if (!booking) {
         return (
-            <Layout>
+            <>
                 <div className="container py-6">
                     <Card><CardContent className="p-6">Không tìm thấy đơn hàng.</CardContent></Card>
                 </div>
-            </Layout>
+            </>
         );
     }
-
     return (
         <>
             <div className="container py-6">
@@ -193,80 +756,225 @@ export default function DoiLichPage() {
                                             <span className="ml-2 text-xs text-muted-foreground rounded px-2 py-0.5 border">{booking.type === 'flight' ? 'Máy bay' : booking.type === 'bus' ? 'Xe' : 'Tour'}</span>
                                         </div>
                                         <div className="text-sm text-muted-foreground">{booking.details}</div>
-                                        <div className="text-sm text-muted-foreground">Ngày hiện tại: {booking.serviceDate}</div>
+                                        {/* <div className="text-sm text-muted-foreground">Ngày hiện tại: {booking.serviceDate}</div> */}
+                                        <div className="text-sm text-muted-foreground">
+                                            <div>Ngày đặt: <span className="font-medium">{booking.bookingDate}</span></div>
+                                            <div>Ngày khởi hành: <span className="font-medium">{booking.serviceDate}</span></div>
+                                        </div>
                                     </div>
                                     <div className="text-right">
                                         <div className="text-xs text-muted-foreground">Giá hiện tại</div>
-                                        <div className="text-xl font-bold text-primary">{formatPrice(booking.total)}</div>
+                                        <div className="text-xl font-bold text-primary">{formatPrice(order ? Number(order.total || 0) : booking.total)}</div>
                                     </div>
                                 </div>
 
                                 <Separator />
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div>
-                                        <Label className="mb-2 block">Chọn ngày mới</Label>
-                                        <div className="rounded border p-2">
-                                            <Calendar
-                                                mode="single"
-                                                selected={selectedDate}
-                                                onSelect={(d) => setSelectedDate(d)}
-                                                disabled={(d) => {
-                                                    const today = new Date();
-                                                    today.setHours(0, 0, 0, 0);
-                                                    return d < today;
-                                                }}
-                                                initialFocus
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <Label className="mb-2 block">Chọn chuyến/giờ</Label>
-                                        {selectedDate ? (
-                                            <RadioGroup value={selectedOptionId} onValueChange={setSelectedOptionId}>
-                                                <div className="space-y-2">
-                                                    {options.map((opt) => (
-                                                        <label key={opt.id} className="flex items-center justify-between border rounded p-3 cursor-pointer">
-                                                            <div className="flex items-center gap-3">
-                                                                <RadioGroupItem value={opt.id} />
-                                                                <div>
-                                                                    <div className="font-medium flex items-center gap-2">
-                                                                        <Clock className="h-4 w-4" /> {opt.time}
-                                                                        {opt.notes && (
-                                                                            <span className="text-xs text-muted-foreground">• {opt.notes}</span>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="text-xs text-muted-foreground">Ngày {selectedDate.toLocaleDateString('vi-VN')}</div>
+                                    {/* Left column: Chuyến cũ (top) + Chuyến mới (below) */}
+                                    <div className="space-y-6">
+                                        {/* Chuyến cũ */}
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Chuyến cũ</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <div className="font-medium">{booking.title}</div>
+                                                        <div className="text-sm text-muted-foreground">{booking.details}</div>
+                                                        <div className="text-sm mt-2">Ngày khởi hành: <span className="font-semibold">{booking.serviceDate}</span></div>
+                                                        {assignedSeats && assignedSeats.length > 0 && (
+                                                            <div className="mt-2 text-sm">
+                                                                <div className="font-medium">Ghế đã đặt</div>
+                                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                                    {assignedSeats.map(s => <span key={s} className="px-2 py-1 rounded border text-sm">{s}</span>)}
                                                                 </div>
                                                             </div>
-                                                            <div className="text-right">
-                                                                <div className="text-sm">{formatPrice(opt.fare)}</div>
-                                                                {opt.fare > booking.total && (
-                                                                    <div className="text-xs text-orange-600 flex items-center gap-1 justify-end"><TrendingUp className="h-3 w-3" /> +{formatPrice(opt.fare - booking.total)}</div>
-                                                                )}
-                                                            </div>
-                                                        </label>
-                                                    ))}
+                                                        )}
+                                                        {/* <div className="text-sm">Giờ: <span className="font-medium">{serviceTime}</span></div> */}
+                                                        {/* <div className="text-sm">Ngày đặt: <span className="font-medium">{booking.bookingDate}</span></div> */}
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm text-muted-foreground">Tổng hiện tại</div>
+                                                        <div className="text-lg font-bold">{formatPrice(order ? Number(order.total || 0) : booking.total)}</div>
+                                                    </div>
                                                 </div>
-                                            </RadioGroup>
-                                        ) : (
-                                            <div className="text-sm text-muted-foreground border rounded p-3">Vui lòng chọn ngày để xem chuyến phù hợp.</div>
-                                        )}
+
+                                                <Separator className="my-3" />
+                                                {/* passenger breakdown */}
+                                                {(() => {
+                                                    const pc = paxCountsFromOrder(order || ({} as any));
+                                                    return (
+                                                        <div className="space-y-1 text-sm">
+                                                            <div>Người lớn: <strong>{pc.adults}</strong></div>
+                                                            <div>Trẻ em: <strong>{pc.children}</strong></div>
+                                                            <div>Em bé: <strong>{pc.infants}</strong></div>
+                                                            <div>Loại vé: <strong>{booking.type?.toUpperCase()}</strong></div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </CardContent>
+                                        </Card>
+
+                                        {/* Chuyến mới — format giống chuyến cũ */}
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Chuyến mới</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <div className="font-medium">{booking.title}</div>
+                                                        <div className="text-sm text-muted-foreground">{booking.details}</div>
+                                                        <div className="text-sm mt-2">
+                                                            Ngày khởi hành: <span className="font-semibold">{selectedDateLabel ?? 'Chưa chọn'}</span>
+                                                        </div>
+                                                        {selectedSeats && selectedSeats.length > 0 && (
+                                                            <div className="mt-2 text-sm">
+                                                                <div className="font-medium">Ghế mới chọn</div>
+                                                                <div className="flex flex-wrap gap-2 mt-1">
+                                                                    {selectedSeats.map(s => <span key={s} className="px-2 py-1 rounded border text-sm">{s}</span>)}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {/* <div className="text-sm">Giờ: <span className="font-medium">{selectedOption ? selectedOption.time : '-'}</span></div> */}
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm text-muted-foreground">Tổng chuyến mới <span className='font-bold'>(đã thêm thuế)</span></div>
+                                                        <div className="text-lg font-bold">{selectedOption ? formatPrice(newTotal) : <span className="text-muted-foreground">Chưa chọn</span>}</div>
+                                                    </div>
+                                                </div>
+
+                                                <Separator className="my-3" />
+                                                {/* passenger breakdown (same as chuyến cũ) */}
+                                                {(() => {
+                                                    const pc = paxCountsFromOrder(order || ({} as any));
+                                                    return (
+                                                        <div className="space-y-1 text-sm">
+                                                            <div>Người lớn: <strong>{pc.adults}</strong></div>
+                                                            <div>Trẻ em: <strong>{pc.children}</strong></div>
+                                                            <div>Em bé: <strong>{pc.infants}</strong></div>
+                                                            <div>Loại vé: <strong>{booking.type?.toUpperCase()}</strong></div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    {/* Right column: chỉ hiển thị các ngày có đủ chỗ để đổi */}
+                                    <div>
+                                        <Card>
+                                            <CardHeader>
+                                                <CardTitle>Chọn ngày để đổi</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+
+                                                <div className="" style={{ height: '51.6vh', overflow: 'auto' }}>
+
+
+                                                    {/* If a date selected, show available times for that date (optional) */}
+                                                    {optionsForSelectedDate.length > 0 && (
+                                                        <>
+                                                            <div className="text-sm font-medium mb-2">Bạn đã chọn </div>
+                                                            <RadioGroup value={selectedOptionId} onValueChange={setSelectedOptionId}>
+                                                                <div className="space-y-2">
+                                                                    {optionsForSelectedDate.map((opt) => {
+                                                                        const pc = paxCountsFromOrder(order || ({} as any));
+                                                                        const perPax = (opt as any).perPax || null;
+                                                                        const previewTotal = perPax
+                                                                            ? (Number(perPax.adult || 0) * pc.adults) + (Number(perPax.child || 0) * pc.children) + (Number(perPax.infant || 0) * pc.infants)
+                                                                            : (Number(opt.fare || 0) * Math.max(1, (pc.adults + pc.children + pc.infants)));
+                                                                        return (
+                                                                            <label key={opt.id} className={`flex items-center justify-between rounded p-2 cursor-pointer`}>
+                                                                                <div className="flex items-center gap-3">
+                                                                                    <RadioGroupItem value={opt.id} />
+                                                                                    <div>
+                                                                                        <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {opt.time}</div>
+                                                                                        {(opt as any).labelDate && <div className="text-xs text-muted-foreground">Ngày {(opt as any).labelDate}</div>}
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="text-right">
+                                                                                    <div className="text-sm">Phí mới  <span className='font-bold'>(chưa kèm thuế)</span>{formatPrice(previewTotal)}</div>
+                                                                                    {booking?.type !== 'bus' && typeof (opt as any).seatsAvailable !== 'undefined' && <div className="text-xs">{(opt as any).seatsAvailable} chỗ</div>}
+                                                                                </div>
+                                                                            </label>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </RadioGroup>
+                                                        </>
+                                                    )}
+                                                    <Separator className="my-3" />
+
+
+                                                    <div className="text-sm text-muted-foreground mb-3">Chỉ hiển thị ngày còn đủ chỗ theo số khách của đơn</div>
+                                                    <div className="space-y-2">
+                                                        {loadingOptions ? (
+                                                            <div className="text-sm text-muted-foreground border rounded p-3">Đang tải danh sách ngày, xin đợi...</div>
+                                                        ) : Object.keys(groupedOptions).length ? (
+                                                            Object.keys(groupedOptions).sort().map((date) => {
+                                                                // pick seatsAvailable from first option of that date
+                                                                const opts = groupedOptions[date];
+                                                                const seats = opts[0]?.seatsAvailable ?? '-';
+                                                                const selected = selectedDateLabel === date;
+                                                                return (
+                                                                    <button
+                                                                        key={date}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setSelectedDateLabel(date);
+                                                                            // auto-select first time option for chosen date
+                                                                            if (opts && opts.length) setSelectedOptionId(opts[0].id);
+                                                                        }}
+                                                                        className={`w-full flex items-center justify-between p-3 rounded border transition ${selected ? 'border-2 border-[hsl(var(--primary))] bg-primary/10' : 'hover:bg-[hsl(var(--primary))/0.03]'}`}
+                                                                    >
+                                                                        <div>
+                                                                            <div className="font-medium">{date}</div>
+                                                                            {/* <div className="text-xs text-muted-foreground">Chọn ngày</div> */}
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            {/* hide seat count for bus orders */}
+                                                                            {booking?.type !== 'bus' && <div className="text-sm">{seats} chỗ</div>}
+                                                                        </div>
+                                                                    </button>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <div className="text-sm text-muted-foreground border rounded p-3">Không có ngày phù hợp hoặc hết chỗ.</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+
+                                            </CardContent>
+                                        </Card>
                                     </div>
                                 </div>
 
-                                <div className="flex gap-2">
-                                    <Button variant="outline" onClick={() => router.back()}>Hủy</Button>
-                                    <Button onClick={handleConfirm} disabled={!canChange || !selectedDate || !selectedOption}>
-                                        <Ticket className="h-4 w-4 mr-1" />
-                                        Xác nhận đổi lịch
-                                    </Button>
+                                <div className=" ">
+                                    <div className="mb-5">
+
+                                        <label className="flex items-center gap-2 text-sm mb-2 sm:mb-0  ">
+                                            <input type="checkbox" checked={ackChecked} onChange={(e) => setAckChecked(e.target.checked)} className="w-4 h-4" />
+                                            <span>Bạn đã đọc chính sách và vẫn muốn đổi lịch?</span>
+                                        </label>
+                                    </div>
+                                    <div className="flex gap-2">
+
+                                        <Button variant="outline" onClick={() => router.back()}>Hủy</Button>
+                                        <Button onClick={handleConfirm} disabled={!canChange || !selectedDateLabel || !selectedOption}>
+                                            <Ticket className="h-4 w-4 mr-1" />
+                                            Xác nhận đổi lịch
+                                        </Button>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
                     </div>
-
-                    <div className="space-y-4">
+                    {/* Right column: Tóm tắt chi phí */}
+                    <div className="space-y-6">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Tóm tắt chi phí</CardTitle>
@@ -274,13 +982,13 @@ export default function DoiLichPage() {
                             <CardContent className="space-y-2">
                                 <div className="flex items-center justify-between text-sm">
                                     <span>Giá hiện tại</span>
-                                    <span className="font-medium">{formatPrice(booking.total)}</span>
+                                    <span className="font-medium">{formatPrice(order ? Number(order.total || 0) : booking.total)}</span>
                                 </div>
-                                {selectedOption && (
+                                {selectedOption ? (
                                     <>
                                         <div className="flex items-center justify-between text-sm">
                                             <span>Giá chuyến mới</span>
-                                            <span className="font-medium">{formatPrice(selectedOption.fare)}</span>
+                                            <span className="font-medium">{formatPrice(newTotal)}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span>Chênh lệch giá</span>
@@ -289,8 +997,12 @@ export default function DoiLichPage() {
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
-                                            <span>Phí đổi lịch</span>
-                                            <span className="font-medium">{formatPrice(changeFeePerPax * booking.passengers)}</span>
+                                            <span>Phạt theo chính sách ({Math.round(penaltyPercent * 100)}%)</span>
+                                            <span className="font-medium text-red-600">{formatPrice(penaltyAmount)}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span>Phí đổi lịch (tham khảo)</span>
+                                            <span className="font-medium">{formatPrice(changeFeePerPax)}</span>
                                         </div>
                                         <Separator />
                                         {extraPay > 0 ? (
@@ -304,55 +1016,59 @@ export default function DoiLichPage() {
                                                 <span className="text-lg font-bold text-green-600">{formatPrice(refundBack)}</span>
                                             </div>
                                         )}
+
                                     </>
+                                ) : (
+                                    <div className="text-sm text-muted-foreground">Chưa chọn chuyến mới để hiển thị tóm tắt.</div>
                                 )}
-                                {!canChange && (
-                                    <div className="text-sm text-muted-foreground">Chỉ có thể đổi lịch với đơn đã xác nhận.</div>
-                                )}
-                                <div className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                                    <CalendarDays className="h-3 w-3" />
-                                    Có thể đổi lịch trước giờ khởi hành, tùy theo quy định của nhà cung cấp.
+                                <div className="text-md text-muted-foreground mt-3">
+                                    <strong>Chính sách đổi lịch
+                                        (
+                                        <i>
+                                            tính từ ngày đổi đến ngày khởi hành
+                                        </i>)
+                                    </strong><br />
+                                    - Trên 5 ngày: 30% giá trị tour<br />
+                                    - Từ 5 ngày trước: 50% giá trị tour<br />
+                                    - 3 ngày trước: 100% giá trị tour
                                 </div>
                             </CardContent>
                         </Card>
+                        {booking.type === 'bus' && selectedDateLabel && seatMap.length > 0 && (
+                            <>
+                                <Separator className="my-3" />
+                                <div className="text-sm font-medium mb-2">Sơ đồ ghế ({selectedDateLabel})</div>
+                                <div className="grid grid-cols-6 gap-2">
+                                    {seatMap.map((s) => {
+                                        const id = s.seatId || s.label;
+                                        const isBooked = s.status !== 'available';
+                                        const isSelected = selectedSeats.includes(id);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={id}
+                                                onClick={() => toggleSeat(id)}
+                                                disabled={isBooked && !isSelected}
+                                                className={`text-xs p-2 rounded border flex items-center justify-center ${isBooked ? 'bg-red-100 text-red-800 cursor-not-allowed' : isSelected ? 'bg-primary/10 border-[hsl(var(--primary))]' : 'hover:bg-slate-50'}`}
+                                            >
+                                                <div className="text-center">
+                                                    <div className="font-medium">{s.label || id}</div>
+                                                    <div className="text-[10px] text-muted-foreground">{s.type || ''}</div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-2">Chọn tối đa {paxCountsFromOrder(order).seatCount} ghế. Ghế đỏ đã bị đặt.</div>
+                            </>
+                        )}
                     </div>
+
+
                 </div>
             </div>
 
-            {/* OTP Dialog */}
-            <Dialog open={otpOpen} onOpenChange={setOtpOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Xác minh OTP</DialogTitle>
-                        <DialogDescription>Nhập mã 6 số đã gửi tới email/SMS để xác nhận đổi lịch.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid grid-cols-6 gap-2">
-                        {Array.from({ length: 6 }).map((_, idx) => (
-                            <Input
-                                key={idx}
-                                inputMode="numeric"
-                                value={otp[idx] || ''}
-                                onChange={(e) => {
-                                    const v = e.target.value.replace(/[^0-9]/g, '').slice(-1);
-                                    const arr = otp.split('');
-                                    arr[idx] = v;
-                                    const next = arr.join('');
-                                    setOtp(next);
-                                }}
-                                className="text-center text-lg"
-                                maxLength={1}
-                            />
-                        ))}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setOtpOpen(false)}>Hủy</Button>
-                        <Button onClick={confirmOtp}>
-                            Xác nhận
-                            <ChevronRight className="h-4 w-4 ml-1" />
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+
         </>
     );
 }
