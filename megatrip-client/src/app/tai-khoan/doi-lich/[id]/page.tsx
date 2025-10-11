@@ -139,6 +139,12 @@ export default function DoiLichPage() {
     const [selectedOptionId, setSelectedOptionId] = useState<string>('');
 
     const [ackChecked, setAckChecked] = useState<boolean>(false);
+
+    // payment modal state
+    const [payOpen, setPayOpen] = useState<boolean>(false);
+    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('momo');
+    const [payAckConfirmed, setPayAckConfirmed] = useState<boolean>(false);
+
     const [options, setOptions] = useState<Option[]>([]);
     const [loadingOptions, setLoadingOptions] = useState<boolean>(false);
     const selectedOption = options.find((o) => o.id === selectedOptionId);
@@ -436,20 +442,155 @@ export default function DoiLichPage() {
     }
 
     // const handleConfirm = () => { if (!booking || !selectedDate || !selectedOption) return; setOtp(''); setOtpOpen(true); };
+    // open payment modal after primary ackChecked
     const handleConfirm = () => {
-        if (!booking || !selectedDateLabel || !selectedOption) {
-            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày và chuyến mới' });
+        // debug info
+        console.log('handleConfirm click', {
+            booking,
+            selectedDateLabel,
+            selectedOptionId,
+            selectedOption,
+            ackChecked,
+            canChange,
+            optionsForSelectedDate,
+        });
+
+        if (!booking || !selectedDateLabel) {
+            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày mới' });
             return;
         }
+
+        // if user selected a date but didn't pick a time option, auto-select first available option for that date
+        if (!selectedOption && optionsForSelectedDate && optionsForSelectedDate.length > 0) {
+            // set state and ask user to confirm again (simple & safe)
+            setSelectedOptionId(optionsForSelectedDate[0].id);
+            toast({ title: 'Đã chọn mặc định', description: 'Đã tự chọn chuyến đầu tiên trong ngày. Vui lòng nhấn lại Xác nhận.' });
+            return;
+        }
+
         if (!ackChecked) {
             toast({ title: 'Chưa đồng ý', description: 'Bạn phải đồng ý chính sách trước khi xác nhận' });
             return;
         }
-        const rid = saveRequest();
-        toast({ title: 'Đã gửi yêu cầu đổi lịch', description: `Mã yêu cầu ${rid}` });
-        if (typeof window !== 'undefined') window.history.replaceState({ activeTab: 'requests' }, '');
-        router.push('/tai-khoan');
+
+        if (!canChange) {
+            toast({ title: 'Không đủ điều kiện đổi', description: 'Không thể đổi lịch — kiểm tra chính sách thời hạn đổi.' });
+            return;
+        }
+
+        // ready to open payment modal
+        setPayAckConfirmed(false);
+        setPayMethod('momo');
+        setPayOpen(true);
     };
+
+    // final payment handler (simulated): save request + attach payment info, then navigate
+    async function handlePay() {
+        if (!booking || !order || !selectedDateLabel || !selectedOption) {
+            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày và chuyến mới' });
+            return;
+        }
+        if (!payAckConfirmed) {
+            toast({ title: 'Chưa xác nhận', description: 'Vui lòng xác nhận trước khi thanh toán' });
+            return;
+        }
+
+        const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_BASE || 'http://localhost:7000';
+        const ORDERS_API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+
+        try {
+            // Bước mới: Gọi API để update inforChangeCalendar trước
+            const changeResponse = await fetch(`${ORDERS_API}/api/orders/${order._id || order.orderNumber}/change-calendar`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    newDate: selectedDateLabel,
+                    newTime: selectedOption.time,
+                    selectedOption: selectedOption,
+                    passengers: booking.passengers,
+                    changeFeePerPax: changeFeePerPax,
+                    fareDiff: fareDiff, totalpayforChange: extraPay // Gửi từ FE nếu muốn (server sẽ override)
+                }),
+            });
+            if (!changeResponse.ok) {
+                const errorData = await changeResponse.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to update change calendar');
+            }
+            const responseData = await changeResponse.json();
+            const { codeChange, amountDue, refund } = responseData;
+            if (!codeChange || typeof amountDue !== 'number') {
+                throw new Error('Invalid response from change calendar API');
+            }
+
+            // Nếu không cần thanh toán (amountDue <= 0), hiển thị thông tin hoàn tiền và navigate
+            if (amountDue <= 0) {
+                const refundAmount = Math.abs(amountDue) || refund || 0; // Sử dụng refund nếu có
+                const id = saveRequest();
+                toast({
+                    title: 'Yêu cầu lưu',
+                    description: refundAmount > 0 ? `Không cần thanh toán. Sẽ hoàn lại ${formatPrice(refundAmount)}. Mã yêu cầu ${id}` : `Không cần thanh toán. Mã yêu cầu ${id}`
+                });
+                setPayOpen(false);
+                router.push('/tai-khoan'); // Navigate nhất quán
+                return;
+            }
+
+            // Tiếp tục logic thanh toán với amountDue từ server
+            const changeCode = codeChange;
+
+            // Build payment payloads per gateway (dùng amountDue thay vì extraPay)
+            if (payMethod === 'momo') {
+                const resp = await fetch(`${PAYMENT_BASE}/momo/payment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        orderId: changeCode,
+                        amount: Math.max(0, Math.round(amountDue)), // Dùng amountDue từ server
+                        orderInfo: `Thanh toán đổi lịch - ${order.orderNumber || ''}`,
+                        orderDescription: `${booking.title} — ${selectedDateLabel} ${selectedOption?.time ?? ''}`,
+                        extraData: JSON.stringify({ originalOrder: order.orderNumber, changeCode })
+                    })
+                });
+                const data = await resp.json();
+                const url = data?.payUrl || data?.shortLink || data?.payUrl;
+                if (url) {
+                    window.location.href = url;
+                    return;
+                } else {
+                    throw new Error('MoMo tạo payment không trả về URL');
+                }
+            } else if (payMethod === 'zalopay') {
+                const resp = await fetch(`${PAYMENT_BASE}/zalo/payment`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        amount: Math.max(0, Math.round(amountDue)), // Dùng amountDue từ server
+                        description: `Thanh toán đổi lịch ${order.orderNumber || ''}`,
+                        orderId: changeCode,
+                        app_user: order.customerEmail || 'guest',
+                        callback_url: `${ORDERS_API}/api/payment/callback/zalo`,
+                        embed_data: { orderNumber: changeCode, originalOrder: order.orderNumber }
+                    })
+                });
+                const data = await resp.json();
+                const url = data?.order_url || data?.paymentUrl || (data && data.data && data.data.order_url);
+                if (url) {
+                    window.location.href = url;
+                    return;
+                } else {
+                    throw new Error('ZaloPay tạo payment không trả về URL');
+                }
+            } else {
+                throw new Error('Phương thức thanh toán không hỗ trợ');
+            }
+        } catch (err: any) {
+            console.error('Payment init failed', err);
+            toast({ title: 'Lỗi thanh toán', description: String(err?.message || err) });
+            return;
+        }
+    }
     // Map server Order shape -> booking summary used by this page
     function mapOrderToBooking(order: any): Booking {
         if (!order) return null as any;
@@ -792,7 +933,7 @@ export default function DoiLichPage() {
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        {/* <div className="text-sm">Giờ: <span className="font-medium">{serviceTime}</span></div> */}
+                                                        <div className="text-sm">Giờ: <span className="font-medium">{serviceTime}</span></div>
                                                         {/* <div className="text-sm">Ngày đặt: <span className="font-medium">{booking.bookingDate}</span></div> */}
                                                     </div>
                                                     <div className="text-right">
@@ -838,7 +979,7 @@ export default function DoiLichPage() {
                                                                 </div>
                                                             </div>
                                                         )}
-                                                        {/* <div className="text-sm">Giờ: <span className="font-medium">{selectedOption ? selectedOption.time : '-'}</span></div> */}
+                                                        <div className="text-sm">Giờ: <span className="font-medium">{selectedOption ? selectedOption.time : '-'}</span></div>
                                                     </div>
                                                     <div className="text-right">
                                                         <div className="text-sm text-muted-foreground">Tổng chuyến mới <span className='font-bold'>(đã thêm thuế)</span></div>
@@ -964,7 +1105,9 @@ export default function DoiLichPage() {
                                     <div className="flex gap-2">
 
                                         <Button variant="outline" onClick={() => router.back()}>Hủy</Button>
-                                        <Button onClick={handleConfirm} disabled={!canChange || !selectedDateLabel || !selectedOption}>
+                                        <Button onClick={handleConfirm}
+                                            disabled={!canChange || !selectedDateLabel || !selectedOption}
+                                        >
                                             <Ticket className="h-4 w-4 mr-1" />
                                             Xác nhận đổi lịch
                                         </Button>
@@ -1000,10 +1143,10 @@ export default function DoiLichPage() {
                                             <span>Phạt theo chính sách ({Math.round(penaltyPercent * 100)}%)</span>
                                             <span className="font-medium text-red-600">{formatPrice(penaltyAmount)}</span>
                                         </div>
-                                        <div className="flex items-center justify-between text-sm">
+                                        {/* <div className="flex items-center justify-between text-sm">
                                             <span>Phí đổi lịch (tham khảo)</span>
                                             <span className="font-medium">{formatPrice(changeFeePerPax)}</span>
-                                        </div>
+                                        </div> */}
                                         <Separator />
                                         {extraPay > 0 ? (
                                             <div className="flex items-center justify-between">
@@ -1069,6 +1212,78 @@ export default function DoiLichPage() {
             </div>
 
 
+
+            {/* Payment dialog */}
+            {/* Payment dialog with overlay and explicit bg */}
+            <Dialog open={payOpen} onOpenChange={(open) => setPayOpen(open)}>
+                {/* overlay */}
+                {payOpen && <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60]" aria-hidden="true" />}
+                <DialogContent className="z-[70] bg-white dark:bg-slate-900 rounded-md shadow-lg">
+                    <DialogHeader>
+                        <DialogTitle>Thanh toán đổi lịch</DialogTitle>
+                        <DialogDescription>Việc đổi lịch này chỉ được thực hiện 1 lần và không được hoàn tiền nhé!</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        {/* Old trip summary */}
+                        <div className="text-sm">
+                            <div className="font-medium mb-2">Chuyến cũ</div>
+                            <div className="mb-1">{booking.title}</div>
+                            <div className="text-muted-foreground text-sm mb-1">{booking.details}</div>
+                            <div className="text-sm">Ngày : <span className="font-medium">{booking.serviceDate}</span> — Giờ : <span className="font-medium">{serviceTime}</span></div>
+
+                            <div className="text-sm">Giá hiện tại: <span className="font-medium">{formatPrice(order ? Number(order.total || 0) : booking.total)}</span></div>
+                        </div>
+
+                        <Separator />
+
+                        {/* New trip summary */}
+                        <div className="text-sm">
+                            <div className="font-medium mb-2">Chuyến mới</div>
+                            <div className="mb-1">{booking.title}</div>
+                            <div className="text-muted-foreground text-sm mb-1">{booking.details}</div>
+                            <div className="text-sm">Ngày: <span className="font-medium">{selectedDateLabel ?? '-'}</span> — Giờ: <span className="font-medium">{selectedOption ? selectedOption.time : '-'}</span></div>
+                            {selectedSeats && selectedSeats.length > 0 && <div className="text-sm">Ghế: <span className="font-medium">{selectedSeats.join(', ')}</span></div>}
+                            <div className="text-sm mt-2">Giá chuyến mới: <span className="font-medium">{selectedOption ? formatPrice(newTotal) : '-'}</span></div>
+                            <div className="text-sm">Số tiền cần thanh toán: <span className="text-primary font-bold">{formatPrice(Math.max(0, extraPay))}</span></div>
+                            <div className="text-xs text-muted-foreground font-bold mt-1">Lưu ý: chi phí hiển thị đã bao gồm phạt theo chính sách .</div>
+                        </div>
+
+                        <Separator />
+
+                        {/* Payment method */}
+                        <div>
+                            <div className="text-sm font-medium mb-2">Chọn phương thức thanh toán</div>
+                            <RadioGroup value={payMethod} onValueChange={(v) => setPayMethod(v as any)}>
+                                <div className="flex gap-4 items-center">
+                                    <label className="flex items-center gap-2">
+                                        <RadioGroupItem value="momo" />
+                                        <span>MoMo</span>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <RadioGroupItem value="zalopay" />
+                                        <span>ZaloPay</span>
+                                    </label>
+                                </div>
+                            </RadioGroup>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={payAckConfirmed} onChange={(e) => setPayAckConfirmed(e.target.checked)} className="w-4 h-4" />
+                            <span>Tôi xác nhận đã kiểm tra thông tin và đồng ý thanh toán cho việc đổi lịch (không hoàn lại)</span>
+                        </label>
+
+                        <div className="text-xs text-muted-foreground font-bold">
+                            Đơn hàng sẽ được cập nhật và vé sẽ được gửi lại cho khách sau khi thanh toán được hoàn tất.
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setPayOpen(false)}>Hủy</Button>
+                        <Button onClick={handlePay} disabled={!payAckConfirmed}>Thanh toán</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
