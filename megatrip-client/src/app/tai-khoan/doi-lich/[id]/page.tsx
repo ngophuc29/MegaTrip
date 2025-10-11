@@ -376,17 +376,35 @@ export default function DoiLichPage() {
             }
         } catch { daysUntilService = Infinity; }
 
-        // penalty policy:
-        // days > 5 => 30%
-        // 3 < days <= 5 => 50%
-        // days <= 3 => 100%
-        let pp = 0;
-        if (typeof daysUntilService === 'number') {
-            if (daysUntilService > 5) pp = 0.30;
-            else if (daysUntilService > 3) pp = 0.50;
-            else pp = 1.00;
+        // penalty policy: riêng cho bus
+        let penAmount = 0;
+        if (booking?.type === 'bus') {
+            // Tính theo giờ cho bus
+            const sdRaw = order?.metadata?.bookingDataSnapshot?.details?.startDateTime ?? order?.metadata?.bookingDataSnapshot?.details?.date ?? booking?.serviceDate ?? order?.createdAt;
+            if (sdRaw) {
+                const sd = new Date(sdRaw);
+                const now = new Date();
+                const hoursDiff = (sd.getTime() - now.getTime()) / (1000 * 60 * 60);
+                const pc = paxCountsFromOrder(order || ({} as any));
+                const totalPax = pc.adults + pc.children; // Giả sử không tính infant cho phạt
+                if (hoursDiff >= 72) {
+                    penAmount = 50000 * totalPax;
+                } else if (hoursDiff >= 24) {
+                    penAmount = 50000 * totalPax + 0.25 * currentTotal;
+                } else {
+                    penAmount = Infinity; // Không cho đổi, sẽ set canChange = false
+                }
+            }
+        } else {
+            // Tour/flight: giữ nguyên
+            let pp = 0;
+            if (typeof daysUntilService === 'number') {
+                if (daysUntilService > 5) pp = 0.30;
+                else if (daysUntilService > 3) pp = 0.50;
+                else pp = 1.00;
+            }
+            penAmount = Math.round(Number(currentTotal) * pp);
         }
-        const penAmount = Math.round(Number(currentTotal) * pp);
 
         // determine final pay / refund after applying penalty
         let amountDue = 0;
@@ -407,7 +425,6 @@ export default function DoiLichPage() {
             }
         }
 
-
         // per your request: do NOT include change fee into automatic total; show fee separately
         // const pay = Math.max(0, diff);
         // const refund = Math.max(0, -diff);
@@ -419,7 +436,7 @@ export default function DoiLichPage() {
         setFareDiff(diff);
         setExtraPay(amountDue);
         setRefundBack(refund);
-        setPenaltyPercent(pp);
+        setPenaltyPercent(penAmount / currentTotal); // Tùy chỉnh hiển thị %
         setPenaltyAmount(penAmount);
     }, [order, selectedOption, options]);
 
@@ -499,21 +516,29 @@ export default function DoiLichPage() {
         const ORDERS_API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 
         try {
+            const requestBody: any = {
+                newDate: selectedDateLabel,
+                newTime: selectedOption.time,
+                selectedOption: selectedOption,
+                passengers: booking.passengers,
+                changeFeePerPax: changeFeePerPax,
+                fareDiff: fareDiff,
+                totalpayforChange: extraPay
+            };
+
+            // Nếu là bus, thêm selectedSeats
+            if (booking.type === 'bus') {
+                requestBody.selectedSeats = selectedSeats;
+            }
             // Bước mới: Gọi API để update inforChangeCalendar trước
             const changeResponse = await fetch(`${ORDERS_API}/api/orders/${order._id || order.orderNumber}/change-calendar`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({
-                    newDate: selectedDateLabel,
-                    newTime: selectedOption.time,
-                    selectedOption: selectedOption,
-                    passengers: booking.passengers,
-                    changeFeePerPax: changeFeePerPax,
-                    fareDiff: fareDiff, totalpayforChange: extraPay // Gửi từ FE nếu muốn (server sẽ override)
-                }),
+                body: JSON.stringify(requestBody),
             });
+
             if (!changeResponse.ok) {
                 const errorData = await changeResponse.json().catch(() => ({}));
                 throw new Error(errorData.error || 'Failed to update change calendar');
@@ -682,16 +707,29 @@ export default function DoiLichPage() {
     }, [groupedOptions, selectedDateLabel]);
 
     const canChange = (() => {
-        try {
-            const sd = booking?.serviceDate ? new Date(booking.serviceDate) : null;
-            if (!sd) return false;
-            const today = new Date();
-            const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-            const t1 = Date.UTC(sd.getFullYear(), sd.getMonth(), sd.getDate());
-            const days = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
-            return typeof days === 'number' ? days > 3 : false;
-        } catch {
+        if (booking?.type === 'bus') {
+            // Cho bus: >=24 giờ
+            const sdRaw = order?.metadata?.bookingDataSnapshot?.details?.startDateTime ?? order?.metadata?.bookingDataSnapshot?.details?.date ?? booking?.serviceDate ?? order?.createdAt;
+            if (sdRaw) {
+                const sd = new Date(sdRaw);
+                const now = new Date();
+                const hoursDiff = (sd.getTime() - now.getTime()) / (1000 * 60 * 60);
+                return hoursDiff >= 24;
+            }
             return false;
+        } else {
+            // Tour/flight: >3 ngày
+            try {
+                const sd = booking?.serviceDate ? new Date(booking.serviceDate) : null;
+                if (!sd) return false;
+                const today = new Date();
+                const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+                const t1 = Date.UTC(sd.getFullYear(), sd.getMonth(), sd.getDate());
+                const days = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+                return typeof days === 'number' ? days > 3 : false;
+            } catch {
+                return false;
+            }
         }
     })();
 
@@ -1165,16 +1203,22 @@ export default function DoiLichPage() {
                                     <div className="text-sm text-muted-foreground">Chưa chọn chuyến mới để hiển thị tóm tắt.</div>
                                 )}
                                 <div className="text-md text-muted-foreground mt-3">
-                                    <strong>Chính sách đổi lịch
-                                        (
-                                        <i>
-                                            tính từ ngày đổi đến ngày khởi hành
-                                        </i>)
-                                    </strong><br />
-                                    - Trên 5 ngày: 30% giá trị tour<br />
-                                    - Từ 5 ngày trước: 50% giá trị tour<br />
-                                    - 3 ngày trước: 100% giá trị tour
+                                    <strong>Chính sách đổi lịch</strong><br />
+                                    {booking?.type === 'bus' ? (
+                                        <>
+                                            - Đổi ≥ 72 giờ trước giờ khởi hành: phí 50.000đ / khách<br />
+                                            - Đổi 24 – 72 giờ trước: phí 50.000đ / khách + 25% giá vé<br />
+                                            - Đổi &lt; 24 giờ: không cho đổi
+                                        </>
+                                    ) : (
+                                        <>
+                                            - Trên 5 ngày: 30% giá trị tour<br />
+                                            - Từ 5 ngày trước: 50% giá trị tour<br />
+                                            - 3 ngày trước: 100% giá trị tour
+                                        </>
+                                    )}
                                 </div>
+
                             </CardContent>
                         </Card>
                         {booking.type === 'bus' && selectedDateLabel && seatMap.length > 0 && (
