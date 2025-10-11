@@ -1320,39 +1320,40 @@ const Support: React.FC = () => {
             sortable: true,
             render: (value) => getStatusBadge(value),
         },
-        {
-            key: "assignedToName",
-            title: "Người xử lý",
-            render: (_value, record) => (
-                <Select
-                    value={record.assignedTo ?? "unassigned"}
-                    onValueChange={(value) => {
-                        handleAssignmentChange(record.id, value);
-                    }}
-                >
-                    <SelectTrigger className="w-40">
-                        <SelectValue
-                            placeholder="Chọn phân công"
-                        // Hiển thị đúng label theo giá trị select
-                        >
-                            {
-                                record.assignedTo
-                                    ? admins.find((a) => a.id === record.assignedTo)?.name || "Chưa phân công"
-                                    : "Chưa phân công"
-                            }
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="unassigned">Chưa phân công</SelectItem>
-                        {admins.map((admin: any) => (
-                            <SelectItem key={admin.id} value={admin.id}>
-                                {admin.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            ),
-        },
+        // Người xử lý
+        // {
+        //     key: "assignedToName",
+        //     title: "Người xử lý",
+        //     render: (_value, record) => (
+        //         <Select
+        //             value={record.assignedTo ?? "unassigned"}
+        //             onValueChange={(value) => {
+        //                 handleAssignmentChange(record.id, value);
+        //             }}
+        //         >
+        //             <SelectTrigger className="w-40">
+        //                 <SelectValue
+        //                     placeholder="Chọn phân công"
+        //                 // Hiển thị đúng label theo giá trị select
+        //                 >
+        //                     {
+        //                         record.assignedTo
+        //                             ? admins.find((a) => a.id === record.assignedTo)?.name || "Chưa phân công"
+        //                             : "Chưa phân công"
+        //                     }
+        //                 </SelectValue>
+        //             </SelectTrigger>
+        //             <SelectContent>
+        //                 <SelectItem value="unassigned">Chưa phân công</SelectItem>
+        //                 {admins.map((admin: any) => (
+        //                     <SelectItem key={admin.id} value={admin.id}>
+        //                         {admin.name}
+        //                     </SelectItem>
+        //                 ))}
+        //             </SelectContent>
+        //         </Select>
+        //     ),
+        // },
         {
             key: "createdAt",
             title: "Ngày tạo",

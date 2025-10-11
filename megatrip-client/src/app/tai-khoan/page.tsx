@@ -253,7 +253,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Yêu cầu hủy đơn (hoàn tiền) & đổi lịch</h1>
+                <h1 className="text-2xl font-bold">Yêu cầu đã gửi</h1>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={loadSupport} disabled={loading}>{loading ? 'Đang tải...' : 'Làm mới'}</Button>
                     {error && <div className="text-sm text-red-500">{error}</div>}
@@ -265,7 +265,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
                     <CardContent className="p-6 text-sm text-muted-foreground">Chưa có yêu cầu nào.</CardContent>
                 </Card>
             ) : (
-                <div className="space-y-4">
+                    <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                     {items.map((r) => (
                         <Card key={r.id} className="hover:shadow-sm cursor-pointer" onClick={() => openDetail(r)}>
                             <CardContent className="p-4 flex items-start justify-between gap-4">
@@ -352,7 +352,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
                                         <div className="mt-2">
                                             <div className="text-xs font-medium">Chi tiết tính</div>
                                             <ul className="list-disc ml-4 mt-1 space-y-1 text-xs">
-                                                <li>Nhà vận chuyển: {selected.details.airline || '—'}</li>
+                                                {/* <li>Nhà vận chuyển: {selected.details.airline || '—'}</li> */}
                                                 {'tierRate' in selected.details && <li>Tỷ lệ phạt: {Math.round((selected.details.tierRate || 0) * 100)}%</li>}
                                                 {'airlinePenalty' in selected.details && <li>Phí phạt hãng: {formatPrice(selected.details.airlinePenalty || 0)}</li>}
                                                 {'taxes' in selected.details && <li>Thuế/Phí không hoàn: {formatPrice(selected.details.taxes || 0)}</li>}
@@ -440,8 +440,8 @@ function mapOrderToBooking(order:any) {
     const paymentStatus = order.paymentStatus || 'pending';
     // cancel only when paymentStatus === 'paid'
     const canCancel = paymentStatus === 'paid';
-    // allow change only when daysUntilService is defined and > 3
-    const canChange = typeof daysUntilService === 'number' ? (daysUntilService > 3) : false;
+    // allow change only when daysUntilService is defined and > 3, and not already changed
+    const canChange = (typeof daysUntilService === 'number' ? (daysUntilService > 3) : false) && !order.changeCalendar;
     const canReview = (order.orderStatus === 'confirmed' || order.orderStatus === 'completed');
 
     return {
@@ -460,7 +460,9 @@ function mapOrderToBooking(order:any) {
         canChange,
         canReview,
         refunded: order.refundedAmount || 0,
-        rating: null
+        rating: null,
+        changeCalendar: order.changeCalendar,
+        hasRefundRequest: order.hasRefundRequest || false,
     };
 }
 
@@ -606,7 +608,7 @@ export default function TaiKhoan() {
                                         onClick={() => setActiveTab('requests')}
                                     >
                                         <FileText className="h-4 w-4 mr-2" />
-                                        Yêu cầu hủy/đổi lịch
+                                        Yêu cầu 
                                     </Button>
                                     <Button
                                         variant={activeTab === 'notifications' ? 'default' : 'ghost'}
@@ -801,6 +803,7 @@ export default function TaiKhoan() {
                             <div className="space-y-6">
                                 <div className="flex items-center justify-between">
                                     <h1 className="text-2xl font-bold">Đơn hàng của tôi</h1>
+
                                     <div className="flex gap-2">
                                         <Select defaultValue="all">
                                             <SelectTrigger className="w-40">
@@ -816,9 +819,13 @@ export default function TaiKhoan() {
                                     </div>
                                 </div>
 
+                                {/* Note ở đây */}
+                                <div className="text-sm w-full text-muted-foreground italic ">
+                                    <strong>Lưu ý:</strong> Nút "Hủy đơn" sẽ bị vô hiệu hóa nếu đã gửi yêu cầu hoàn. Nút "Đổi lịch" sẽ bị vô hiệu hóa nếu đã đổi lịch trước đó hoặc chuyến sắp khởi hành (trong 3 ngày).
+                                </div>
                                 <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                                     {/* {userData.bookings.map((booking) => ( */}
-                                    {displayBookings.map((booking) => (
+                                    {displayBookings.map((booking:any) => (
 
                                         <Card key={booking.id}>
                                             <CardContent className="p-6">
@@ -833,6 +840,9 @@ export default function TaiKhoan() {
                                                                 <Badge className={getStatusColor(booking.status)}>
                                                                     {getStatusText(booking.status)}
                                                                 </Badge>
+                                                                {booking.changeCalendar && (
+                                                                    <Badge variant="secondary">Đã đổi lịch</Badge>
+                                                                )}
                                                             </div>
                                                             <div className="text-sm text-muted-foreground space-y-1">
                                                                 <div>Mã đơn hàng: {booking.id}</div>
@@ -857,12 +867,37 @@ export default function TaiKhoan() {
                                                                 Xem chi tiết
                                                             </Button>
                                                             {booking.paymentStatus === 'paid' && (
-                                                                <Button size="sm" variant="outline" asChild>
-                                                                    <a href={`/tai-khoan/huy-don/${booking.id}`}>
-                                                                        <XCircle className="h-3 w-3 mr-1" />
-                                                                        Hủy đơn
-                                                                    </a>
-                                                                </Button>
+                                                                booking.hasRefundRequest ? (
+                                                                    <Tooltip.Provider>
+                                                                        <Tooltip.Root>
+                                                                            <Tooltip.Trigger asChild>
+                                                                                <Button
+                                                                                    disabled
+                                                                                    variant={'outline'}
+                                                                                    className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                                >
+                                                                                    <XCircle className="h-3 w-3 mr-1" />
+                                                                                    Hủy đơn
+                                                                                </Button>
+                                                                            </Tooltip.Trigger>
+                                                                            <Tooltip.Portal>
+                                                                                <Tooltip.Content
+                                                                                    className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                    sideOffset={5}
+                                                                                >
+                                                                                    Đã gửi yêu cầu hoàn
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Portal>
+                                                                        </Tooltip.Root>
+                                                                    </Tooltip.Provider>
+                                                                ) : (
+                                                                    <Button size="sm" variant="outline" asChild>
+                                                                        <a href={`/tai-khoan/huy-don/${booking.id}`}>
+                                                                            <XCircle className="h-3 w-3 mr-1" />
+                                                                            Hủy đơn
+                                                                        </a>
+                                                                    </Button>
+                                                                )
                                                             )}
                                                             {/* Always render change button but disable with tooltip when not allowed */}
                                                             {booking.canChange ? (
@@ -890,12 +925,13 @@ export default function TaiKhoan() {
                                                                                 className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
                                                                                 sideOffset={5}
                                                                             >
-                                                                                Khả dụng trước ngày sử dụng 3 ngày
+                                                                                {booking.daysUntilService <= 3 ? 'Khả dụng trước ngày sử dụng 3 ngày' : 'Đơn hàng đã đổi lịch'}
                                                                             </Tooltip.Content>
                                                                         </Tooltip.Portal>
                                                                     </Tooltip.Root>
                                                                 </Tooltip.Provider>
                                                             )}
+                                                           
                                                             {booking.canReview && (
                                                                 <Button size="sm" variant="outline">
                                                                     <Star className="h-3 w-3 mr-1" />
