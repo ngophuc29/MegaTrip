@@ -923,7 +923,7 @@ export default function TaiKhoan() {
                                                                 Xem chi tiết
                                                             </Button>
                                                             {booking.paymentStatus === 'paid' && (
-                                                                booking.hasRefundRequest ? (
+                                                                booking.hasRefundRequest && !booking.changeCalendar ? (
                                                                     <Tooltip.Provider>
                                                                         <Tooltip.Root>
                                                                             <Tooltip.Trigger asChild>
@@ -942,6 +942,29 @@ export default function TaiKhoan() {
                                                                                     sideOffset={5}
                                                                                 >
                                                                                     Đã gửi yêu cầu hoàn
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Portal>
+                                                                        </Tooltip.Root>
+                                                                    </Tooltip.Provider>
+                                                                ) : new Date(booking.serviceDate) < new Date() ? (
+                                                                    <Tooltip.Provider>
+                                                                        <Tooltip.Root>
+                                                                            <Tooltip.Trigger asChild>
+                                                                                <Button
+                                                                                    disabled
+                                                                                    variant={'outline'}
+                                                                                    className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                                >
+                                                                                    <XCircle className="h-3 w-3 mr-1" />
+                                                                                    Hủy đơn
+                                                                                </Button>
+                                                                            </Tooltip.Trigger>
+                                                                            <Tooltip.Portal>
+                                                                                <Tooltip.Content
+                                                                                    className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                    sideOffset={5}
+                                                                                >
+                                                                                    Ngày sử dụng đã qua
                                                                                 </Tooltip.Content>
                                                                             </Tooltip.Portal>
                                                                         </Tooltip.Root>
