@@ -238,6 +238,14 @@ const SERVICE_OPTIONS = [
     "xe đưa đón",
     "tàu hỏa",
 ];
+interface Province {
+    name: string;
+    code: number;
+    division_type?: string;
+    codename?: string;
+    phone_code?: number;
+    wards?: any[];
+}
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
@@ -297,11 +305,35 @@ export default function Tours() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
+     
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
     });
 
+    // new: provinces state + selectedDeparture
+    const [provinces, setProvinces] = useState<Province[]>([]);
+    const [provincesLoading, setProvincesLoading] = useState(false);
+    const [selectedDeparture, setSelectedDeparture] = useState<string>("");
+
+    // load provinces.json from /provinces.json (public)
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                setProvincesLoading(true);
+                const res = await fetch('/provinces.json');
+                if (!res.ok) throw new Error('Không thể tải danh sách tỉnh/thành');
+                const data = await res.json();
+                if (mounted && Array.isArray(data)) setProvinces(data);
+            } catch (err) {
+                console.error('Load provinces failed', err);
+            } finally {
+                if (mounted) setProvincesLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
     // Data    loading state (try real API, fallback to mock)
     const [tours, setTours] = useState<Tour[]>(mockTours);
     const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -2041,26 +2073,58 @@ export default function Tours() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <Label htmlFor="departureFrom">Điểm khởi hành *</Label>
-                            <Input
-                                id="departureFrom"
-                                value={formData.departureFrom}
-                                onChange={(e) => handleFormChange("departureFrom", e.target.value)}
-                                placeholder="Hà Nội"
-                                className={formErrors.departureFrom ? "border-red-500" : ""}
-                            />
+                            <Select
+                                value={formData.departureFrom || ""}
+                                onValueChange={(value) => {
+                                    handleFormChange("departureFrom", value);
+                                    setSelectedDeparture(value);
+                                    // if destination equals new departure, clear destination
+                                    if (formData.destination === value) handleFormChange("destination", "");
+                                }}
+                            >
+                                <SelectTrigger className={formErrors.departureFrom ? "border-red-500" : ""}>
+                                    <SelectValue placeholder={provincesLoading ? "Đang tải..." : "Chọn điểm khởi hành"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {provincesLoading ? (
+                                        <SelectItem value="">{/* loading placeholder */}Đang tải ...</SelectItem>
+                                    ) : (
+                                        provinces.map((p) => (
+                                            <SelectItem key={String(p.code)} value={p.name}>
+                                                {p.name}
+                                            </SelectItem>
+                                        ))
+                                    )}
+                                </SelectContent>
+                            </Select>
                             {formErrors.departureFrom && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.departureFrom}</p>
                             )}
                         </div>
+
                         <div>
                             <Label htmlFor="destination">Điểm đến *</Label>
-                            <Input
-                                id="destination"
-                                value={formData.destination}
-                                onChange={(e) => handleFormChange("destination", e.target.value)}
-                                placeholder="Vịnh Hạ Long"
-                                className={formErrors.destination ? "border-red-500" : ""}
-                            />
+                            <Select
+                                value={formData.destination || ""}
+                                onValueChange={(value) => handleFormChange("destination", value)}
+                            >
+                                <SelectTrigger className={formErrors.destination ? "border-red-500" : ""}>
+                                    <SelectValue placeholder={provincesLoading ? "Đang tải..." : "Chọn điểm đến"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {provincesLoading ? (
+                                        <SelectItem value="">{/* loading */}Đang tải ...</SelectItem>
+                                    ) : (
+                                        provinces
+                                            .filter((p) => p.name !== selectedDeparture)
+                                            .map((p) => (
+                                                <SelectItem key={String(p.code)} value={p.name}>
+                                                    {p.name}
+                                                </SelectItem>
+                                            ))
+                                    )}
+                                </SelectContent>
+                            </Select>
                             {formErrors.destination && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.destination}</p>
                             )}

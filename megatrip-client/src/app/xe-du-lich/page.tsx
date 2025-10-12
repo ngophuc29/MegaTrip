@@ -27,6 +27,7 @@ import {
     Armchair,
     Bed,
     Shield,
+    Map,
 } from 'lucide-react';
 import BusResults from './BusResults';
 
@@ -1265,7 +1266,7 @@ export default function XeDuLich() {
                             {fetchAttempted && fetchError ? (
                                 <Card className="text-center py-12">
                                     <CardContent>
-                                        <Bus className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                                        <Map className="h-12 w-12 text-red-500 mx-auto mb-4" />
                                         <h3 className="text-lg font-medium mb-2 text-red-600">Lỗi khi tải dữ liệu</h3>
                                         <p className="text-[hsl(var(--muted-foreground))] mb-4">{fetchError}</p>
                                         <div className="flex justify-center gap-2">
@@ -1290,18 +1291,7 @@ export default function XeDuLich() {
                                     selectedDate={selectedDate}
                                 />
                             )}
-                            {/* {sortedBuses.length === 0 && (
-                                <Card className="text-center py-12">
-                                    <CardContent>
-                                        <Bus className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
-                                        <h3 className="text-lg font-medium mb-2">Không tìm thấy chuyến xe phù hợp</h3>
-                                        <p className="text-[hsl(var(--muted-foreground))] mb-4">
-                                            Vui lòng thử điều chỉnh bộ lọc hoặc thay đổi tuyến đường
-                                        </p>
-                                        <Button variant="outline">Điều chỉnh tìm kiếm</Button>
-                                    </CardContent>
-                                </Card>
-                            )} */}
+                            
                         </div>
                     </div>
                 </div>

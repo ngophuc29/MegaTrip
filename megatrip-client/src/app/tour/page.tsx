@@ -32,6 +32,7 @@ import {
     Share2,
     ChevronUp,
     ChevronDown,
+    Torus,
 } from 'lucide-react';
 import TourResults from './TourResults';
 
@@ -343,36 +344,56 @@ export default function Tour() {
     // state for API tours
     const [apiTours, setApiTours] = useState<any[]>([]);
     const API_BASE_TOUR = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
-
-    useEffect(() => {
-        let mounted = true;
-        async function fetchTours() {
-            try {
-                setIsLoading(true);
-                // forward query params (from/to/departure etc.) to backend
-                const base = API_BASE_TOUR; // use central API_BASE
-                const qs = searchParams ? String(searchParams.toString()) : '';
-                const url = qs ? `${base}/api/tours?${qs}` : `${base}/api/tours`;
-                console.log('[Tour.page] fetching', url);
-                const res = await fetch(url);
-                const json = await res.json();
-                const data = Array.isArray(json.data) ? json.data : (json.data || []);
-                const mapped = data.map(mapDbTourToList);
-                if (mounted) setApiTours(mapped);
-            } catch (e) {
-                console.error('Fetch tours error', e);
-            } finally {
-                if (mounted) setIsLoading(false);
+    const [fetchAttempted, setFetchAttempted] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    // Define fetchTours function at component level
+    async function fetchTours() {
+        try {
+            setIsLoading(true);
+            setFetchError(null);
+            // forward query params (from/to/departure etc.) to backend
+            const base = API_BASE_TOUR; // use central API_BASE
+            const qs = searchParams ? String(searchParams.toString()) : '';
+            const url = qs ? `${base}/api/tours?${qs}` : `${base}/api/tours`;
+            console.log('[Tour.page] fetching', url);
+            const res = await fetch(url);
+            if (!res.ok) {
+                const text = await res.text();
+                const msg = `Server lỗi ${res.status}${text ? `: ${text}` : ''}`;
+                console.warn('fetchTours non-ok', { status: res.status, body: text });
+                setFetchError(msg);
+                return;
             }
+            const json = await res.json();
+            const data = Array.isArray(json.data) ? json.data : (json.data || []);
+            const mapped = data.map(mapDbTourToList);
+            setApiTours(mapped);
+            setFetchError(null);
+        } catch (err) {
+            const msg = String(err?.message || err || 'Không thể kết nối tới server');
+            console.error('Fetch tours error', err);
+            setApiTours([]);
+            setFetchError(msg);
+        } finally {
+            setFetchAttempted(true);
+            setIsLoading(false);
         }
-        fetchTours();
-        return () => { mounted = false; };
-    }, []);
+    }
+      useEffect(() => {
+              let mounted = true;
+              // reset attempt flag so UI shows correct state for new search
+                  setFetchAttempted(false);
+              // call fetchTours whenever search params change (so /tour?from=.. triggers API)
+                  (async () => {
+                          await fetchTours();
+                      })();
+              return () => { mounted = false; };
+          }, [searchParams ? String(searchParams.toString()) : '']);
 
     // const destinationTours = selectedTour ? generateDestinationTours() : [];
     // const allTours = selectedTour ? [...destinationTours, ...sampleTours] : sampleTours;
     const destinationTours = selectedTour ? generateDestinationTours() : [];
-    const baseTours = apiTours.length ? apiTours : sampleTours; // use API when available
+    const baseTours = apiTours; // Chỉ dùng API, không fallback sampleTours
     const allTours = selectedTour ? [...destinationTours, ...baseTours] : baseTours;
     // const filteredTours = allTours.filter(tour => {
     //     const matchesPrice = tour.priceFrom >= priceRange[0] && tour.priceFrom <= priceRange[1];
@@ -967,16 +988,27 @@ export default function Tour() {
                                     </Select>
                                 </div>
                             </div>
+                            {fetchAttempted && fetchError ? (
+                                <Card className="text-center py-12">
+                                    <CardContent>
+                                        <Map className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
+                                        <h3 className="text-lg font-medium mb-2">Không tìm thấy tour phù hợp!! Lỗi kết nối DB</h3>
+                                        {/* <p className="text-[hsl(var(--muted-foreground))] mb-4">
+                                            Vui lòng thử điều chỉnh bộ lọc hoặc thay đổi điều kiện tìm kiếm
+                                        </p>
+                                        <Button variant="outline">Điều chỉnh tìm kiếm</Button> */}
+                                    </CardContent>
+                                </Card>
+                            ) : (
 
-                            {/* Tour Results */}
-                            <TourResults
-                                isLoading={isLoading}
-                                sortedTours={sortedTours}
-                                favorites={favorites}
-                                toggleFavorite={toggleFavorite}
-                                formatPrice={formatPrice}
-                            />
-
+                                <TourResults
+                                    isLoading={isLoading}
+                                    sortedTours={sortedTours}
+                                    favorites={favorites}
+                                    toggleFavorite={toggleFavorite}
+                                    formatPrice={formatPrice}
+                                />
+                            )}
 
                         </div>
                     </div>
