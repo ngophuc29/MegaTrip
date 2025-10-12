@@ -42,7 +42,7 @@ interface Tour {
     minBooking: number;
     status: "active" | "hidden" | "draft";
     highlight: boolean;
-    visibility: "public" | "private";
+    isVisible: boolean;
     categoryId: string;
     tags: string[];
     images: string[];
@@ -111,7 +111,7 @@ interface TourFormData {
     cancellationPolicy: string;
     status: "active" | "hidden" | "draft";
     highlight: boolean;
-    visibility: "public" | "private";
+    isVisible: boolean;
     metaTitle: string;
     metaDescription: string;
     metaKeywords: string;
@@ -160,7 +160,7 @@ const mockTours: Tour[] = [
         minBooking: 2,
         status: "active",
         highlight: true,
-        visibility: "public",
+        isVisible: true,
         categoryId: "cat_001",
         tags: ["du thuyền", "biển đảo", "sang trọng"],
         images: [
@@ -283,7 +283,7 @@ export default function Tours() {
         cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
         status: "draft",
         highlight: false,
-        visibility: "public",
+        isVisible: true,
         metaTitle: "",
         metaDescription: "",
         metaKeywords: "",
@@ -385,7 +385,7 @@ export default function Tours() {
             minBooking: Number(t.minBooking || 1),
             status: t.status || "draft",
             highlight: Boolean(t.highlight),
-            visibility: t.visibility || "public",
+            isVisible: Boolean(t.isVisible),
             categoryId: t.categoryId || "",
             tags: Array.isArray(t.tags) ? t.tags : [],
             images: Array.isArray(t.images) ? t.images : [],
@@ -411,10 +411,11 @@ export default function Tours() {
             setIsLoading(true);
             setError(null);
             try {
-                const res = await fetch(`${API_BASE}/api/tours`);
+                // admin endpoint returns all tours (no isVisible filter)
+                const res = await fetch(`${API_BASE}/api/tours/admin`);
                 if (!mounted) return;
                 if (!res.ok) {
-                    console.warn("Fetch /api/tours failed:", res.status);
+                    console.warn("Fetch /api/tours/admin failed:", res.status);
                     setError({ status: res.status });
                     return;
                 }
@@ -426,7 +427,7 @@ export default function Tours() {
                     console.info("No tours returned from API — keeping mock data");
                 }
             } catch (err) {
-                console.error("Error fetching tours:", err);
+                console.error("Error fetching admin tours:", err);
                 setError(err);
             } finally {
                 if (mounted) setIsLoading(false);
@@ -872,6 +873,7 @@ export default function Tours() {
             startDates: startDatesIso,
             endDates: endDatesIso,
             itinerary: normalizedItin,
+            isVisible: Boolean(data.isVisible),
         };
 
         // remove undefined keys
@@ -1503,29 +1505,19 @@ export default function Tours() {
             ),
         },
         {
-            key: "status",
-            title: "Trạng thái",
+            key: "isVisible",
+            title: "Hiển thị",
             sortable: true,
-            render: (value, record: Tour) => (
-                <div className="flex items-center space-x-1">
-                    <Badge
-                        className={
-                            value === "active"
-                                ? "bg-green-100 text-green-800 hover:bg-green-100"
-                                : value === "hidden"
-                                    ? "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                                    : "bg-yellow-100 text-yellow-800 hover:bg-yellow-100"
-                        }
-                    >
-                        {value === "active" ? "Hoạt động" : value === "hidden" ? "Ẩn" : "Bản nháp"}
-                    </Badge>
-                    {record.highlight && (
-                        <Badge variant="outline" className="text-yellow-600 border-yellow-600">
-                            <Star className="w-3 h-3 mr-1" />
-                            Nổi bật
-                        </Badge>
-                    )}
-                </div>
+            render: (value: boolean) => (
+                <Badge
+                    className={
+                        value
+                            ? "bg-green-100 text-green-800 hover:bg-green-100"
+                            : "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                    }
+                >
+                    {value ? "Hiện" : "Ẩn"}
+                </Badge>
             ),
         },
     ];
@@ -1582,7 +1574,7 @@ export default function Tours() {
             cancellationPolicy: tour.cancellationPolicy || "",
             status: tour.status,
             highlight: tour.highlight,
-            visibility: tour.visibility,
+            isVisible: tour.isVisible,
             metaTitle: tour.metaTitle || "",
             metaDescription: tour.metaDescription || "",
             metaKeywords: tour.metaKeywords || "",
@@ -2665,7 +2657,7 @@ export default function Tours() {
                     </div>
 
                     <div>
-                        <Label htmlFor="visibility">Khả năng hiển thị</Label>
+                        {/* <Label htmlFor="visibility">Khả năng hiển thị</Label>
                         <Select
                             value={formData.visibility}
                             onValueChange={(value) => handleFormChange("visibility", value)}
@@ -2677,7 +2669,15 @@ export default function Tours() {
                                 <SelectItem value="public">Công khai</SelectItem>
                                 <SelectItem value="private">Riêng tư</SelectItem>
                             </SelectContent>
-                        </Select>
+                        </Select> */}
+                        <div className="flex items-center space-x-2">
+                            <Switch
+                                id="isVisible"
+                                checked={formData.isVisible}
+                                onCheckedChange={(checked) => handleFormChange("isVisible", checked)}
+                            />
+                            <Label htmlFor="isVisible">Hiển thị ra client</Label>
+                        </div>
                     </div>
                 </TabsContent>
             </Tabs>

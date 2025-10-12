@@ -342,6 +342,7 @@ export default function Tour() {
     // Generate additional tours for selected destination
     // state for API tours
     const [apiTours, setApiTours] = useState<any[]>([]);
+    const API_BASE_TOUR = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
 
     useEffect(() => {
         let mounted = true;
@@ -349,9 +350,9 @@ export default function Tour() {
             try {
                 setIsLoading(true);
                 // forward query params (from/to/departure etc.) to backend
-                const base = 'http://localhost:8080/api/tours';
+                const base = API_BASE_TOUR; // use central API_BASE
                 const qs = searchParams ? String(searchParams.toString()) : '';
-                const url = qs ? `${base}?${qs}` : base;
+                const url = qs ? `${base}/api/tours?${qs}` : `${base}/api/tours`;
                 console.log('[Tour.page] fetching', url);
                 const res = await fetch(url);
                 const json = await res.json();
@@ -452,7 +453,7 @@ export default function Tour() {
     // const durations = [...new Set(sampleTours.map(tour => tour.duration))];
     // const departures = [...new Set(sampleTours.map(tour => tour.departure))];
     // helpers to detect tour duration in days (support API numeric duration or string)
-    
+
 
     // UI options
     const durations = durationOptions.map(d => d.label);
