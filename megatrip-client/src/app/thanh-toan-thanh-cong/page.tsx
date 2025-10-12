@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation'; // Thêm import này
 import Link from 'next/link';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -17,84 +18,19 @@ import {
     FileText,
     Home,
     List,
+    Loader2, // Thêm icon loading
 } from 'lucide-react';
 import VeDienTu from '../components/VeDienTu';
 
-// Sample booking confirmation data
-const bookingConfirmation = {
-    bookingCode: 'TRV123456789',
-    status: 'confirmed',
-    paymentMethod: 'Thẻ tín dụng',
-    transactionId: 'TXN987654321',
-    bookingDate: '29/12/2024 14:30',
-    flightDetails: {
-        flightNumber: 'VN1546',
-        airline: 'Vietnam Airlines',
-        route: 'TP.HCM → Hà Nội',
-        date: '15/01/2025',
-        time: '06:15 - 08:30',
-        class: 'Phổ thông',
-    },
-    passenger: {
-        name: 'NGUYEN VAN AN',
-        idNumber: '123456789',
-    },
-    pricing: {
-        total: 2230000,
-    },
-    contact: {
-        email: 'customer@email.com',
-        phone: '0912345678',
-    }
-};
-
 export default function ThanhToanThanhCong() {
-    // Lấy dữ liệu booking từ localStorage (ưu tiên) hoặc fallback mẫu
-    const [booking, setBooking] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const stored = window.localStorage.getItem('bookingData');
-            const storedPassengers = window.localStorage.getItem('participants');
-            try {
-                const bookingData = stored ? JSON.parse(stored) : null;
-                const passengers = storedPassengers ? JSON.parse(storedPassengers) : [];
-                if (bookingData) {
-                    return {
-                        bookingType: bookingData.type,
-                        bookingData,
-                        passengers: passengers.length ? passengers : [{
-                            title: '',
-                            firstName: bookingConfirmation.passenger.name,
-                            lastName: '',
-                            gender: '',
-                            dateOfBirth: '',
-                            phone: bookingConfirmation.contact.phone,
-                            idNumber: bookingConfirmation.passenger.idNumber,
-                            idType: 'cccd',
-                        }],
-                    };
-                }
-            } catch {}
-        }
-        // fallback mẫu flight
-        return {
-            bookingType: 'flight',
-            bookingData: {
-                type: 'flight',
-                details: bookingConfirmation.flightDetails,
-                pricing: bookingConfirmation.pricing
-            },
-            passengers: [{
-                title: '',
-                firstName: bookingConfirmation.passenger.name,
-                lastName: '',
-                gender: '',
-                dateOfBirth: '',
-                phone: bookingConfirmation.contact.phone,
-                idNumber: bookingConfirmation.passenger.idNumber,
-                idType: 'cccd',
-            }],
-        };
-    });
+    const searchParams = useSearchParams();
+    const orderId = searchParams.get('orderId'); // Lấy orderId từ URL params
+    const extraData = searchParams.get('extraData'); // Lấy extraData
+
+    const [order, setOrder] = useState(null);
+    const [tickets, setTickets] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -104,21 +40,99 @@ export default function ThanhToanThanhCong() {
     };
 
     useEffect(() => {
-        // Send confirmation email (would be handled by backend)
-        console.log('Sending confirmation email...');
-    }, []);
+        if (!orderId) {
+            setError('Không tìm thấy mã đơn hàng');
+            setIsLoading(false);
+            return;
+        }
+
+        // Parse extraData để lấy originalOrder nếu là change calendar
+        let actualOrderId = orderId;
+        if (orderId.startsWith('ORD_FORCHANGE_') && extraData) {
+            try {
+                const parsedExtraData = JSON.parse(decodeURIComponent(extraData));
+                if (parsedExtraData.originalOrder) {
+                    actualOrderId = parsedExtraData.originalOrder;
+                }
+            } catch (e) {
+                console.error('Error parsing extraData:', e);
+            }
+        }
+
+        const fetchOrderDetails = async () => {
+            try {
+                const response = await fetch(`http://localhost:7700/api/orders/${actualOrderId}/details`);
+                if (!response.ok) throw new Error('Không thể tải thông tin đơn hàng');
+                const data = await response.json();
+                setOrder(data.order);
+                setTickets(data.tickets || []);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchOrderDetails();
+    }, [orderId, extraData]);
+
+    if (isLoading) {
+        return (
+            <div className="container py-8">
+                <div className="max-w-4xl mx-auto text-center">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                    <p>Đang tải thông tin đơn hàng...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="container py-8">
+                <div className="max-w-4xl mx-auto text-center">
+                    <p className="text-red-600">{error}</p>
+                    <Button asChild className="mt-4">
+                        <Link href="/">Về trang chủ</Link>
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!order) {
+        return (
+            <div className="container py-8">
+                <div className="max-w-4xl mx-auto text-center">
+                    <p>Không tìm thấy đơn hàng</p>
+                    <Button asChild className="mt-4">
+                        <Link href="/">Về trang chủ</Link>
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    // Xác định bookingType từ order
+    const bookingType = order.items?.[0]?.type || 'tour';
+    const bookingData = {
+        type: bookingType,
+        details: order.metadata?.bookingDataSnapshot?.details || {},
+        pricing: order.metadata?.bookingDataSnapshot?.pricing || {},
+    };
+    const passengers = order.metadata?.bookingDataSnapshot?.details?.passengers || [];
 
     return (
         <>
             <div className="container py-8">
-                <div className="max-w-4xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                     {/* Success Header */}
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                             <CheckCircle className="h-8 w-8 text-green-600" />
                         </div>
                         <h1 className="text-3xl font-bold text-green-600 mb-2">
-                            Đặt chỗ thành công!
+                            {orderId.startsWith('ORD_FORCHANGE_') ? 'Giao dịch đổi lịch thành công!' : 'Giao dịch thành công!'}
                         </h1>
                         <p className="text-lg text-muted-foreground">
                             Cảm ơn bạn đã tin tưởng MegaTrip. Vé điện tử đã được gửi đến email của bạn.
@@ -126,17 +140,31 @@ export default function ThanhToanThanhCong() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Main: chỉ hiển thị vé điện tử */}
+                        {/* Main: hiển thị vé điện tử từ tickets */}
                         <div className="lg:col-span-2 space-y-6">
-                            <VeDienTu
-                                bookingType={booking.bookingType}
-                                bookingData={booking.bookingData}
-                                passengers={booking.passengers}
-                                countdown={undefined}
-                                expired={false}
-                                bookingCode={bookingConfirmation.bookingCode}
-                                status="Đã thanh toán"
-                            />
+                            {tickets.map((ticket, index) => {
+                                // Parse passenger từ string JSON
+                                let passengerObj = {};
+                                try {
+                                    passengerObj = typeof ticket.passenger === 'string' ? JSON.parse(ticket.passenger) : ticket.passenger;
+                                } catch (e) {
+                                    console.error('Error parsing passenger:', e);
+                                }
+
+                                return (
+                                    <VeDienTu
+                                        key={ticket._id}
+                                        bookingType={bookingType}
+                                        bookingData={bookingData}
+                                        passengers={[passengerObj]} // Truyền passenger từ ticket
+                                        ticket={ticket} // Truyền toàn bộ ticket
+                                        countdown={undefined}
+                                        expired={false}
+                                        bookingCode={order.orderNumber}
+                                        status={ticket.status} // Truyền status từ ticket
+                                    />
+                                );
+                            })}
                         </div>
                         {/* Sidebar - Actions */}
                         <div className="space-y-6">
@@ -150,7 +178,7 @@ export default function ThanhToanThanhCong() {
                                         <Mail className="h-4 w-4 text-green-600 mt-0.5" />
                                         <div className="text-sm">
                                             <div className="font-medium text-green-800">Email đã được gửi</div>
-                                            <div className="text-green-600">{bookingConfirmation.contact.email}</div>
+                                            <div className="text-green-600">{order.customerEmail}</div>
                                         </div>
                                     </div>
                                     <Button className="w-full" variant="outline">
@@ -167,33 +195,99 @@ export default function ThanhToanThanhCong() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3 text-sm">
-                                        <div className="flex items-start gap-2">
-                                            <Calendar className="h-4 w-4 text-blue-500 mt-0.5" />
-                                            <div>
-                                                <div className="font-medium">Check-in online</div>
-                                                <div className="text-muted-foreground">
-                                                    24h trước giờ bay trên website Vietnam Airlines
+                                        {bookingType === 'flight' && (
+                                            <>
+                                                <div className="flex items-start gap-2">
+                                                    <Calendar className="h-4 w-4 text-blue-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Check-in online</div>
+                                                        <div className="text-muted-foreground">
+                                                            24h trước giờ bay trên website Vietnam Airlines
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-start gap-2">
-                                            <FileText className="h-4 w-4 text-purple-500 mt-0.5" />
-                                            <div>
-                                                <div className="font-medium">Giấy tờ tùy thân</div>
-                                                <div className="text-muted-foreground">
-                                                    Mang theo CCCD/CMND còn hạn khi đi máy bay
+                                                <div className="flex items-start gap-2">
+                                                    <FileText className="h-4 w-4 text-purple-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Giấy tờ tùy thân</div>
+                                                        <div className="text-muted-foreground">
+                                                            Mang theo CCCD/CMND còn hạn khi đi máy bay
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-start gap-2">
-                                            <Plane className="h-4 w-4 text-green-500 mt-0.5" />
-                                            <div>
-                                                <div className="font-medium">Có mặt tại sân bay</div>
-                                                <div className="text-muted-foreground">
-                                                    Trước 2h đối với chuyến bay nội địa
+                                                <div className="flex items-start gap-2">
+                                                    <Plane className="h-4 w-4 text-green-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Có mặt tại sân bay</div>
+                                                        <div className="text-muted-foreground">
+                                                            Trước 2h đối với chuyến bay nội địa
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
+                                            </>
+                                        )}
+                                        {bookingType === 'bus' && (
+                                            <>
+                                                <div className="flex items-start gap-2">
+                                                    <Calendar className="h-4 w-4 text-blue-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Giờ xuất phát</div>
+                                                        <div className="text-muted-foreground">
+                                                            Có mặt tại bến xe trước 30 phút
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <FileText className="h-4 w-4 text-purple-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Điểm đón/trả</div>
+                                                        <div className="text-muted-foreground">
+                                                            Kiểm tra điểm đón/trả trên vé điện tử
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <Users className="h-4 w-4 text-green-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Giấy tờ tùy thân</div>
+                                                        <div className="text-muted-foreground">
+                                                            Mang theo CCCD/CMND còn hạn
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                        {bookingType === 'tour' && (
+                                            <>
+                                                <div className="flex items-start gap-2">
+                                                    <Calendar className="h-4 w-4 text-blue-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Điểm tập trung</div>
+                                                        <div className="text-muted-foreground">
+                                                            Có mặt đúng giờ tại điểm tập trung
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <FileText className="h-4 w-4 text-purple-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Giấy tờ tùy thân</div>
+                                                        <div className="text-muted-foreground">
+                                                            Mang theo CCCD/CMND còn hạn
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-start gap-2">
+                                                    <Plane className="h-4 w-4 text-green-500 mt-0.5" />
+                                                    <div>
+                                                        <div className="font-medium">Lịch trình</div>
+                                                        <div className="text-muted-foreground">
+                                                            Kiểm tra lịch trình chi tiết trên email
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>
@@ -205,19 +299,19 @@ export default function ThanhToanThanhCong() {
                                 </CardHeader>
                                 <CardContent className="space-y-3">
                                     <Button variant="outline" className="w-full" asChild>
-                                        <Link prefetch={false}  href="/tai-khoan">
+                                        <Link prefetch={false} href="/tai-khoan">
                                             <List className="h-4 w-4 mr-2" />
                                             Xem đơn hàng của tôi
                                         </Link>
                                     </Button>
                                     <Button variant="outline" className="w-full" asChild>
-                                        <Link prefetch={false}  href="/">
+                                        <Link prefetch={false} href="/">
                                             <Home className="h-4 w-4 mr-2" />
                                             Về trang chủ
                                         </Link>
                                     </Button>
                                     <Button variant="outline" className="w-full" asChild>
-                                        <Link prefetch={false}  href="/ve-may-bay">
+                                        <Link prefetch={false} href="/ve-may-bay">
                                             <Plane className="h-4 w-4 mr-2" />
                                             Đặt vé mới
                                         </Link>
