@@ -265,7 +265,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
                     <CardContent className="p-6 text-sm text-muted-foreground">Chưa có yêu cầu nào.</CardContent>
                 </Card>
             ) : (
-                    <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
+                <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                     {items.map((r) => (
                         <Card key={r.id} className="hover:shadow-sm cursor-pointer" onClick={() => openDetail(r)}>
                             <CardContent className="p-4 flex items-start justify-between gap-4">
@@ -412,7 +412,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
         </div>
     );
 }
-function mapOrderToBooking(order:any) {
+function mapOrderToBooking(order: any) {
     const snap = order.metadata?.bookingDataSnapshot;
     const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
     const pax = (() => {
@@ -425,7 +425,13 @@ function mapOrderToBooking(order:any) {
         return 1;
     })();
     // compute serviceDate and days until service
-    const serviceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+    console.log('Order ID:', order.orderNumber);
+    console.log('changeCalendar:', order.changeCalendar);
+    console.log('dateChangeCalendar:', order.dateChangeCalendar);
+    console.log('originalServiceDateRaw:', originalServiceDateRaw);
+    console.log('serviceDateRaw:', serviceDateRaw);
     const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : (order.createdAt ? new Date(order.createdAt) : null);
     const serviceDate = serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '';
     let daysUntilService = null;
@@ -549,7 +555,45 @@ export default function TaiKhoan() {
         console.log('Saving profile:', editForm);
         setIsEditing(false);
     };
+    // Thêm state cho modal
+    const [detailModalOpen, setDetailModalOpen] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [orderDetails, setOrderDetails] = useState(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+    function getPassengerTypeLabel(type: string) {
+        switch (type) {
+            case 'adult': return 'Người lớn';
+            case 'child': return 'Trẻ em';
+            case 'infant': return 'Em bé';
+            default: return type;
+        }
+    }
 
+    function getTicketStatusLabel(status: string) {
+        switch (status) {
+            case 'paid': return 'Đã thanh toán';
+            case 'cancelled': return 'Đã hủy';
+            case 'changed': return 'Đã đổi';
+            default: return status;
+        }
+
+    }
+    // Function mở modal chi tiết
+    const openOrderDetail = async (orderId) => {
+        setLoadingDetails(true);
+        setDetailModalOpen(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/${orderId}/client/details`);
+            if (!res.ok) throw new Error('Failed to load order details');
+            const data = await res.json();
+            setOrderDetails(data);
+        } catch (err) {
+            console.error('Error loading order details:', err);
+            setOrderDetails(null);
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
     return (
         <>
             <div className="container py-6">
@@ -608,7 +652,7 @@ export default function TaiKhoan() {
                                         onClick={() => setActiveTab('requests')}
                                     >
                                         <FileText className="h-4 w-4 mr-2" />
-                                        Yêu cầu 
+                                        Yêu cầu
                                     </Button>
                                     <Button
                                         variant={activeTab === 'notifications' ? 'default' : 'ghost'}
@@ -783,6 +827,14 @@ export default function TaiKhoan() {
                                                         <Badge className={getStatusColor(booking.status)}>
                                                             {getStatusText(booking.status)}
                                                         </Badge>
+                                                        {booking.changeCalendar && (
+                                                            <>
+                                                                <Badge variant="secondary">Đã đổi lịch</Badge>
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    Đã đổi lịch từ {booking.originalServiceDate || 'N/A'} qua {booking.serviceDate}
+                                                                </span>
+                                                            </>
+                                                        )}
                                                         <div className="text-sm text-muted-foreground mt-1">
                                                             {formatPrice(booking.total)}
                                                         </div>
@@ -825,7 +877,7 @@ export default function TaiKhoan() {
                                 </div>
                                 <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                                     {/* {userData.bookings.map((booking) => ( */}
-                                    {displayBookings.map((booking:any) => (
+                                    {displayBookings.map((booking: any) => (
 
                                         <Card key={booking.id}>
                                             <CardContent className="p-6">
@@ -848,7 +900,11 @@ export default function TaiKhoan() {
                                                                 <div>Mã đơn hàng: {booking.id}</div>
                                                                 {/* <div>Chi tiết: {booking.details}</div> */}
                                                                 <div>Ngày đặt: {booking.bookingDate}</div>
-                                                                <div>Ngày sử dụng: {booking.serviceDate}</div>
+                                                                {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
+                                                                <div>
+                                                                    Ngày sử dụng: {booking.serviceDate}
+
+                                                                </div>
                                                                 {/* <div>Số khách: {booking.passengers}</div> */}
                                                                 {/* {booking.refunded && (
                                                                         <div className="text-green-600">Đã hoàn: {formatPrice(booking.refunded)}</div>
@@ -862,7 +918,7 @@ export default function TaiKhoan() {
                                                             {formatPrice(booking.total)}
                                                         </div>
                                                         <div className="flex flex-col gap-2">
-                                                            <Button size="sm" variant="outline">
+                                                            <Button size="sm" variant="outline" onClick={() => openOrderDetail(booking.id)}>
                                                                 <Eye className="h-3 w-3 mr-1" />
                                                                 Xem chi tiết
                                                             </Button>
@@ -931,7 +987,7 @@ export default function TaiKhoan() {
                                                                     </Tooltip.Root>
                                                                 </Tooltip.Provider>
                                                             )}
-                                                           
+
                                                             {booking.canReview && (
                                                                 <Button size="sm" variant="outline">
                                                                     <Star className="h-3 w-3 mr-1" />
@@ -1100,6 +1156,132 @@ export default function TaiKhoan() {
                     </div>
                 </div>
             </div >
+
+
+
+
+            <Modal open={detailModalOpen} onOpenChange={setDetailModalOpen} size="lg">
+                <ModalContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <ModalHeader>
+                        <ModalTitle>Chi tiết đơn hàng {selectedOrder?.id}</ModalTitle>
+                        <ModalDescription>
+                            {orderDetails?.order && (
+                                <div className="space-y-2">
+                                    {/* Tags */}
+                                    <div className="flex gap-2">
+                                        {orderDetails.order.paymentStatus === 'paid' && <Badge className="bg-green-100 text-green-700">Đã thanh toán</Badge>}
+                                        {orderDetails.order.orderStatus === 'cancelled' && <Badge className="bg-red-100 text-red-700">Đã hủy</Badge>}
+                                        {orderDetails.order.changeCalendar && <Badge className="bg-blue-100 text-blue-700">Đã đổi lịch</Badge>}
+                                    </div>
+                                    {/* Note đổi lịch */}
+                                    {orderDetails.order.changeCalendar && (
+                                        <div className="text-sm text-muted-foreground italic">
+                                            Bạn đã đổi lịch từ ngày {orderDetails.order.metadata?.bookingDataSnapshot?.details?.date} sang ngày {orderDetails.order.dateChangeCalendar}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </ModalDescription>
+                    </ModalHeader>
+                    <div className="p-4 space-y-4">
+                        {loadingDetails ? (
+                            <div className="text-center">Đang tải...</div>
+                        ) : orderDetails ? (
+                            <>
+                                {/* Thông tin cơ bản */}
+                                    {/* Thông tin cơ bản */}
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div><strong>Mã đơn:</strong> {orderDetails.order.orderNumber}</div>
+                                        <div><strong>Tổng tiền:</strong> {formatPrice(orderDetails.order.total)}</div>
+                                        <div><strong>Ngày đặt:</strong> {new Date(orderDetails.order.createdAt).toLocaleDateString('vi-VN')}</div>
+                                        <div><strong>Ngày sử dụng:</strong> {(() => {
+                                            const snap = orderDetails.order.metadata?.bookingDataSnapshot;
+                                            const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                            const serviceDateRaw = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
+                                            const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                                            return serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '--';
+                                        })()}</div>
+                                        <div><strong>Trạng thái:</strong> {getStatusText(orderDetails.order.orderStatus)}</div>
+                                    </div>
+
+                                {/* Thông tin hành khách */}
+                                {orderDetails.order.metadata?.bookingDataSnapshot?.details?.passengers && (
+                                    <div>
+                                        <h4 className="font-semibold mb-2">Thông tin hành khách</h4>
+                                        <div className="space-y-2">
+                                            {orderDetails.order.metadata.bookingDataSnapshot.details.passengers.map((passenger: any, index: number) => (
+                                                <div key={index} className="border p-3 rounded">
+                                                    <div className="grid grid-cols-2 gap-2 text-sm">
+                                                        <div><strong>Họ tên:</strong> {passenger.title ? `${passenger.title} ` : ''}{passenger.firstName} {passenger.lastName}</div>
+                                                        <div><strong>Loại:</strong> {getPassengerTypeLabel(passenger.type)}</div>
+                                                        <div><strong>Ngày sinh:</strong> {passenger.dateOfBirth}</div>
+                                                        <div><strong>CMND/CCCD:</strong> {passenger.idNumber}</div>
+                                                        <div><strong>Quốc tịch:</strong> {passenger.nationality}</div>
+                                                        <div><strong>Loại giấy tờ:</strong> {passenger.idType}</div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                    {/* Breakdown vé */}
+                                    <div className="space-y-4">
+                                        {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold">Vé cũ</h4>
+                                                <div className="space-y-2">
+                                                    {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                                        <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                            <div>
+                                                                <div className="font-medium">{ticket.ticketNumber}</div>
+                                                                <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                            </div>
+                                                            <div className="text-sm">
+                                                                <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                                <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
+                                                <div className="space-y-2">
+                                                    {orderDetails.tickets.filter((ticket) => ticket.status === 'changed').map((ticket) => (
+                                                        <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                            <div>
+                                                                <div className="font-medium">{ticket.ticketNumber}</div>
+                                                                <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                            </div>
+                                                            <div className="text-sm">
+                                                                <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                                <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                                <Button size="sm" variant="outline" className="ml-2" asChild>
+                                                                    <a href={`/thanh-toan-thanh-cong?orderId=${orderDetails.order.orderNumber}`} target="_blank">
+                                                                        <Download className="h-3 w-3 mr-1" />
+                                                                        Vé điện tử
+                                                                    </a>
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                            </>
+                        ) : (
+                            <div className="text-center text-red-500">Không thể tải chi tiết đơn hàng</div>
+                        )}
+                    </div>
+                    <ModalFooter>
+                        <Button variant="outline" onClick={() => setDetailModalOpen(false)}>Đóng</Button>
+                    </ModalFooter>
+                </ModalContent>
+            </Modal>
         </>
     );
 }

@@ -17,13 +17,13 @@ export function Modal({ open, onOpenChange, children }: ModalProps) {
     if (!open) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center ">
             <div
                 className="absolute inset-0 bg-black/40"
                 onClick={() => onOpenChange?.(false)}
                 aria-hidden
             />
-            <div className="relative w-full max-w-2xl mx-4">
+            <div className="relative w-full max-w-5xl mx-4 " >
                 {children}
             </div>
         </div>,
@@ -33,7 +33,7 @@ export function Modal({ open, onOpenChange, children }: ModalProps) {
 
 export function ModalContent({ children }: { children?: React.ReactNode }) {
     return (
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden max-h-[92vh] overflow-y-auto">
             {children}
         </div>
     );
