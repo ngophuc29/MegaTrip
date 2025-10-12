@@ -26,7 +26,19 @@ interface OrderItem {
     unitPrice: number;
     subtotal: number;
 }
-
+interface TimelineEvent {
+    ts: {
+        $date: {
+            $numberLong: string;
+        };
+    };
+    text: string;
+    meta?: {
+        ticket?: {
+            $oid: string;
+        };
+    };
+}
 interface Order {
     id: string;
     orderNumber: string;
@@ -65,8 +77,12 @@ interface Order {
     }>;
     createdAt: string;
     updatedAt: string;
+    changeCalendar?: boolean;
+    dateChangeCalendar?: string;
+    timeline: Array<TimelineEvent>;
 }
-
+// Add API_BASE at the top, assuming it's defined in your config
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 interface OrderFilters {
     paymentStatus: string;
     orderStatus: string;
@@ -396,6 +412,9 @@ export default function Orders() {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [noteModalOpen, setNoteModalOpen] = useState(false);
     const [newNote, setNewNote] = useState("");
+    const [orderDetails, setOrderDetails] = useState(null);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+    
     const [refundData, setRefundData] = useState({
         amount: 0,
         reason: "",
@@ -411,53 +430,83 @@ export default function Orders() {
         pageSize: 10,
     });
 
-    // Fetch orders with mock data
+    // Fetch orders with API
     const { data: ordersData, isLoading, error, refetch } = useQuery({
         queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const filteredOrders = mockOrders.filter((order) => {
-                const matchesSearch = order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    order.customerEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    order.customerPhone.includes(searchQuery);
-                const matchesPaymentStatus = filters.paymentStatus === 'all' || order.paymentStatus === filters.paymentStatus;
-                const matchesOrderStatus = filters.orderStatus === 'all' || order.orderStatus === filters.orderStatus;
-                const matchesPaymentMethod = filters.paymentMethod === 'all' || order.paymentMethod === filters.paymentMethod;
-                return matchesSearch && matchesPaymentStatus && matchesOrderStatus && matchesPaymentMethod;
+            const params = new URLSearchParams({
+                page: pagination.current.toString(),
+                pageSize: pagination.pageSize.toString(),
             });
+            if (searchQuery) params.append('q', searchQuery);
+            if (filters.paymentStatus !== 'all') params.append('paymentStatus', filters.paymentStatus);
+            if (filters.orderStatus !== 'all') params.append('orderStatus', filters.orderStatus);
+            if (filters.paymentMethod !== 'all') params.append('paymentMethod', filters.paymentMethod);
 
-            const start = (pagination.current - 1) * pagination.pageSize;
-            const end = start + pagination.pageSize;
-            const paginatedOrders = filteredOrders.slice(start, end);
-
-            return {
-                data: paginatedOrders,
-                pagination: {
-                    total: filteredOrders.length,
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                },
-            };
+            const res = await fetch(`${API_BASE}/api/orders?${params.toString()}`);
+            if (!res.ok) throw new Error('Failed to fetch orders');
+            const json = await res.json();
+            // Map _id to id
+            const mappedData = json.data.map((order: any) => ({
+                ...order,
+                id: order._id,
+            }));
+            return { data: mappedData, pagination: json.pagination };
         },
     });
-
+  
     // Update order status mutation (mock implementation)
+    // const updateOrderMutation = useMutation({
+    //     mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
+    //         const index = mockOrders.findIndex(order => order.id === id);
+    //         if (index === -1) throw new Error('Order not found');
+
+    //         mockOrders[index] = {
+    //             ...mockOrders[index],
+    //             orderStatus: status as any,
+    //             paymentStatus: status === 'cancelled' && mockOrders[index].paymentStatus === 'paid' ? 'refunded' : mockOrders[index].paymentStatus,
+    //             timeline: [
+    //                 ...mockOrders[index].timeline,
+    //                 { status, note, actor: 'Admin', timestamp: new Date().toISOString() },
+    //             ],
+    //             updatedAt: new Date().toISOString(),
+    //         };
+    //         return mockOrders[index];
+    //     },
+    //     onSuccess: () => {
+    //         queryClient.invalidateQueries({ queryKey: ['orders'] });
+    //         toast({
+    //             title: "Cập nhật đơn hàng thành công",
+    //             description: "Trạng thái đơn hàng đã được cập nhật",
+    //         });
+    //     },
+    //     onError: (error: any) => {
+    //         toast({
+    //             title: "Lỗi khi cập nhật đơn hàng",
+    //             description: error.message,
+    //             variant: "destructive",
+    //         });
+    //     },
+    // });
+
+    // Update order status mutation (call API instead of mock)
     const updateOrderMutation = useMutation({
         mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
-            const index = mockOrders.findIndex(order => order.id === id);
-            if (index === -1) throw new Error('Order not found');
-
-            mockOrders[index] = {
-                ...mockOrders[index],
-                orderStatus: status as any,
-                paymentStatus: status === 'cancelled' && mockOrders[index].paymentStatus === 'paid' ? 'refunded' : mockOrders[index].paymentStatus,
-                timeline: [
-                    ...mockOrders[index].timeline,
-                    { status, note, actor: 'Admin', timestamp: new Date().toISOString() },
-                ],
-                updatedAt: new Date().toISOString(),
-            };
-            return mockOrders[index];
+            const res = await fetch(`${API_BASE}/api/orders/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    orderStatus: status,
+                    note: note || `Trạng thái cập nhật thành ${status}`,
+                }),
+            });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to update order');
+            }
+            return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -564,6 +613,14 @@ export default function Orders() {
         if (order.orderStatus === 'cancelled') return 0;
         return order.total; // Full refund for other statuses
     };
+    const getTypeColor = (type: string) => {
+        switch (type) {
+            case 'bus': return 'bg-blue-100 text-blue-800 hover:bg-blue-100';
+            case 'tour': return 'bg-green-100 text-green-800 hover:bg-green-100';
+            case 'flight': return 'bg-purple-100 text-purple-800 hover:bg-purple-100';
+            default: return 'bg-gray-100 text-gray-800 hover:bg-gray-100';
+        }
+    };
 
     const columns: Column[] = [
         {
@@ -594,9 +651,13 @@ export default function Orders() {
             render: (items: OrderItem[]) => (
                 <div className="space-y-1">
                     {items.slice(0, 2).map((item, index) => (
-                        <div key={index} className="text-sm">
+                        <div key={index} className="text-sm flex items-center gap-2">
                             <span className="font-medium">{item.name}</span>
-                            <span className="text-gray-500 ml-2">x{item.quantity}</span>
+                            <Badge className={`${getTypeColor(item.type)} uppercase`}>
+                                {item.type}
+                            </Badge>
+
+                            {/* <span className="text-gray-500">x{item.quantity}</span> */}
                         </div>
                     ))}
                     {items.length > 2 && (
@@ -614,9 +675,9 @@ export default function Orders() {
                     <div className="font-bold">
                         {new Intl.NumberFormat('vi-VN').format(value)} ₫
                     </div>
-                    <div className="text-gray-500">
+                    {/* <div className="text-gray-500">
                         {record.items.reduce((sum, item) => sum + item.quantity, 0)} sản phẩm
-                    </div>
+                    </div> */}
                 </div>
             ),
         },
@@ -646,19 +707,26 @@ export default function Orders() {
             key: "orderStatus",
             title: "Trạng thái",
             sortable: true,
-            render: (value) => {
+            render: (value, record: Order) => {
                 const status = getStatusInfo(value, 'order');
                 return (
-                    <Badge className={
-                        status.color === 'green' ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                            status.color === 'blue' ? "bg-blue-100 text-blue-800 hover:bg-blue-100" :
-                                status.color === 'purple' ? "bg-purple-100 text-purple-800 hover:bg-purple-100" :
-                                    status.color === 'yellow' ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
-                                        status.color === 'red' ? "bg-red-100 text-red-800 hover:bg-red-100" :
-                                            "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                    }>
-                        {status.label}
-                    </Badge>
+                    <div className="flex flex-col gap-1">
+                        <Badge className={
+                            status.color === 'green' ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                                status.color === 'blue' ? "bg-blue-100 text-blue-800 hover:bg-blue-100" :
+                                    status.color === 'purple' ? "bg-purple-100 text-purple-800 hover:bg-purple-100" :
+                                        status.color === 'yellow' ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
+                                            status.color === 'red' ? "bg-red-100 text-red-800 hover:bg-red-100" :
+                                                "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                        }>
+                            {status.label}
+                        </Badge>
+                        {record.changeCalendar && (
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-800 hover:bg-orange-100">
+                                Đã đổi lịch
+                            </Badge>
+                        )}
+                    </div>
                 );
             },
         },
@@ -678,10 +746,34 @@ export default function Orders() {
                 </div>
             ),
         },
+        {
+            key: "serviceDate",
+            title: "Ngày sử dụng",
+            sortable: true,
+            render: (value, record: Order) => {
+                const snap = record.metadata?.bookingDataSnapshot;
+                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                const serviceDateRaw = record.changeCalendar && record.dateChangeCalendar ? record.dateChangeCalendar : originalServiceDateRaw;
+                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toLocaleDateString('vi-VN') : '--';
+                return <div className="text-sm">{serviceDate}</div>;
+            },
+        },
     ];
 
-    const handleView = (order: Order) => {
+    const handleView = async (order: Order) => {
         setSelectedOrder(order);
+        setLoadingDetails(true);
+        try {
+            const res = await fetch(`${API_BASE}/api/orders/${order.id}/client/details`);
+            if (!res.ok) throw new Error('Failed to load order details');
+            const data = await res.json();
+            setOrderDetails(data);
+        } catch (err) {
+            console.error('Error loading order details:', err);
+            setOrderDetails(null);
+        } finally {
+            setLoadingDetails(false);
+        }
         setModalMode("view");
         setModalOpen(true);
     };
@@ -695,6 +787,27 @@ export default function Orders() {
     };
 
     const handleCompleteOrder = (order: Order) => {
+        // Tính ngày sử dụng từ metadata
+        const snap = order.metadata?.bookingDataSnapshot;
+        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+        // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Kiểm tra nếu ngày sử dụng chưa qua
+        if (serviceDate && serviceDate >= today) {
+            toast({
+                title: "Không thể hoàn thành",
+                description: "Đơn hàng chưa đến ngày sử dụng, không thể đánh dấu hoàn thành",
+                variant: "destructive",
+            });
+            return; // Dừng lại, không cập nhật
+        }
+
+        // Nếu đã qua hoặc không có ngày, tiến hành cập nhật
         updateOrderMutation.mutate({
             id: order.id,
             status: "completed",
@@ -746,8 +859,43 @@ export default function Orders() {
         {
             label: "Hoàn thành",
             action: (keys: string[]) => {
+                console.log("Bulk hoàn thành: keys =", keys); // Thêm log
                 keys.forEach(id => {
-                    updateOrderMutation.mutate({ id, status: "completed" });
+                    const index = parseInt(id); // Chuyển id (string index) thành number
+                    const order = orders[index]; // Truy cập trực tiếp bằng index
+                    console.log("Order found:", order); // Thêm log
+                    if (!order) return;
+
+                    // Tính ngày sử dụng từ metadata
+                    const snap = order.metadata?.bookingDataSnapshot;
+                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                    const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+                    console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate); // Thêm log
+
+                    // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+
+                    // Kiểm tra nếu ngày sử dụng chưa qua
+                    if (serviceDate && serviceDate >= today) {
+                        console.log("Ngày chưa qua, không cập nhật"); // Thêm log
+                        toast({
+                            title: "Không thể hoàn thành",
+                            description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                            variant: "destructive",
+                        });
+                        return; // Bỏ qua đơn này, không cập nhật
+                    }
+
+                    console.log("Cập nhật đơn hàng:", id); // Thêm log
+                    // Nếu đã qua hoặc không có ngày, tiến hành cập nhật
+                    updateOrderMutation.mutate({
+                        id: order.id, // Dùng order.id thật
+                        status: "completed",
+                        note: "Đơn hàng đã hoàn thành"
+                    });
                 });
             },
             icon: <Package className="w-4 h-4 mr-2" />,
@@ -780,7 +928,21 @@ export default function Orders() {
             label: "Hoàn thành",
             action: handleCompleteOrder,
             icon: <Package className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => order.orderStatus === "confirmed" || order.orderStatus === "processing",
+            condition: (order: Order) => {
+                // Kiểm tra trạng thái đơn hàng
+                const isValidStatus = order.orderStatus === "confirmed" || order.orderStatus === "processing";
+
+                // Kiểm tra ngày sử dụng
+                const snap = order.metadata?.bookingDataSnapshot;
+                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const isPastServiceDate = !serviceDate || serviceDate < today;
+
+                return isValidStatus && isPastServiceDate;
+            },
         },
         {
             label: "Hoàn tiền",
@@ -806,7 +968,23 @@ export default function Orders() {
             icon: <Printer className="mr-2 h-4 w-4" />,
         },
     ];
+    function getPassengerTypeLabel(type: string) {
+        switch (type) {
+            case 'adult': return 'Người lớn';
+            case 'child': return 'Trẻ em';
+            case 'infant': return 'Em bé';
+            default: return type;
+        }
+    }
 
+    function getTicketStatusLabel(status: string) {
+        switch (status) {
+            case 'paid': return 'Đã thanh toán';
+            case 'cancelled': return 'Đã hủy';
+            case 'changed': return 'Đã đổi';
+            default: return status;
+        }
+    }
     const renderOrderDetails = () => {
         if (!selectedOrder) return null;
 
@@ -837,6 +1015,11 @@ export default function Orders() {
                         }>
                             {getStatusInfo(selectedOrder.paymentStatus, 'payment').label}
                         </Badge>
+                        {selectedOrder.changeCalendar && (
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                                Đã đổi lịch
+                            </Badge>
+                        )}
                     </div>
                 </div>
 
@@ -959,44 +1142,210 @@ export default function Orders() {
                 {/* Payment Information */}
                 <div>
                     <Label className="text-sm font-medium text-gray-700">Thông tin thanh toán</Label>
-                    <div className="mt-2">
+                    <div className="mt-2 space-y-2">
                         <div className="flex justify-between">
                             <span>Phương thức:</span>
                             <span>{paymentMethods.find(m => m.value === selectedOrder.paymentMethod)?.label}</span>
                         </div>
+                        {selectedOrder.transId && (
+                            <div className="flex justify-between">
+                                <span>Mã giao dịch:</span>
+                                <span>{selectedOrder.transId}</span>
+                            </div>
+                        )}
+                        {selectedOrder.zp_trans_id && (
+                            <div className="flex justify-between">
+                                <span>Mã giao dịch ZaloPay:</span>
+                                <span>{selectedOrder.zp_trans_id}</span>
+                            </div>
+                        )}
+                        {selectedOrder.paymentReference && (
+                            <div className="flex justify-between">
+                                <span>Tham chiếu thanh toán:</span>
+                                <span>{selectedOrder.paymentReference}</span>
+                            </div>
+                        )}
                     </div>
                 </div>
+                {/* Ticket Information */}
+                {loadingDetails ? (
+                    <div className="text-center">Đang tải thông tin vé...</div>
+                ) : orderDetails && (orderDetails.oldTickets?.length > 0 || orderDetails.tickets?.length > 0) && (
+                    <div>
+                        <Label className="text-sm font-medium text-gray-700">Thông tin vé</Label>
+                        <div className="mt-2 space-y-4">
+                            {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
+                                <div>
+                                    <h4 className="font-semibold">Vé cũ</h4>
+                                    <div className="space-y-2">
+                                        {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                <div>
+                                                    <div className="font-medium">{ticket.ticketNumber}</div>
+                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                </div>
+                                                <div className="text-sm">
+                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                    <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                <div>
+                                    <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
+                                    <div className="space-y-2">
+                                        {orderDetails.tickets.filter((ticket) => ticket.status === 'changed').map((ticket) => (
+                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                <div>
+                                                    <div className="font-medium">{ticket.ticketNumber}</div>
+                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                </div>
+                                                <div className="text-sm">
+                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                    <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
+                <Separator />
+
+                {/* Change Calendar Information */}
+                {selectedOrder.changeCalendar && selectedOrder.inforChangeCalendar && (
+                    <div>
+                        <Label className="text-sm font-medium text-gray-700">Thông tin đổi lịch</Label>
+                        <div className="mt-2 space-y-2">
+                            <div className="flex justify-between">
+                                <span>Ngày đổi:</span>
+                                <span>{selectedOrder.dateChangeCalendar}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Phí phạt:</span>
+                                <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.inforChangeCalendar.penalty)} ₫</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Giá mới:</span>
+                                <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.inforChangeCalendar.newPrice)} ₫</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Chênh lệch:</span>
+                                <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.inforChangeCalendar.diff)} ₫</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Mã giao dịch đổi:</span>
+                                <span>{selectedOrder.inforChangeCalendar.transId}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Mã đổi lịch:</span>
+                                <span>{selectedOrder.inforChangeCalendar.codeChange}</span>
+                            </div>
+                            {selectedOrder.inforChangeCalendar.data?.note && (
+                                <div>
+                                    <span className="font-medium">Ghi chú:</span>
+                                    <div className="text-sm text-gray-600">{selectedOrder.inforChangeCalendar.data.note}</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <Separator />
+
+                {/* Booking Details from Metadata */}
+                {selectedOrder.metadata?.bookingDataSnapshot && (
+                    <div>
+                        <Label className="text-sm font-medium text-gray-700">Chi tiết đặt chỗ</Label>
+                        <div className="mt-2 space-y-4">
+                            {selectedOrder.metadata.bookingDataSnapshot.details && (
+                                <div>
+                                    <h4 className="font-medium">Thông tin chuyến</h4>
+                                    <div className="space-y-1 text-sm">
+                                        <div>Tuyến: {selectedOrder.metadata.bookingDataSnapshot.details.route}</div>
+                                        <div>Ngày: {selectedOrder.changeCalendar && selectedOrder.dateChangeCalendar ? selectedOrder.dateChangeCalendar : selectedOrder.metadata.bookingDataSnapshot.details.date}</div>
+                                        {/* <div>Giờ: {selectedOrder.metadata.bookingDataSnapshot.details.time}</div> */}
+                                        {selectedOrder.metadata.bookingDataSnapshot.details.selectedPickup && (
+                                            <div>Điểm đón: {selectedOrder.metadata.bookingDataSnapshot.details.selectedPickup}</div>
+                                        )}
+                                        {selectedOrder.metadata.bookingDataSnapshot.details.selectedDropoff && (
+                                            <div>Điểm trả: {selectedOrder.metadata.bookingDataSnapshot.details.selectedDropoff}</div>
+                                        )}
+                                        {selectedOrder.metadata.bookingDataSnapshot.details.seats && (
+                                            <div>Ghế: {selectedOrder.metadata.bookingDataSnapshot.details.seats.join(', ')}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                            {selectedOrder.metadata.bookingDataSnapshot.details?.passengers && (
+                                <div>
+                                    <h4 className="font-medium">Hành khách</h4>
+                                    <div className="space-y-2">
+                                        {selectedOrder.metadata.bookingDataSnapshot.details.passengers.map((p: any, idx: number) => (
+                                            <div key={idx} className="text-sm border p-2 rounded">
+                                                <div>{p.title} {p.firstName} {p.lastName}</div>
+                                                <div>Loại: {p.type}, Ngày sinh: {p.dateOfBirth}, Quốc tịch: {p.nationality}</div>
+                                                <div>CMND/CCCD: {p.idNumber} ({p.idType})</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {selectedOrder.metadata.bookingDataSnapshot.pricing && (
+                                <div>
+                                    <h4 className="font-medium">Giá chi tiết</h4>
+                                    <div className="space-y-1 text-sm">
+                                        <div>Giá cơ bản: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.basePrice)} ₫</div>
+                                        <div>Thuế: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.taxes)} ₫</div>
+                                        <div>Phụ phí: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.addOns)} ₫</div>
+                                        <div>Giảm giá: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.discount)} ₫</div>
+                                        <div>Tổng: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.total)} ₫</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
                 <Separator />
 
                 {/* Timeline */}
-                <div>
+                {/* <div>
                     <Label className="text-sm font-medium text-gray-700">Lịch sử đơn hàng</Label>
-                    <div className="mt-2 space-y-3">
-                        {selectedOrder.timeline.map((event, index) => (
-                            <div key={index} className="flex items-start space-x-3">
-                                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                                <div className="flex-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-medium">{getStatusInfo(event.status, 'order').label}</span>
-                                        <span className="text-sm text-gray-500">
-                                            {new Date(event.timestamp).toLocaleString('vi-VN')}
-                                        </span>
+                    <div className="mt-4 relative">
+                        <div className="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-300"></div>
+                        <div className="space-y-6">
+                            {selectedOrder.timeline.map((event, index) => (
+                                <div key={index} className="relative flex items-start space-x-4">
+                                    <div className="w-6 h-6 bg-blue-500 rounded-full border-4 border-white shadow-md flex items-center justify-center">
+                                        <div className="w-2 h-2 bg-white rounded-full"></div>
                                     </div>
-                                    {event.note && (
-                                        <p className="text-sm text-gray-600 mt-1">{event.note}</p>
-                                    )}
-                                    <p className="text-xs text-gray-500">Bởi: {event.actor}</p>
+                                    <div className="flex-1 pb-4">
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-semibold text-gray-900">{event.text}</span>
+                                            <span className="text-sm text-gray-500">
+                                                {event.ts?.$date?.$numberLong ? new Date(parseInt(event.ts.$date.$numberLong)).toLocaleString('vi-VN') : 'N/A'}
+                                            </span>
+                                        </div>
+                                        {event.meta?.ticket && (
+                                            <p className="text-sm text-gray-700 mt-1 bg-gray-50 p-2 rounded">Ticket: {event.meta.ticket.$oid}</p>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
+                </div> */}
 
-                <Separator />
+                {/* <Separator /> */}
 
                 {/* Admin Notes */}
-                <div>
+                {/* <div>
                     <div className="flex items-center justify-between">
                         <Label className="text-sm font-medium text-gray-700">Ghi chú nội bộ</Label>
                         <Button size="sm" variant="outline" onClick={() => setNoteModalOpen(true)}>
@@ -1018,7 +1367,7 @@ export default function Orders() {
                             <p className="text-sm text-gray-500">Chưa có ghi chú nào</p>
                         )}
                     </div>
-                </div>
+                </div> */}
             </div>
         );
     };

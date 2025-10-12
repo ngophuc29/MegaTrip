@@ -1282,12 +1282,12 @@ export default function TaiKhoan() {
                                                             <div className="text-sm">
                                                                 <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
                                                                 <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                                <Button size="sm" variant="outline" className="ml-2" asChild>
+                                                                {/* <Button size="sm" variant="outline" className="ml-2" asChild>
                                                                     <a href={`/thanh-toan-thanh-cong?orderId=${orderDetails.order.orderNumber}`} target="_blank">
                                                                         <Download className="h-3 w-3 mr-1" />
                                                                         Vé điện tử
                                                                     </a>
-                                                                </Button>
+                                                                </Button> */}
                                                             </div>
                                                         </div>
                                                     ))}
