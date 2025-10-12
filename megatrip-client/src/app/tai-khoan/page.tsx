@@ -830,9 +830,9 @@ export default function TaiKhoan() {
                                                         {booking.changeCalendar && (
                                                             <>
                                                                 <Badge variant="secondary">Đã đổi lịch</Badge>
-                                                                <span className="text-xs text-muted-foreground">
+                                                                {/* <span className="text-xs text-muted-foreground">
                                                                     Đã đổi lịch từ {booking.originalServiceDate || 'N/A'} qua {booking.serviceDate}
-                                                                </span>
+                                                                </span> */}
                                                             </>
                                                         )}
                                                         <div className="text-sm text-muted-foreground mt-1">

@@ -189,8 +189,26 @@ export default function HuyDonPage() {
         const service = new Date(booking.serviceDate + 'T00:00:00');
         if (service <= today) return { canCancel: false, message: 'Đơn đã qua ngày sử dụng.' } as const;
         const diffDays = Math.ceil((service.getTime() - today.getTime()) / (24 * 3600 * 1000));
+        const diffHours = Math.ceil((service.getTime() - today.getTime()) / (3600 * 1000));
 
-        // Tour cancellation policy (per request)
+        // Bus cancellation policy
+        if (booking.type === 'bus') {
+            let feeRate = 1.0;
+            if (diffHours >= 72) feeRate = 0.1;
+            else if (diffHours >= 24) feeRate = 0.25;
+            else if (diffHours >= 12) feeRate = 0.5;
+            const tiers = [
+                { minHours: 72, feeRate: 0.1 },
+                { minHours: 24, feeRate: 0.25 },
+                { minHours: 12, feeRate: 0.5 },
+                { minHours: 0, feeRate: 1.0 }
+            ];
+            const tier = tiers.find(t => diffHours >= t.minHours) ?? tiers[tiers.length - 1];
+            const busPolicy = { name: 'Chính sách hủy xe', tiers, nonRefundableTaxPerPax: 0, platformFee: 0 };
+            return { canCancel: true, diffHours, busPolicy, tier } as const;
+        }
+
+        // Tour cancellation policy
         if (booking.type === 'tour') {
             const tiers = [
                 { minDays: 15, feeRate: 0.20 },
@@ -198,10 +216,9 @@ export default function HuyDonPage() {
                 { minDays: 3, feeRate: 0.75 },
                 { minDays: 0, feeRate: 1.00 }
             ];
-            // find largest minDays <= diffDays
-            let tier = tiers.slice().reverse().find(t => diffDays >= t.minDays) ?? tiers[tiers.length - 1];
-            const airlinePolicy = { name: 'Chính sách hủy tour', tiers, nonRefundableTaxPerPax: 0, platformFee: 0 };
-            return { canCancel: true, diffDays, airlinePolicy, tier } as const;
+            const tier = tiers.find(t => diffDays >= t.minDays) ?? tiers[tiers.length - 1];
+            const tourPolicy = { name: 'Chính sách hủy tour', tiers, nonRefundableTaxPerPax: 0, platformFee: 0 };
+            return { canCancel: true, diffDays, tourPolicy, tier } as const;
         }
 
         // Fallback: existing airline/flight policy
@@ -215,12 +232,12 @@ export default function HuyDonPage() {
         const paxCount = booking.passengers;
         const baseAmount = booking.total;
         const tierRate = (policy as any).tier.feeRate as number;
-        const airlinePenalty = Math.round(baseAmount * tierRate);
-        const taxes = ((policy as any).airlinePolicy.nonRefundableTaxPerPax as number) * paxCount;
-        const platformFee = (policy as any).airlinePolicy.platformFee as number;
-        const totalFees = airlinePenalty + taxes + platformFee;
+        const penalty = Math.round(baseAmount * tierRate);
+        const taxes = ((policy as any).airlinePolicy?.nonRefundableTaxPerPax || (policy as any).busPolicy?.nonRefundableTaxPerPax || (policy as any).tourPolicy?.nonRefundableTaxPerPax || 0) * paxCount;
+        const platformFee = (policy as any).airlinePolicy?.platformFee || (policy as any).busPolicy?.platformFee || (policy as any).tourPolicy?.platformFee || 0;
+        const totalFees = penalty + taxes + platformFee;
         const refund = Math.max(0, baseAmount - totalFees);
-        return { paxCount, baseAmount, airlinePenalty, taxes, platformFee, refund, tierRate };
+        return { paxCount, baseAmount, penalty, taxes, platformFee, refund, tierRate };
     }, [booking, policy]);
     // validate refund method - MUST be declared unconditionally (before any early return)
     const validMethod = useMemo(() => {
@@ -438,19 +455,39 @@ export default function HuyDonPage() {
                                 <div className="p-3 rounded border bg-amber-50 text-amber-900 flex items-start gap-2">
                                     <Info className="h-4 w-4 mt-0.5" />
                                     <div className="text-sm">
-                                        {booking.type === 'tour' ? (
+                                        {booking.type === 'bus' ? (
+                                            <>
+                                                <div className="font-medium">Chính sách hủy xe</div>
+                                                {(policy as any).canCancel ? (
+                                                    <>
+                                                        <div className="mt-1">Còn {(policy as any).diffHours} giờ đến giờ khởi hành</div>
+                                                        <div className="mt-2">
+                                                            <div className="text-xs font-medium">Bảng phí hủy (tính theo % tổng tiền)</div>
+                                                            <ul className="list-disc ml-4 mt-1 space-y-1">
+                                                                <li>≥ 72 giờ trước: Phí 10% {((policy as any).tier?.minHours === 72) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>24-72 giờ trước: Phí 25% {((policy as any).tier?.minHours === 24) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>12- &lt; 24 giờ trước: Phí 50% {((policy as any).tier?.minHours === 12) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>&lt; 12 giờ hoặc sau khi xe chạy: Không hoàn {((policy as any).tier?.minHours === 0) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                            </ul>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="mt-1">{(policy as any).message}</div>
+                                                )}
+                                            </>
+                                        ) : booking.type === 'tour' ? (
                                             <>
                                                 <div className="font-medium">Chính sách hủy tour</div>
                                                 {(policy as any).canCancel ? (
                                                     <>
-                                                        <div className="mt-1">Còn {(policy as any).diffDays} ngày đến ngày sử dụng</div>
+                                                        <div className="mt-1">Còn {(policy as any).diffDays} ngày đến ngày khởi hành</div>
                                                         <div className="mt-2">
                                                             <div className="text-xs font-medium">Bảng phí hủy (tính theo % tổng tiền tour)</div>
                                                             <ul className="list-disc ml-4 mt-1 space-y-1">
-                                                                <li>Trước 15 ngày: 20% tổng tiền tour {((policy as any).tier?.minDays === 15) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
-                                                                <li>7-14 ngày trước: 50% tổng tiền tour {((policy as any).tier?.minDays === 7) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
-                                                                <li>3-6 ngày trước: 75% tổng tiền tour {((policy as any).tier?.minDays === 3) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
-                                                                <li>Trong 2 ngày: 100% tổng tiền tour {((policy as any).tier?.minDays === 0) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>Trước 15 ngày: Phí 20% {((policy as any).tier?.minDays === 15) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>7-14 ngày trước: Phí 50% {((policy as any).tier?.minDays === 7) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>3-6 ngày trước: Phí 75% {((policy as any).tier?.minDays === 3) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
+                                                                <li>Trong 3 ngày trước: Phí 100% {((policy as any).tier?.minDays === 0) && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}</li>
                                                             </ul>
                                                         </div>
                                                     </>
@@ -517,9 +554,10 @@ export default function HuyDonPage() {
                                 </div>
                                 {(policy as any).canCancel && breakdown && (
                                     <>
+
                                         <div className="flex items-center justify-between text-sm">
-                                            <span>Phí phạt hãng ({Math.round(breakdown.tierRate * 100)}%)</span>
-                                            <span className="font-medium text-red-600">- {formatPrice(breakdown.airlinePenalty)}</span>
+                                            <span>Phí phạt ({Math.round(breakdown.tierRate * 100)}%)</span>
+                                            <span className="font-medium text-red-600">- {formatPrice(breakdown.penalty)}</span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span>Thuế/Phí không hoàn</span>
