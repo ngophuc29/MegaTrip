@@ -746,7 +746,9 @@ export default function ChiTietXeDuLich() {
                                         <div className="text-sm font-medium">{opt.labelDate}</div>
                                         {/* <div className="text-xs text-[hsl(var(--muted-foreground))]">{opt.labelTime}</div> */}
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">{opt.labelTime}</div>
-                                        {typeof opt.seatsAvailable === 'number' && (
+                                        {opt.isPast ? (
+                                            <div className="text-xs text-red-500 mt-1">Đã khởi hành</div>
+                                        ) : typeof opt.seatsAvailable === 'number' && (
                                             <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Còn {opt.seatsAvailable} chỗ</div>
                                         )}
                                     </button>
