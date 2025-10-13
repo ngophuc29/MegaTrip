@@ -204,18 +204,23 @@ export default function DoiLichPage() {
         async function loadProductOptions() {
             if (!order) { setOptions([]); return; }
             setLoadingOptions(true);
-            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8080';
+            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 
             const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
             const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
             const { adults, children, infants, seatCount } = paxCountsFromOrder(order);
             const type = (item?.type || '').toLowerCase();
 
+            const now = new Date();
+            const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+
             if (type === 'flight') {
                 const baseFare = Math.round((order.total || 0) / Math.max(1, adults + children + infants));
                 const dates: Date[] = [];
                 const start = selectedDate || new Date();
-                for (let i = 0; i < 7; i++) dates.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+                const startIso = new Date(start.getFullYear(), start.getMonth(), start.getDate()).toISOString().slice(0, 10);
+                const actualStart = startIso <= todayIso ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) : start; // Từ ngày mai nếu selectedDate <= today
+                for (let i = 0; i < 7; i++) dates.push(new Date(actualStart.getFullYear(), actualStart.getMonth(), actualStart.getDate() + i));
                 const opts: Option[] = [];
                 for (const d of dates) {
                     const gen = generateOptions(baseFare, d);
@@ -233,7 +238,9 @@ export default function DoiLichPage() {
                     if (!r.ok) throw new Error(String(r.status));
                     const j = await r.json();
                     const tour = j && j.data ? j.data : j;
-                    const dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
+                    let dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
+                    // Filter chỉ giữ ngày > today
+                    dates = dates.filter(d => d > todayIso);
                     const adultUnit = Number(tour?.adultPrice ?? tour?.pricing?.perPax?.adultUnit ?? tour?.price ?? 0);
                     const childUnit = Number(tour?.childPrice ?? tour?.pricing?.perPax?.childUnit ?? 0);
                     const infantUnit = Number(tour?.infantPrice ?? tour?.pricing?.perPax?.infantUnit ?? 0);
@@ -284,7 +291,9 @@ export default function DoiLichPage() {
                     if (!r.ok) throw new Error(String(r.status));
                     const j = await r.json();
                     const bus = j && j.data ? j.data : j;
-                    const dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
+                    let dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
+                    // Filter chỉ giữ ngày > today
+                    dates = dates.filter(d => d > todayIso);
                     const adultUnit = Number(bus?.adultPrice || bus?.price || 0);
                     const childUnit = Number(bus?.childPrice || 0);
                     const infantUnit = 0;
@@ -662,35 +671,28 @@ export default function DoiLichPage() {
         const g: Record<string, Option[]> = {};
         const excludeDate = booking?.serviceDate ?? null;
         const now = new Date();
-        const todayIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString().slice(0, 10);
+        const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
         for (const o of options) {
             const d = (o as any).labelDate || (o.id.split('-')[2] ?? null);
+            console.log('Processing option d:', d, 'todayIso:', todayIso, 'excludeDate:', excludeDate);
             if (!d) continue;
             // skip current service date
-            if (excludeDate && d === excludeDate) continue;
-            // skip past dates
-            if (d < todayIso) continue;
-
-            // if date is today, drop options that are already departed (compare HH:mm)
-            if (d === todayIso) {
-                const timeStr = String((o as any).time || '').trim();
-                const m = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-                if (m) {
-                    const hh = Number(m[1]);
-                    const mm = Number(m[2]);
-                    if (!Number.isNaN(hh) && !Number.isNaN(mm)) {
-                        const optMinutes = hh * 60 + mm;
-                        if (optMinutes <= nowMinutes) {
-                            // this option already departed — skip it
-                            continue;
-                        }
-                    }
-                }
-                // if no parsable time, keep the option (can't decide)
+            if (excludeDate && d === excludeDate) {
+                console.log('Skipping excludeDate:', d);
+                continue;
             }
-
+            // skip today specifically
+            if (d === todayIso) {
+                console.log('Skipping today:', d);
+                continue;
+            }
+            // skip past dates
+            if (d < todayIso) {
+                console.log('Skipping past:', d);
+                continue;
+            }
             if (!g[d]) g[d] = [];
             g[d].push(o);
         }

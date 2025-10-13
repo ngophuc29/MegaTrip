@@ -246,7 +246,7 @@ interface Province {
     phone_code?: number;
     wards?: any[];
 }
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:7700";
 export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");

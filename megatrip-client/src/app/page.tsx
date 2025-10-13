@@ -364,7 +364,7 @@ export default function Index() {
     // fetch each slug/id from backend; tolerate different response shapes
     (async () => {
       try {
-        const res = await fetch('http://localhost:8080/api/tours/batch', {
+        const res = await fetch('http://localhost:7700/api/tours/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ slugs: ids })

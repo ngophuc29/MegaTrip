@@ -45,9 +45,9 @@ export function ImageUploader({
   useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
 
   // base API for upload (adjust via NEXT_PUBLIC_API_BASE_URL)
-  // const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+  // const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:7700";
   // base API for upload (use NEXT_PUBLIC_API_BASE if set, fallback to 7700)
-  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:8080";
+  const API_BASE = (process.env.NEXT_PUBLIC_API_BASE as string) || (process.env.NEXT_PUBLIC_API_BASE_URL as string) || "http://localhost:7700";
   // sync incoming value (array of URLs) into internal preview state
   // sync incoming value (array of URLs) into internal preview state
   useEffect(() => {

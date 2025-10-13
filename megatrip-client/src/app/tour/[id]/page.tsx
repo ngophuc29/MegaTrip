@@ -70,8 +70,8 @@ const tourDetails = {
         { url: 'https://media-cdn-v2.laodong.vn/Storage/NewsPortal/2022/2/26/1017919/Sun-World-Ba-Na-Hill-01.jpg', title: 'Sun World Ba Na Hills', type: 'image' },
         { url: 'https://centralvietnamguide.com/wp-content/uploads/2022/02/ba-na-hill-station_2-1024x683.jpg', title: 'Ba Na Hill Station', type: 'image' },
         { url: 'https://vietnam.travel/sites/default/files/inline-images/shutterstock_1346056832.jpg', title: 'Cầu Vàng Bà Nà', type: 'image' },
-        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1580803905738.jpg', title: 'Bà Nà Hill 1', type: 'image' },
-        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1580803905738.jpg', title: 'Bà Nà Hill 2', type: 'image' },
+        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1577003905738.jpg', title: 'Bà Nà Hill 1', type: 'image' },
+        { url: 'https://impresstravel.com/wp-content/uploads/2020/02/Ba-Na-Hill-e1577003905738.jpg', title: 'Bà Nà Hill 2', type: 'image' },
         { url: '/placeholder.svg', title: 'Video tour overview', type: 'video' },
         { url: '/placeholder.svg', title: 'Khách sạn 4 sao', type: 'image' },
     ],
@@ -410,7 +410,7 @@ export default function ChiTietTour() {
         if (!id) return;
         async function fetchBySlug() {
             try {
-                const res = await fetch(`http://localhost:8080/api/tours/slug/${id}`);
+                const res = await fetch(`http://localhost:7700/api/tours/slug/${id}`);
                 if (!res.ok) {
                     console.warn('Tour by slug fetch failed', res.status);
                     return;
@@ -569,7 +569,7 @@ export default function ChiTietTour() {
         if (!id) return;
         async function fetchBySlug() {
             try {
-                const res = await fetch(`http://localhost:8080/api/tours/slug/${id}`);
+                const res = await fetch(`http://localhost:7700/api/tours/slug/${id}`);
                 if (!res.ok) {
                     console.warn('Tour by slug fetch failed', res.status);
                     return;
@@ -598,7 +598,7 @@ export default function ChiTietTour() {
 
                 }
                 // fetch slot info for each start date and merge into mapped.availableDates
-                const TOUR_SERVICE = 'http://localhost:8080';
+                const TOUR_SERVICE = 'http://localhost:7700';
                 async function fetchSlotForDate(tourId: string, dateIso: string) {
                     try {
                         const r = await fetch(`${TOUR_SERVICE}/api/tours/${encodeURIComponent(tourId)}/slots/${encodeURIComponent(dateIso)}`);

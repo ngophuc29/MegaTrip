@@ -253,7 +253,7 @@ export default function ChiTietXeDuLich() {
         // fetch slots for this bus (to get per-date seatmap/seatsAvailable)
         (async () => {
             try {
-                const r = await fetch(`${API_BASE}/api/bus-slots/${id}`);
+                const r = await fetch(`${API_BASE}/api/buses/bus-slots/${id}`);
                 if (r.ok) {
                     const json = await r.json();
                     // map dateIso -> booking entry

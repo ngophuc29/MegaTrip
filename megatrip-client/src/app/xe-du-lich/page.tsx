@@ -257,7 +257,7 @@ export default function XeDuLich() {
             params.append('status', 'scheduled');
             // only add query string when there are meaningful params (avoid trailing '?')
             const qs = params.toString();
-            const url = qs ? `${API_BASE}/api/client/buses?${qs}` : `${API_BASE}/api/client/buses`;
+            const url = qs ? `${API_BASE}/api/buses/client/buses?${qs}` : `${API_BASE}/api/buses/client/buses`;
 
             // Log the outgoing request for debugging
             console.log('fetchBuses -> requesting', { url, from, to, departure });

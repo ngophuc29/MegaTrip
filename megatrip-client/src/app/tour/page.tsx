@@ -343,7 +343,7 @@ export default function Tour() {
     // Generate additional tours for selected destination
     // state for API tours
     const [apiTours, setApiTours] = useState<any[]>([]);
-    const API_BASE_TOUR = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    const API_BASE_TOUR = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:7700";
     const [fetchAttempted, setFetchAttempted] = useState(false);
     const [fetchError, setFetchError] = useState<string | null>(null);
     // Define fetchTours function at component level
