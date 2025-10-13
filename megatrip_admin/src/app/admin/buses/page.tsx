@@ -217,115 +217,82 @@ const formatRouteSelectValue = (routeObj: any) => {
 };
 
 // --- Stronger validation ---
-const validateForm = (data: BusFormData): Record<string, string> => {
+const validateForm = (data: BusFormData, fieldsToValidate?: string[]): Record<string, string> => {
     const errors: Record<string, string> = {};
 
+    const shouldValidate = (field: string) => !fieldsToValidate || fieldsToValidate.includes(field);
+
     // busCode: required, uppercase alnum/_- 3-12 chars
-    if (!data.busCode || !data.busCode.trim()) {
-        errors.busCode = "Bạn phải nhập mã tuyến xe";
-    } else {
-        const code = data.busCode.trim().toUpperCase();
-        const re = /^[A-Z0-9_-]{3,12}$/;
-        if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+    if (shouldValidate('busCode')) {
+        if (!data.busCode || !data.busCode.trim()) {
+            errors.busCode = "Bạn phải nhập mã tuyến xe";
+        } else {
+            const code = data.busCode.trim().toUpperCase();
+            const re = /^[A-Z0-9_-]{3,12}$/;
+            if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+        }
     }
 
     // operator: must exist in loaded operators (if available)
-    if (!data.operatorId) {
-        errors.operatorId = "Bạn phải chọn nhà xe";
-    } else if (operatorsData && Array.isArray(operatorsData)) {
-        const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
-        if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+    if (shouldValidate('operatorId')) {
+        if (!data.operatorId) {
+            errors.operatorId = "Bạn phải chọn nhà xe";
+        } else if (operatorsData && Array.isArray(operatorsData)) {
+            const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+            if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+        }
     }
 
     // routeFrom / routeTo: required and must map to a station
-    if (!data.routeFrom) {
-        errors.routeFrom = "Bạn phải chọn điểm đi";
-    } else {
-        const parsedFrom = parseRouteValue(data.routeFrom);
-        if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+    if (shouldValidate('routeFrom')) {
+        if (!data.routeFrom) {
+            errors.routeFrom = "Bạn phải chọn điểm đi";
+        } else {
+            const parsedFrom = parseRouteValue(data.routeFrom);
+            if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+        }
     }
-    if (!data.routeTo) {
-        errors.routeTo = "Bạn phải chọn điểm đến";
-    } else {
-        const parsedTo = parseRouteValue(data.routeTo);
-        if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
-    }
-    // Ensure they are different
-    if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
-        errors.routeTo = "Điểm đến phải khác điểm đi";
+    if (shouldValidate('routeTo')) {
+        if (!data.routeTo) {
+            errors.routeTo = "Bạn phải chọn điểm đến";
+        } else {
+            const parsedTo = parseRouteValue(data.routeTo);
+            if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+        }
+        // Ensure they are different
+        if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+            errors.routeTo = "Điểm đến phải khác điểm đi";
+        }
     }
 
     // departureDates: require at least one, each valid and not in past
-    const now = new Date();
-    if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
-        errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
-    } else {
-        const seen = new Set<string>();
-        for (let i = 0; i < data.departureDates.length; i++) {
-            const d = data.departureDates[i];
-            if (!d || isNaN(new Date(d).getTime())) {
-                errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
-            } else {
-                const dt = new Date(d);
-                if (dt < now) {
-                    errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+    if (shouldValidate('departureDates') || shouldValidate('departureAt')) {
+        const now = new Date();
+        if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
+            errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
+        } else {
+            const seen = new Set<string>();
+            for (let i = 0; i < data.departureDates.length; i++) {
+                const d = data.departureDates[i];
+                if (!d || isNaN(new Date(d).getTime())) {
+                    errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
+                } else {
+                    const dt = new Date(d);
+                    if (dt < now) {
+                        errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+                    }
+                    const key = dt.toISOString();
+                    if (seen.has(key)) {
+                        errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
+                    }
+                    seen.add(key);
                 }
-                const key = dt.toISOString();
-                if (seen.has(key)) {
-                    errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
-                }
-                seen.add(key);
             }
         }
     }
 
     // arrivalAt validation: must be valid and after earliest departure
-    if (!data.arrivalAt) {
-        errors.arrivalAt = "Bạn phải chọn giờ đến";
-    } else if (isNaN(new Date(data.arrivalAt).getTime())) {
-        errors.arrivalAt = "Giờ đến không hợp lệ";
-    } else {
-        const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
-        if (earliest && new Date(data.arrivalAt) <= earliest) {
-            errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
-        }
-    }
-
-    // numeric checks
-    if (typeof data.price !== 'number' || isNaN(data.price) || data.price <= 0) {
-        errors.price = "Giá vé phải là số lớn hơn 0";
-    }
-    if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
-        errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
-    }
-    if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
-        errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
-    } else if (data.seatsAvailable > data.seatsTotal) {
-        errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
-    }
-
-    // busType must have at least one entry
-    if (!Array.isArray(data.busType) || data.busType.length === 0) {
-        errors.busType = "Bạn phải chọn ít nhất một loại xe";
-    }
-
-    // No strict requirement for amenities (checkboxes) — optional
-
-    // arrivalDates: if present, must pair with departures and be after each corresponding departure
-    if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
-        for (let i = 0; i < (data.departureDates || []).length; i++) {
-            const dep = data.departureDates?.[i];
-            const arr = data.arrivalDates?.[i];
-            if (!arr || isNaN(new Date(arr).getTime())) {
-                errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
-            } else if (dep && !isNaN(new Date(dep).getTime())) {
-                if (new Date(arr) <= new Date(dep)) {
-                    errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
-                }
-            }
-        }
-    } else {
-        // fallback to single arrivalAt check (existing)
+    if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
         if (!data.arrivalAt) {
             errors.arrivalAt = "Bạn phải chọn giờ đến";
         } else if (isNaN(new Date(data.arrivalAt).getTime())) {
@@ -334,6 +301,63 @@ const validateForm = (data: BusFormData): Record<string, string> => {
             const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
             if (earliest && new Date(data.arrivalAt) <= earliest) {
                 errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+            }
+        }
+    }
+
+    // numeric checks
+    if (shouldValidate('adultPrice') || shouldValidate('price')) {
+        if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
+            errors.adultPrice = "Giá vé phải là số lớn hơn 0";
+        }
+    }
+    if (shouldValidate('seatsTotal')) {
+        if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+            errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+        }
+    }
+    if (shouldValidate('seatsAvailable')) {
+        if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+            errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+        } else if (data.seatsAvailable > data.seatsTotal) {
+            errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+        }
+    }
+
+    // busType must have at least one entry
+    if (shouldValidate('busType')) {
+        if (!Array.isArray(data.busType) || data.busType.length === 0) {
+            errors.busType = "Bạn phải chọn ít nhất một loại xe";
+        }
+    }
+
+    // No strict requirement for amenities (checkboxes) — optional
+
+    // arrivalDates: if present, must pair with departures and be after each corresponding departure
+    if (shouldValidate('arrivalDates') || shouldValidate('arrivalAt')) {
+        if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
+            for (let i = 0; i < (data.departureDates || []).length; i++) {
+                const dep = data.departureDates?.[i];
+                const arr = data.arrivalDates?.[i];
+                if (!arr || isNaN(new Date(arr).getTime())) {
+                    errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
+                } else if (dep && !isNaN(new Date(dep).getTime())) {
+                    if (new Date(arr) <= new Date(dep)) {
+                        errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                    }
+                }
+            }
+        } else {
+            // fallback to single arrivalAt check (existing)
+            if (!data.arrivalAt) {
+                errors.arrivalAt = "Bạn phải chọn giờ đến";
+            } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+                errors.arrivalAt = "Giờ đến không hợp lệ";
+            } else {
+                const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
+                if (earliest && new Date(data.arrivalAt) <= earliest) {
+                    errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+                }
             }
         }
     }
@@ -696,94 +720,96 @@ export default function Buses() {
     // Update bus mutation -> PUT /api/buses/:id
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-            const payload: any = { ...data }; // Truyền tất cả trường từ data (kể cả không thay đổi)
+        const payload: any = { ...data }; // Bắt đầu với tất cả data
 
-            // Kiểm tra và log những trường nào thay đổi (so với originalBus)
-            if (originalBus) {
-                const changedFields: string[] = [];
-                Object.keys(data).forEach(key => {
-                    const originalValue = (originalBus as any)[key];
-                    const newValue = (data as any)[key];
-                    // So sánh đơn giản (có thể cần deep compare cho object/array)
-                    if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
-                        changedFields.push(key);
-                    }
-                });
-                console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
-                // Nếu muốn chỉ update trường thay đổi, uncomment dòng dưới và sửa payload
-                // const partialPayload = {};
-                // changedFields.forEach(key => partialPayload[key] = payload[key]);
-                // Object.assign(payload, partialPayload);
-            }
-
-            // Xử lý payload như cũ (operator, route, dates, etc.)
-            if ((data as any).operatorId) {
-                const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
-                if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
-            }
-            if ((data as any).routeFrom) {
-                const parsedFromUp = parseRouteValue((data as any).routeFrom);
-                payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
-            }
-            if ((data as any).routeTo) {
-                const parsedToUp = parseRouteValue((data as any).routeTo);
-                payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
-            }
-
-            // Normalize departureDates/arrivalDates to ISO/Z
-            if ((data as any).departureDates && Array.isArray((data as any).departureDates)) {
-                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
-            }
-            if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates)) {
-                payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
-            }
-            if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length)) {
-                payload.departureDates = [localToIso((data as any).departureAt)];
-            }
-            if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length)) {
-                payload.arrivalDates = [localToIso((data as any).arrivalAt)];
-            }
-
-            delete payload.departureAt;
-            delete payload.arrivalAt;
-
-            if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
-                payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
-            }
-            const allSubtypes = getAllSubtypes(loaixeData);
-            let subtypeUpd;
-            if (selectedSubtypeId) {
-                subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
-            } else {
-                const firstTypeName = payload && payload.busType && payload.busType[0];
-                subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
-            }
-            if (subtypeUpd) {
-                payload.busType = [subtypeUpd.name];
-                if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
-            }
-            if (amenitiesSelected && amenitiesSelected.length) {
-                payload.amenities = amenitiesSelected.join(', ');
-            }
-            payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
-
-            if (typeof payload.adultPrice !== 'undefined') payload.adultPrice = Number(payload.adultPrice);
-            if (typeof payload.childPrice !== 'undefined') payload.childPrice = Number(payload.childPrice);
-            delete payload.price;
-
-            console.log('[Buses] updateBus payload (all fields):', JSON.stringify(payload, null, 2));
-
-            const res = await fetch(`${API_BASE}/api/buses/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+        // So sánh và chỉ gửi các trường đã thay đổi
+        if (originalBus) {
+            const changedFields: string[] = [];
+            Object.keys(data).forEach(key => {
+                const originalValue = (originalBus as any)[key];
+                const newValue = (data as any)[key];
+                // So sánh sâu (bao gồm arrays/objects)
+                if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                    changedFields.push(key);
+                }
             });
-            if (!res.ok) {
-                const j = await res.json().catch(() => ({}));
-                throw new Error(j.error || 'Failed to update');
-            }
-            return res.json();
-        },
+            console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
+            // Chỉ giữ lại các trường đã thay đổi
+            const partialPayload: any = {};
+            changedFields.forEach(key => partialPayload[key] = payload[key]);
+            // Ghi đè payload với partialPayload
+            Object.keys(payload).forEach(key => delete payload[key]); // Xóa tất cả
+            Object.assign(payload, partialPayload); // Chỉ thêm changed fields
+        }
+
+        // Xử lý payload như cũ (operator, route, dates, etc.) - nhưng chỉ cho các trường đã thay đổi
+        if ((data as any).operatorId && payload.operatorId) {  // Chỉ xử lý nếu trường này có trong payload
+            const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
+            if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
+        }
+        if ((data as any).routeFrom && payload.routeFrom) {
+            const parsedFromUp = parseRouteValue((data as any).routeFrom);
+            payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
+        }
+        if ((data as any).routeTo && payload.routeTo) {
+            const parsedToUp = parseRouteValue((data as any).routeTo);
+            payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
+        }
+
+        // Normalize departureDates/arrivalDates to ISO/Z - chỉ nếu chúng có trong payload
+        if ((data as any).departureDates && Array.isArray((data as any).departureDates) && payload.departureDates) {
+            payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
+        }
+        if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates) && payload.arrivalDates) {
+            payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
+        }
+        if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length) && payload.departureAt) {
+            payload.departureDates = [localToIso((data as any).departureAt)];
+        }
+        if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length) && payload.arrivalAt) {
+            payload.arrivalDates = [localToIso((data as any).arrivalAt)];
+        }
+
+        delete payload.departureAt;
+        delete payload.arrivalAt;
+
+        if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
+            payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
+        }
+        const allSubtypes = getAllSubtypes(loaixeData);
+        let subtypeUpd;
+        if (selectedSubtypeId) {
+            subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
+        } else {
+            const firstTypeName = payload.busType && payload.busType[0];
+            subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
+        }
+        if (subtypeUpd && payload.busType) {
+            payload.busType = [subtypeUpd.name];
+            if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
+        }
+        if (amenitiesSelected && amenitiesSelected.length && payload.amenities) {
+            payload.amenities = amenitiesSelected.join(', ');
+        }
+        payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+        if (typeof payload.adultPrice !== 'undefined' && payload.adultPrice !== null) payload.adultPrice = Number(payload.adultPrice);
+        if (typeof payload.childPrice !== 'undefined' && payload.childPrice !== null) payload.childPrice = Number(payload.childPrice);
+        delete payload.price;
+
+        console.log('[Buses] updateBus payload (only changed fields):', JSON.stringify(payload, null, 2));
+
+        const res = await fetch(`${API_BASE}/api/buses/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j.error || 'Failed to update');
+        }
+        return res.json();
+    },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
@@ -860,124 +886,87 @@ export default function Buses() {
     const total = busesData?.pagination?.total || 0;
 
     // Form validation
-    const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = []): Record<string, string> => {
+    const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = [], changedFields?: string[]): Record<string, string> => {
         const errors: Record<string, string> = {};
 
+        // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields
+        const shouldValidate = (field: string) => !changedFields || changedFields.includes(field);
+
         // busCode: required, uppercase alnum/_- 3-12 chars
-        if (!data.busCode || !data.busCode.trim()) {
-            errors.busCode = "Bạn phải nhập mã tuyến xe";
-        } else {
-            const code = data.busCode.trim().toUpperCase();
-            const re = /^[A-Z0-9_-]{3,12}$/;
-            if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+        if (shouldValidate('busCode')) {
+            if (!data.busCode || !data.busCode.trim()) {
+                errors.busCode = "Bạn phải nhập mã tuyến xe";
+            } else {
+                const code = data.busCode.trim().toUpperCase();
+                const re = /^[A-Z0-9_-]{3,12}$/;
+                if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+            }
         }
 
         // operator: must exist in loaded operators (if available)
-        if (!data.operatorId) {
-            errors.operatorId = "Bạn phải chọn nhà xe";
-        } else if (operatorsData && Array.isArray(operatorsData)) {
-            const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
-            if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+        if (shouldValidate('operatorId')) {
+            if (!data.operatorId) {
+                errors.operatorId = "Bạn phải chọn nhà xe";
+            } else if (operatorsData && Array.isArray(operatorsData)) {
+                const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+                if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+            }
         }
 
         // routeFrom / routeTo: required and must map to a station
-        if (!data.routeFrom) {
-            errors.routeFrom = "Bạn phải chọn điểm đi";
-        } else {
-            const parsedFrom = parseRouteValue(data.routeFrom);
-            if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+        // Validate cả hai nếu một trong hai thay đổi (do check phụ thuộc)
+        const routeChanged = changedFields && (changedFields.includes('routeFrom') || changedFields.includes('routeTo'));
+        if (shouldValidate('routeFrom') || routeChanged) {
+            if (!data.routeFrom) {
+                errors.routeFrom = "Bạn phải chọn điểm đi";
+            } else {
+                const parsedFrom = parseRouteValue(data.routeFrom);
+                if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+            }
         }
-        if (!data.routeTo) {
-            errors.routeTo = "Bạn phải chọn điểm đến";
-        } else {
-            const parsedTo = parseRouteValue(data.routeTo);
-            if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
-        }
-        // Ensure they are different
-        if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
-            errors.routeTo = "Điểm đến phải khác điểm đi";
+        if (shouldValidate('routeTo') || routeChanged) {
+            if (!data.routeTo) {
+                errors.routeTo = "Bạn phải chọn điểm đến";
+            } else {
+                const parsedTo = parseRouteValue(data.routeTo);
+                if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+            }
+            // Ensure they are different (chỉ check nếu cả hai được validate)
+            if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+                errors.routeTo = "Điểm đến phải khác điểm đi";
+            }
         }
 
-        // departureDates: require at least one, each valid and not in past
         // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
-        const now = new Date();
-        if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
-            errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
-        } else {
-            const seen = new Set<string>();
-            for (let i = 0; i < data.departureDates.length; i++) {
-                const d = data.departureDates[i];
-                if (!d || isNaN(new Date(d).getTime())) {
-                    errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
-                } else {
-                    const dt = new Date(d);
-                    // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
-                    const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
-                    if (isChanged && dt < now) {
-                        errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+        if (shouldValidate('departureDates')) {
+            const now = new Date();
+            if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
+                errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
+            } else {
+                const seen = new Set<string>();
+                for (let i = 0; i < data.departureDates.length; i++) {
+                    const d = data.departureDates[i];
+                    if (!d || isNaN(new Date(d).getTime())) {
+                        errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
+                    } else {
+                        const dt = new Date(d);
+                        // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
+                        const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
+                        if (isChanged && dt < now) {
+                            errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+                        }
+                        const key = dt.toISOString();
+                        if (seen.has(key)) {
+                            errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
+                        }
+                        seen.add(key);
                     }
-                    const key = dt.toISOString();
-                    if (seen.has(key)) {
-                        errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
-                    }
-                    seen.add(key);
                 }
             }
         }
 
         // arrivalAt validation: must be valid and after earliest departure
-        if (!data.arrivalAt) {
-            errors.arrivalAt = "Bạn phải chọn giờ đến";
-        } else if (isNaN(new Date(data.arrivalAt).getTime())) {
-            errors.arrivalAt = "Giờ đến không hợp lệ";
-        } else {
-            const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
-            if (earliest && new Date(data.arrivalAt) <= earliest) {
-                errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
-            }
-        }
-
-        // numeric checks
-        if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
-            errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
-        }
-        if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
-            errors.childPrice = "Giá vé trẻ em phải là số >= 0";
-        }
-        if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
-            errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
-        }
-        if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
-            errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
-        }
-        if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
-            errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
-        } else if (data.seatsAvailable > data.seatsTotal) {
-            errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
-        }
-
-        // busType must have at least one entry
-        if (!Array.isArray(data.busType) || data.busType.length === 0) {
-            errors.busType = "Bạn phải chọn ít nhất một loại xe";
-        }
-
-        // No strict requirement for amenities (checkboxes) — optional
-
-        // arrivalDates: if present, must pair with departures and be after each corresponding departure
-        if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
-            for (let i = 0; i < (data.departureDates || []).length; i++) {
-                const dep = data.departureDates?.[i];
-                const arr = data.arrivalDates?.[i];
-                if (!arr || isNaN(new Date(arr).getTime())) {
-                    errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
-                } else if (dep && !isNaN(new Date(dep).getTime())) {
-                    if (new Date(arr) <= new Date(dep)) {
-                        errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
-                    }
-                }
-            }
-        } else {
-            // fallback to single arrivalAt check (existing)
+        if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
             if (!data.arrivalAt) {
                 errors.arrivalAt = "Bạn phải chọn giờ đến";
             } else if (isNaN(new Date(data.arrivalAt).getTime())) {
@@ -986,6 +975,57 @@ export default function Buses() {
                 const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
                 if (earliest && new Date(data.arrivalAt) <= earliest) {
                     errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+                }
+            }
+        }
+
+        // numeric checks
+        if (shouldValidate('adultPrice')) {
+            if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
+                errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
+            }
+        }
+        if (shouldValidate('childPrice')) {
+            if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
+                errors.childPrice = "Giá vé trẻ em phải là số >= 0";
+            }
+            if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
+                errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
+            }
+        }
+        if (shouldValidate('seatsTotal')) {
+            if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+                errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+            }
+        }
+        if (shouldValidate('seatsAvailable')) {
+            if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+                errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+            } else if (data.seatsAvailable > data.seatsTotal) {
+                errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+            }
+        }
+
+        // busType must have at least one entry
+        if (shouldValidate('busType')) {
+            if (!Array.isArray(data.busType) || data.busType.length === 0) {
+                errors.busType = "Bạn phải chọn ít nhất một loại xe";
+            }
+        }
+
+        // arrivalDates: if present, must pair with departures and be after each corresponding departure
+        if (shouldValidate('arrivalDates')) {
+            if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
+                for (let i = 0; i < (data.departureDates || []).length; i++) {
+                    const dep = data.departureDates?.[i];
+                    const arr = data.arrivalDates?.[i];
+                    if (!arr || isNaN(new Date(arr).getTime())) {
+                        errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
+                    } else if (dep && !isNaN(new Date(dep).getTime())) {
+                        if (new Date(arr) <= new Date(dep)) {
+                            errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                        }
+                    }
                 }
             }
         }
@@ -1244,21 +1284,21 @@ export default function Buses() {
         setSelectedBus(bus);
         setOriginalBus(bus); // Lưu giá trị ban đầu để so sánh
         setOriginalDepartureDates(Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
-            ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
-            : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []));
+            ? (bus as any).departureDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput để đồng nhất
+            : (bus.departureAt ? [toLocalInput(new Date(bus.departureAt))] : []));
         setFormData({
             busCode: bus.busCode,
             operatorId: bus.operator.id,
             routeFrom: formatRouteSelectValue(bus.routeFrom),
             routeTo: formatRouteSelectValue(bus.routeTo),
-            departureAt: bus.departureAt ? bus.departureAt.slice(0, 16) : "",
+            departureAt: bus.departureAt ? toLocalInput(new Date(bus.departureAt)) : "",  // Sử dụng toLocalInput
             departureDates: Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
-                ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
-                : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []),
+                ? (bus as any).departureDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput cho mỗi phần tử
+                : (bus.departureAt ? [toLocalInput(new Date(bus.departureAt))] : []),  // Sử dụng toLocalInput
             arrivalDates: Array.isArray((bus as any).arrivalDates) && (bus as any).arrivalDates.length
-                ? (bus as any).arrivalDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
-                : (bus.arrivalAt ? [bus.arrivalAt.slice(0, 16)] : []),
-            arrivalAt: bus.arrivalAt ? bus.arrivalAt.slice(0, 16) : "",
+                ? (bus as any).arrivalDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput cho mỗi phần tử
+                : (bus.arrivalAt ? [toLocalInput(new Date(bus.arrivalAt))] : []),  // Sử dụng toLocalInput
+            arrivalAt: bus.arrivalAt ? toLocalInput(new Date(bus.arrivalAt)) : "",  // Sử dụng toLocalInput
             duration: bus.duration,
             busType: bus.busType,
             adultPrice: (bus as any).adultPrice ?? (bus as any).price ?? 0,
@@ -1317,7 +1357,22 @@ export default function Buses() {
     };
 
     const handleSubmit = () => {
-        const errors = validateForm(formData, modalMode, originalDepartureDates);
+        let fieldsToValidate: string[] | undefined;
+        if (modalMode === "edit" && selectedBus) {
+            // Calculate changed fields
+            const changedFields: string[] = [];
+            Object.keys(formData).forEach(key => {
+                const originalValue = (selectedBus as any)[key];
+                const newValue = (formData as any)[key];
+                if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                    changedFields.push(key);
+                }
+            });
+            fieldsToValidate = changedFields;
+            console.log('[handleSubmit] Changed fields:', changedFields);
+        }
+
+        const errors = validateForm(formData, modalMode, originalDepartureDates, operatorsData, fieldsToValidate);
         setFormErrors(errors);
 
         if (Object.keys(errors).length > 0) {
@@ -1332,11 +1387,11 @@ export default function Buses() {
         // ensure formData.departureDates not empty when sending, and normalize to ISO/Z
         const dataToSend = { ...formData } as any;
         const depsRaw = (formData.departureDates && formData.departureDates.length) ? formData.departureDates : (formData.departureAt ? [formData.departureAt] : []);
-        dataToSend.departureDates = depsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+        dataToSend.departureDates = depsRaw.filter(Boolean);
 
         // ensure arrivalDates are present and normalized
         const arrsRaw = (formData.arrivalDates && formData.arrivalDates.length) ? formData.arrivalDates : (formData.arrivalAt ? [formData.arrivalAt] : []);
-        dataToSend.arrivalDates = arrsRaw.map((s: string) => localToIso(s)).filter(Boolean);
+        dataToSend.arrivalDates = arrsRaw.filter(Boolean);
 
         // Remove scalar fields to avoid duplication
         delete dataToSend.departureAt;

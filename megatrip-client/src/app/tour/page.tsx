@@ -249,7 +249,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([1000000, 6000000]);
+    const [priceRange, setPriceRange] = useState([1000000, 100000000]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
@@ -850,7 +850,7 @@ export default function Tour() {
                                                 <Slider
                                                     value={priceRange}
                                                     onValueChange={setPriceRange}
-                                                    max={6000000}
+                                                    max={100000000}
                                                     min={1000000}
                                                     step={200000}
                                                     className="mb-3"
@@ -860,6 +860,7 @@ export default function Tour() {
                                                     <span>{formatPrice(priceRange[1])}</span>
                                                 </div>
                                             </div>
+                                            
                                         </div>
 
                                         <Separator />

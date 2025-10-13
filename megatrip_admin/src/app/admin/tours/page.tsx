@@ -798,6 +798,46 @@ export default function Tours() {
 
         toast({ title: "Đã đặt lại lịch", description: "Lịch khởi hành và giờ đến đã được xóa", variant: "default" });
     };
+    // Convert Tour to TourFormData for comparison
+    const convertTourToFormData = (tour: Tour): TourFormData => {
+        return {
+            name: tour.name,
+            slug: tour.slug,
+            description: tour.description,
+            departureFrom: tour.departureFrom,
+            destination: tour.destination,
+            startDate: tour.startDate,
+            endDate: tour.endDate,
+            startDates: tour.startDates || [],
+            endDates: tour.endDates || [],
+            duration: tour.duration,
+            difficulty: tour.difficulty || "easy",
+            adultPrice: tour.adultPrice,
+            childPrice: tour.childPrice ?? 0,
+            infantPrice: tour.infantPrice ?? 0,
+            maxGroupSize: tour.maxGroupSize,
+            minBooking: tour.minBooking,
+            categoryId: tour.categoryId,
+            tags: tour.tags,
+            images: tour.images,
+            videoUrl: tour.videoUrl || "",
+            itinerary: tour.itinerary.map(it => ({
+                day: it.dayNumber,
+                address: it.title,
+                description: it.details,
+                image: undefined,
+            })),
+            services: tour.services,
+            startLocation: tour.startLocation,
+            cancellationPolicy: tour.cancellationPolicy || DEFAULT_CANCELLATION_POLICY,
+            status: tour.status,
+            highlight: tour.highlight,
+            isVisible: tour.isVisible,
+            metaTitle: tour.metaTitle || "",
+            metaDescription: tour.metaDescription || "",
+            metaKeywords: tour.metaKeywords || "",
+        };
+    };
     // Normalize payload so it matches BE schema exactly
     function normalizePayloadForBE(data: TourFormData) {
         const msPerDay = 24 * 60 * 60 * 1000;
@@ -806,9 +846,15 @@ export default function Tours() {
             if (!s) return null;
             // try parse as local "YYYY-MM-DDTHH:mm" using existing helper
             const p = parseLocalInput(s);
-            if (p) return p.toISOString();
+            if (p) {
+                p.setHours(p.getHours() + 7); // chuẩn GMT+7
+                return p.toISOString();
+            }
             const d = new Date(s);
-            if (!isNaN(d.getTime())) return d.toISOString();
+            if (!isNaN(d.getTime())) {
+                d.setHours(d.getHours() + 7); // chuẩn GMT+7
+                return d.toISOString();
+            }
             return null;
         };
 
@@ -1731,14 +1777,31 @@ export default function Tours() {
 
         console.debug("[DEBUG] final payload to send (normalized):", normalized);
 
+        let payloadToSend = normalized;
+        if (modalMode === "edit" && originalTour) {
+            const originalFormData = convertTourToFormData(originalTour);
+            const changedFields: any = {};
+            for (const key in formData) {
+                const k = key as keyof TourFormData;
+                if (JSON.stringify(formData[k]) !== JSON.stringify(originalFormData[k])) {
+                    changedFields[k] = formData[k];
+                }
+            }
+            // Filter normalized to only include changed keys
+            payloadToSend = Object.keys(changedFields).reduce((acc, key) => {
+                if (key in normalized) acc[key] = normalized[key];
+                return acc;
+            }, {} as any);
+        }
+
         // Use normalized payload when mutating so what we log is what we'll actually send
         try {
             if (modalMode === "create") {
                 console.log("[DEBUG] calling createTourMutation.mutate");
-                createTourMutation.mutate({ ...normalized, status: "active" });
+                createTourMutation.mutate({ ...payloadToSend, status: "active" });
             } else if (modalMode === "edit" && selectedTour) {
                 console.log("[DEBUG] calling updateTourMutation.mutate for id:", selectedTour.id);
-                updateTourMutation.mutate({ id: selectedTour.id, data: normalized });
+                updateTourMutation.mutate({ id: selectedTour.id, data: payloadToSend });
             }
         } catch (err) {
             console.error("[DEBUG] Unexpected error while calling mutate:", err);
@@ -2069,7 +2132,7 @@ export default function Tours() {
                         )}
                     </div> */}
 
-                    <div>
+                    {/* <div>
                         <Label htmlFor="tags">Tags</Label>
                         <Input
                             id="tags"
@@ -2085,7 +2148,7 @@ export default function Tours() {
                             }
                             placeholder="thiên nhiên, du thuyền, gia đình"
                         />
-                    </div>
+                    </div> */}
                 </TabsContent>
 
                 <TabsContent value="pricing" className="space-y-4 mt-6">
