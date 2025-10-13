@@ -559,7 +559,8 @@ export default function Buses() {
         current: 1,
         pageSize: 10,
     });
-
+    const [originalBus, setOriginalBus] = useState<BusRoute | null>(null);
+    const [originalDepartureDates, setOriginalDepartureDates] = useState<string[]>([]);
     // Fetch buses from server API
     const { data: busesData, isLoading, error, refetch } = useQuery({
         queryKey: ['buses', pagination.current, pagination.pageSize, searchQuery, filters],
@@ -695,7 +696,27 @@ export default function Buses() {
     // Update bus mutation -> PUT /api/buses/:id
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-            const payload: any = { ...data };
+            const payload: any = { ...data }; // Truyền tất cả trường từ data (kể cả không thay đổi)
+
+            // Kiểm tra và log những trường nào thay đổi (so với originalBus)
+            if (originalBus) {
+                const changedFields: string[] = [];
+                Object.keys(data).forEach(key => {
+                    const originalValue = (originalBus as any)[key];
+                    const newValue = (data as any)[key];
+                    // So sánh đơn giản (có thể cần deep compare cho object/array)
+                    if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                        changedFields.push(key);
+                    }
+                });
+                console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
+                // Nếu muốn chỉ update trường thay đổi, uncomment dòng dưới và sửa payload
+                // const partialPayload = {};
+                // changedFields.forEach(key => partialPayload[key] = payload[key]);
+                // Object.assign(payload, partialPayload);
+            }
+
+            // Xử lý payload như cũ (operator, route, dates, etc.)
             if ((data as any).operatorId) {
                 const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
                 if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
@@ -709,32 +730,23 @@ export default function Buses() {
                 payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
             }
 
-            // Normalize arrivalDates if provided (to ISO/Z)
+            // Normalize departureDates/arrivalDates to ISO/Z
+            if ((data as any).departureDates && Array.isArray((data as any).departureDates)) {
+                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
+            }
             if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates)) {
                 payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
             }
-            // If a single arrivalAt (local) was provided, convert and put into arrivalDates array
+            if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length)) {
+                payload.departureDates = [localToIso((data as any).departureAt)];
+            }
             if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length)) {
                 payload.arrivalDates = [localToIso((data as any).arrivalAt)];
             }
 
-            // Normalize departureDates if provided (to ISO/Z)
-            if ((data as any).departureDates && Array.isArray((data as any).departureDates)) {
-                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
-            }
-            // If a single departureAt (local) was provided, convert and put into departureDates array
-            if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length)) {
-                payload.departureDates = [localToIso((data as any).departureAt)];
-            }
-
-            // Ensure scalar departureAt/arrivalAt are NOT sent (we use arrays only)
             delete payload.departureAt;
             delete payload.arrivalAt;
 
-            // Log normalized payload that will be sent in the PUT request
-            console.log('[Buses] updateBus payload (arrays only):', JSON.stringify(payload, null, 2));
-
-            // compute duration from first pair
             if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
                 payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
             }
@@ -750,7 +762,6 @@ export default function Buses() {
                 payload.busType = [subtypeUpd.name];
                 if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
             }
-            // set amenities string from selected checkboxes (if user changed via UI)
             if (amenitiesSelected && amenitiesSelected.length) {
                 payload.amenities = amenitiesSelected.join(', ');
             }
@@ -759,6 +770,8 @@ export default function Buses() {
             if (typeof payload.adultPrice !== 'undefined') payload.adultPrice = Number(payload.adultPrice);
             if (typeof payload.childPrice !== 'undefined') payload.childPrice = Number(payload.childPrice);
             delete payload.price;
+
+            console.log('[Buses] updateBus payload (all fields):', JSON.stringify(payload, null, 2));
 
             const res = await fetch(`${API_BASE}/api/buses/${id}`, {
                 method: 'PUT',
@@ -775,6 +788,7 @@ export default function Buses() {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
             resetForm();
+            setOriginalBus(null); // Reset originalBus sau update
             toast({ title: "Cập nhật tuyến xe thành công", description: "Thông tin tuyến xe đã được cập nhật" });
         },
         onError: (error: any) => {
@@ -846,7 +860,7 @@ export default function Buses() {
     const total = busesData?.pagination?.total || 0;
 
     // Form validation
-    const validateForm = (data: BusFormData): Record<string, string> => {
+    const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = []): Record<string, string> => {
         const errors: Record<string, string> = {};
 
         // busCode: required, uppercase alnum/_- 3-12 chars
@@ -885,6 +899,7 @@ export default function Buses() {
         }
 
         // departureDates: require at least one, each valid and not in past
+        // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
         const now = new Date();
         if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
             errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
@@ -896,7 +911,9 @@ export default function Buses() {
                     errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
                 } else {
                     const dt = new Date(d);
-                    if (dt < now) {
+                    // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
+                    const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
+                    if (isChanged && dt < now) {
                         errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
                     }
                     const key = dt.toISOString();
@@ -1219,17 +1236,22 @@ export default function Buses() {
 
     const handleEdit = (bus: BusRoute) => {
         setSelectedBus(bus);
+        setOriginalBus(bus); // Lưu giá trị ban đầu để so sánh
+        setOriginalDepartureDates(Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
+            ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
+            : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []));
         setFormData({
             busCode: bus.busCode,
             operatorId: bus.operator.id,
             routeFrom: formatRouteSelectValue(bus.routeFrom),
             routeTo: formatRouteSelectValue(bus.routeTo),
-            // keep departureAt for compatibility
             departureAt: bus.departureAt ? bus.departureAt.slice(0, 16) : "",
-            // populate departureDates if present (convert ISO -> local input format)
-            departureDates: Array.isArray((bus as any).departureDates) ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []),
-            // populate arrivalDates if present (convert ISO -> local input format)
-            arrivalDates: Array.isArray((bus as any).arrivalDates) ? (bus as any).arrivalDates.map((d: string) => (new Date(d).toISOString().slice(0, 16))) : (bus.arrivalAt ? [bus.arrivalAt.slice(0, 16)] : []),
+            departureDates: Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
+                ? (bus as any).departureDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
+                : (bus.departureAt ? [bus.departureAt.slice(0, 16)] : []),
+            arrivalDates: Array.isArray((bus as any).arrivalDates) && (bus as any).arrivalDates.length
+                ? (bus as any).arrivalDates.map((d: string) => (new Date(d).toISOString().slice(0, 16)))
+                : (bus.arrivalAt ? [bus.arrivalAt.slice(0, 16)] : []),
             arrivalAt: bus.arrivalAt ? bus.arrivalAt.slice(0, 16) : "",
             duration: bus.duration,
             busType: bus.busType,
@@ -1248,7 +1270,6 @@ export default function Buses() {
             const found = getAllSubtypes(loaixeData).find((s: any) => s.name === existingTypeName);
             if (found) setSelectedSubtypeId(found.id);
         }
-        // populate amenitiesSelected from comma-separated amenities string
         setAmenitiesSelected(
             Array.isArray(bus.amenities)
                 ? bus.amenities.map(s => String(s).trim()).filter(Boolean)
@@ -1290,7 +1311,7 @@ export default function Buses() {
     };
 
     const handleSubmit = () => {
-        const errors = validateForm(formData);
+        const errors = validateForm(formData, modalMode, originalDepartureDates);
         setFormErrors(errors);
 
         if (Object.keys(errors).length > 0) {
@@ -1370,14 +1391,14 @@ export default function Buses() {
             icon: <Ban className="w-4 h-4 mr-2" />,
             variant: "secondary" as const,
         },
-        {
-            label: "Xóa",
-            action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: 'delete', ids: keys });
-            },
-            icon: <Trash2 className="w-4 h-4 mr-2" />,
-            variant: "destructive" as const,
-        },
+        // {
+        //     label: "Xóa",
+        //     action: (keys: string[]) => {
+        //         bulkActionMutation.mutate({ action: 'delete', ids: keys });
+        //     },
+        //     icon: <Trash2 className="w-4 h-4 mr-2" />,
+        //     variant: "destructive" as const,
+        // },
     ];
 
     const actions = [
@@ -1391,12 +1412,12 @@ export default function Buses() {
             action: handleEdit,
             icon: <Edit className="mr-2 h-4 w-4" />,
         },
-        {
-            label: "Xóa",
-            action: handleDelete,
-            icon: <Trash2 className="mr-2 h-4 w-4" />,
-            variant: "destructive" as const,
-        },
+        // {
+        //     label: "Xóa",
+        //     action: handleDelete,
+        //     icon: <Trash2 className="mr-2 h-4 w-4" />,
+        //     variant: "destructive" as const,
+        // },
         // {
         //     label: "Xóa ngay",
         //     action: (bus: BusRoute) => handleForceDeleteApi(bus.id),

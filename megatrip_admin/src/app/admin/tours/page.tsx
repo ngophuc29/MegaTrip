@@ -338,7 +338,7 @@ export default function Tours() {
     const [tours, setTours] = useState<Tour[]>(mockTours);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<any>(null);
-
+    const [originalTour, setOriginalTour] = useState<Tour | null>(null);
     // add compress helpers (insert near top of file after imports)
     async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
         return new Promise((resolve) => {
@@ -1145,7 +1145,7 @@ export default function Tours() {
     const total = toursData?.pagination?.total || 0;
 
     // Form validation
-    const validateForm = (data: TourFormData): Record<string, string> => {
+    const validateForm = (data: TourFormData, modalMode: string, originalTour: Tour | null = null): Record<string, string> => {
         const errors: Record<string, string> = {};
 
         if (!data.name.trim()) {
@@ -1169,6 +1169,7 @@ export default function Tours() {
             errors.destination = "Bạn phải nhập điểm đến";
         }
 
+        // startDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
         const now = new Date();
         if (!Array.isArray(data.startDates) || data.startDates.length === 0) {
             errors.startDate = "Bạn phải chọn ít nhất một ngày bắt đầu";
@@ -1180,7 +1181,17 @@ export default function Tours() {
                 if (!d || !dt || isNaN(dt.getTime())) {
                     errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không hợp lệ`;
                 } else {
-                    if (dt.getTime() < now.getTime()) {
+                    // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
+                    const isChanged = modalMode === "create";
+                    if (modalMode === "edit" && originalTour) {
+                        const originalStarts = Array.isArray(originalTour.startDates)
+                            ? originalTour.startDates.map(date => toLocalInput(new Date(date)))
+                            : [toLocalInput(new Date(originalTour.startDate))];
+                        if (originalStarts[i] !== d) {
+                            isChanged = true;
+                        }
+                    }
+                    if (isChanged && dt.getTime() < now.getTime()) {
                         errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không được ở quá khứ`;
                     }
                     const key = dt.toISOString();
@@ -1562,6 +1573,7 @@ export default function Tours() {
 
     const handleEdit = (tour: Tour) => {
         setSelectedTour(tour);
+        setOriginalTour(tour); 
         setFormData({
             name: tour.name,
             slug: tour.slug,
@@ -1666,7 +1678,7 @@ export default function Tours() {
     // ...existing code...
     const handleSubmit = () => {
         console.log("[DEBUG] handleSubmit called, modalMode =", modalMode);
-        const errors = validateForm(formData);
+        const errors = validateForm(formData, modalMode, originalTour);
         setFormErrors(errors);
         console.log("[DEBUG] validateForm returned errors:", errors);
 
@@ -1773,14 +1785,14 @@ export default function Tours() {
             icon: <Eye className="w-4 h-4 mr-2" />,
             variant: "secondary" as const,
         },
-        {
-            label: "Xóa",
-            action: (keys: string[]) => {
-                bulkActionMutation.mutate({ action: "delete", ids: keys });
-            },
-            icon: <Trash2 className="w-4 h-4 mr-2" />,
-            variant: "destructive" as const,
-        },
+        // {
+        //     label: "Xóa",
+        //     action: (keys: string[]) => {
+        //         bulkActionMutation.mutate({ action: "delete", ids: keys });
+        //     },
+        //     icon: <Trash2 className="w-4 h-4 mr-2" />,
+        //     variant: "destructive" as const,
+        // },
     ];
 
     const actions = [
@@ -1810,12 +1822,12 @@ export default function Tours() {
             },
             icon: <Copy className="mr-2 h-4 w-4" />,
         },
-        {
-            label: "Xóa",
-            action: handleDelete,
-            icon: <Trash2 className="mr-2 h-4 w-4" />,
-            variant: "destructive" as const,
-        },
+        // {
+        //     label: "Xóa",
+        //     action: handleDelete,
+        //     icon: <Trash2 className="mr-2 h-4 w-4" />,
+        //     variant: "destructive" as const,
+        // },
     ];
 
     const handleModalClose = () => {
