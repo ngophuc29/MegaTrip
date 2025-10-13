@@ -241,6 +241,7 @@ function mapDbTourToList(db: any) {
         transport: db.transport || '',
         hotel: db.hotel || '',
         meals: db.meals || '',
+        isVisible: db.isVisible ?? true,
     };
 }
 
@@ -428,10 +429,12 @@ export default function Tour() {
         // If tour destination is selected, prioritize matching tours
         if (selectedTour) {
             const matchesDestination = tour.name.toLowerCase().includes(selectedTour.destination.toLowerCase());
-            return matchesPrice && matchesCategory && matchesDuration && matchesDeparture && matchesDestination;
+            const matchesVisible = tour.isVisible !== false;
+            return matchesPrice && matchesCategory && matchesDuration && matchesDeparture && matchesDestination && matchesVisible;
         }
 
-        return matchesPrice && matchesCategory && matchesDuration && matchesDeparture;
+        const matchesVisible = tour.isVisible !== false;
+        return matchesPrice && matchesCategory && matchesDuration && matchesDeparture && matchesVisible;
     });
 
     const sortedTours = [...filteredTours].sort((a, b) => {
