@@ -1051,6 +1051,12 @@ export default function Buses() {
         const tzOffset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
+    // Thêm hàm lấy ngày mai dưới dạng local string
+    const getTomorrowLocal = () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return toLocalInput(d);
+    };
 
     // Helper: build seat map from a subtype.layout
     const buildSeatMapFromLayout = (layout: any) => {
@@ -1847,7 +1853,7 @@ export default function Buses() {
                                                         if (idx === 0) handleFormChange('arrivalAt', arrs[0] || "");
                                                     }
                                                 }}
-                                                min={isoLocalNow()}
+                                                min={getTomorrowLocal()}
                                                 className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
                                             />
                                         </div>
@@ -1872,7 +1878,7 @@ export default function Buses() {
                                                         if (duration) handleFormChange('duration', duration);
                                                     }
                                                 }}
-                                                min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : isoLocalNow()}
+                                                min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : getTomorrowLocal()}
                                                 className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
                                             />
                                         </div>

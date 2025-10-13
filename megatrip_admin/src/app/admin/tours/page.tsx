@@ -1294,6 +1294,13 @@ export default function Tours() {
         return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
     };
 
+    // Thêm hàm lấy ngày mai dưới dạng local string
+    const getTomorrowLocal = () => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        return toLocalInput(d);
+    };
+
     const resetForm = () => {
         setFormData({
             name: "",
@@ -2237,7 +2244,7 @@ export default function Tours() {
                                                             if (idx === 0) handleFormChange('endDate', ends[0] || "");
                                                         }
                                                     }}
-                                                    min={isoLocalNow()}
+                                                    min={getTomorrowLocal()}
                                                     className={`w-full ${formErrors[`startDates_${idx}`] ? "border-red-500" : ""}`}
 
 
@@ -2263,7 +2270,7 @@ export default function Tours() {
                                                             if (duration) handleFormChange('duration', duration);
                                                         }
                                                     }}
-                                                    min={(formData.startDates && formData.startDates.length && formData.startDates[idx]) ? formData.startDates[idx] : isoLocalNow()}
+                                                    min={(formData.startDates && formData.startDates.length && formData.startDates[idx]) ? formData.startDates[idx] : getTomorrowLocal()}
                                                     className={formErrors[`endDates_${idx}`] ? "border-red-500" : ""}
                                                 />
                                             </div>
