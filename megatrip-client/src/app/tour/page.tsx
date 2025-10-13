@@ -207,12 +207,24 @@ function FilterSidebarSkeleton() {
 function mapDbTourToList(db: any) {
     const id = db._id?.$oid ?? db._id ?? String(Math.random());
     const images = Array.isArray(db.images) && db.images.length ? db.images : ['/placeholder.svg'];
-    const availableDates = (db.startDates || []).map((d: any) => ({
-        date: toIsoDate(d),
-        price: db.adultPrice ?? 0,
-        available: 20,
-        status: 'available'
-    }));
+    // Use Vietnam timezone (UTC+7) for date comparison
+    const now = new Date();
+    // Get VN date components correctly
+    const vnDateStr = now.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); // YYYY-MM-DD format
+    const [vnYear, vnMonth, vnDay] = vnDateStr.split('-').map(Number);
+    const vnToday = new Date(vnYear, vnMonth - 1, vnDay); // Create date at start of VN day
+    const availableDates = (db.startDates || []).map((d: any) => {
+        const dateStr = toIsoDate(d);
+        const dateObj = dateStr ? new Date(dateStr) : null;
+        const isPast = dateObj && dateObj <= vnToday;
+        return {
+            date: dateStr,
+            price: db.adultPrice ?? 0,
+            available: 20,
+            status: 'available',
+            isPast: !!isPast
+        };
+    });
 
     const durationStr =
         typeof db.duration === 'number'

@@ -299,10 +299,14 @@ export default function ChiTietTour() {
             const startIso = rawStart ? (new Date(rawStart).toISOString()) : null;
             const endIso = rawEnd ? (new Date(rawEnd).toISOString()) : null;
             const date = startIso ? startIso.split('T')[0] : toIsoDate(sd);
-            const now = Date.now();
-            // consider "đã khởi hành" when start time is <= now
-            const isPast = startIso ? (new Date(startIso).getTime() <= now) : false;
-            console.log('[tour page] map startDate', { idx, rawStart, startIso, date, startMs: startIso ? new Date(startIso).getTime() : null, now, isPast });
+            // Use Vietnam timezone (UTC+7) for date comparison
+            const now = new Date();
+            const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+            const vnToday = new Date(vnNow.getFullYear(), vnNow.getMonth(), vnNow.getDate()); // start of today in VN time
+            // consider "đã khởi hành" when start date is before or on today (VN time)
+            const startDate = startIso ? new Date(startIso) : null;
+            const startDateOnly = startDate ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()) : null;
+            const isPast = startDateOnly ? (startDateOnly <= vnToday) : false;
             return {
                 date,
                 startIso,
@@ -581,15 +585,17 @@ export default function ChiTietTour() {
                 const mapped = mapDbTourToClient(db);
                 // DEBUG: log comparison of each startDate vs current time (ISO, ms, now, isPast)
                 if (Array.isArray(mapped.startDates)) {
-                    const nowIso = new Date().toISOString();
-                    const nowMs = Date.now();
-                    console.log('[tour page] startDates comparison start', { nowIso, nowMs });
+                    const now = new Date();
+                    const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+                    const vnNowString = vnNow.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'});
+                    const vnNowMs = vnNow.getTime();
+                    console.log('[tour page] startDates comparison start', { vnNowString, vnNowMs });
                     mapped.startDates.forEach((sd: any, i: number) => {
                         const raw = sd.$date ?? sd;
                         const iso = raw ? new Date(raw).toISOString() : null;
                         const ms = iso ? new Date(iso).getTime() : NaN;
-                        const isPast = Number.isFinite(ms) ? (ms <= nowMs) : null;
-                        console.log(`[tour page] startDates[${i}]`, { raw, iso, ms, nowMs, isPast });
+                        const isPast = Number.isFinite(ms) ? (ms <= vnNowMs) : null;
+                        console.log(`[tour page] startDates[${i}]`, { raw, iso, ms, vnNowMs, isPast });
                     });
                     console.log('[tour page] startDates comparison end');
                 }
@@ -625,11 +631,19 @@ export default function ChiTietTour() {
                         let isPast = false;
                         if (startIsoCandidate) {
                             const startMs = Number(new Date(startIsoCandidate).getTime());
-                            if (!Number.isNaN(startMs)) isPast = startMs <= Date.now();
+                            if (!Number.isNaN(startMs)) {
+                                // Use Vietnam timezone (UTC+7) for date comparison
+                                const now = new Date();
+                                const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+                                const vnToday = new Date(vnNow.getFullYear(), vnNow.getMonth(), vnNow.getDate()); // start of today in VN time
+                                const startDate = new Date(startIsoCandidate);
+                                const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+                                isPast = startDateOnly <= vnToday;
+                            }
                         } else {
                             isPast = !!d.isPast;
                         }
-                        console.log('[tour page] merge slot', { dDate: d.date, slotDateIso: slot.dateIso, startIsoCandidate, startMs: startIsoCandidate ? new Date(startIsoCandidate).getTime() : null, now: Date.now(), isPast });
+                        console.log('[tour page] merge slot', { dDate: d.date, slotDateIso: slot.dateIso, startIsoCandidate, startMs: startIsoCandidate ? new Date(startIsoCandidate).getTime() : null, now: Date.now(), vnNow: new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}), isPast });
                         return { ...d, startIso: startIsoCandidate, isPast, capacity: slot.capacity ?? d.capacity, reserved: slot.reserved ?? 0, available: (typeof slot.available === 'number' ? slot.available : ((slot.capacity ?? d.capacity) - (slot.reserved ?? 0))) };
                     }
                     return d;
@@ -645,7 +659,7 @@ export default function ChiTietTour() {
                     if (firstAvailable) {
                         // build a local-midnight Date from date part to avoid UTC shift
                         const datePart = (firstAvailable.startIso ?? firstAvailable.date).split('T')[0];
-                        const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
+                        const [yy, mm, dd] = datePart.split('-').map((n: string) => Number(n));
                         if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
                             setSelectedDate(new Date(yy, mm - 1, dd));
                         } else {
@@ -878,20 +892,20 @@ export default function ChiTietTour() {
                                             <div
                                                 key={index}
                                                 className={`p-3 rounded-lg cursor-pointer transition-colors relative border ${isSoldOut
-                                                    || dateInfo.isPast
+                                                    || (dateInfo as any).isPast
                                                     ? 'bg-[hsl(var(--muted))] cursor-not-allowed opacity-60'
                                                     : isSelected
                                                         ? 'border-2 border-[hsl(var(--primary))] bg-primary/10 ring-2 ring-[hsl(var(--primary))]'
                                                         : 'border hover:bg-[hsl(var(--primary))/0.05] hover:border-[hsl(var(--primary))]'
                                                     }`}
                                                 onClick={() => {
-                                                    if (!isSoldOut && !dateInfo.isPast) {
-                                                        const datePart = (dateInfo.startIso ?? dateInfo.date).split('T')[0];
-                                                        const [yy, mm, dd] = datePart.split('-').map(n => Number(n));
+                                                    if (!isSoldOut && !(dateInfo as any).isPast) {
+                                                        const datePart = ((dateInfo as any).startIso ?? dateInfo.date).split('T')[0];
+                                                        const [yy, mm, dd] = datePart.split('-').map((n: string) => Number(n));
                                                         if (!Number.isNaN(yy) && !Number.isNaN(mm) && !Number.isNaN(dd)) {
                                                             setSelectedDate(new Date(yy, mm - 1, dd));
                                                         } else {
-                                                            setSelectedDate(new Date(dateInfo.startIso ?? dateInfo.date));
+                                                            setSelectedDate(new Date((dateInfo as any).startIso ?? dateInfo.date));
                                                         }
                                                     }
                                                 }}
@@ -903,7 +917,7 @@ export default function ChiTietTour() {
                                                 <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
                                                 <div className="mt-1">
                                                     <div className="flex items-center gap-2">
-                                                        {dateInfo.isPast
+                                                        {(dateInfo as any).isPast
                                                             ? <Badge variant="destructive">Đã khởi hành</Badge>
                                                             : (isSoldOut
                                                                 ? <Badge variant="destructive">Hết chỗ</Badge>
@@ -978,9 +992,9 @@ export default function ChiTietTour() {
                                             </AccordionTrigger>
                                             <AccordionContent>
                                                 <div className="space-y-4">
-                                                    {day.description && (
+                                                    {(day as any).description && (
                                                         <div className="text-sm text-muted-foreground leading-relaxed">
-                                                            {day.description}
+                                                            {(day as any).description}
                                                         </div>
                                                     )}
                                                     <div>
@@ -1597,10 +1611,10 @@ export default function ChiTietTour() {
                                     const tourCode = String(tourDetails.id ?? id ?? '');
                                     params.set('tourCode', tourCode);
                                     // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
-                                    const startIso = selectedDateInfo?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
+                                    const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
                                     params.set('startDateTime', startIso);
                                     // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
-                                    let endIso = selectedDateInfo?.endIso ?? '';
+                                    let endIso = (selectedDateInfo as any)?.endIso ?? '';
                                     if (!endIso) {
                                         try {
                                             const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
