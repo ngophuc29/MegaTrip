@@ -245,6 +245,11 @@ const tourDetails = {
                 photos: ['/placeholder.svg']
             }
         ]
+    },
+    startLocation: {
+        type: 'Point',
+        address: 'Đà lạt',
+        pickupDropoff: 'Bến xe ngã 4 vũng tàu'
     }
 };
 // helper: compute reasonable original price (suggested) based on base price
@@ -301,7 +306,7 @@ export default function ChiTietTour() {
             const date = startIso ? startIso.split('T')[0] : toIsoDate(sd);
             // Use Vietnam timezone (UTC+7) for date comparison
             const now = new Date();
-            const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+            const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
             const vnToday = new Date(vnNow.getFullYear(), vnNow.getMonth(), vnNow.getDate()); // start of today in VN time
             // consider "đã khởi hành" when start date is before or on today (VN time)
             const startDate = startIso ? new Date(startIso) : null;
@@ -397,6 +402,7 @@ export default function ChiTietTour() {
             attractions: db.attractions || tourDetails.attractions,
             availableDates: availableDates.length ? availableDates : tourDetails.availableDates,
             itinerary,
+            startLocation: db.startLocation,
             pricing: {
                 adult: db.adultPrice ?? tourDetails.pricing.adult,
                 child: db.childPrice ?? tourDetails.pricing.child,
@@ -586,8 +592,8 @@ export default function ChiTietTour() {
                 // DEBUG: log comparison of each startDate vs current time (ISO, ms, now, isPast)
                 if (Array.isArray(mapped.startDates)) {
                     const now = new Date();
-                    const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
-                    const vnNowString = vnNow.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'});
+                    const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+                    const vnNowString = vnNow.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
                     const vnNowMs = vnNow.getTime();
                     console.log('[tour page] startDates comparison start', { vnNowString, vnNowMs });
                     mapped.startDates.forEach((sd: any, i: number) => {
@@ -634,7 +640,7 @@ export default function ChiTietTour() {
                             if (!Number.isNaN(startMs)) {
                                 // Use Vietnam timezone (UTC+7) for date comparison
                                 const now = new Date();
-                                const vnNow = new Date(now.toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}));
+                                const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
                                 const vnToday = new Date(vnNow.getFullYear(), vnNow.getMonth(), vnNow.getDate()); // start of today in VN time
                                 const startDate = new Date(startIsoCandidate);
                                 const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
@@ -643,7 +649,7 @@ export default function ChiTietTour() {
                         } else {
                             isPast = !!d.isPast;
                         }
-                        console.log('[tour page] merge slot', { dDate: d.date, slotDateIso: slot.dateIso, startIsoCandidate, startMs: startIsoCandidate ? new Date(startIsoCandidate).getTime() : null, now: Date.now(), vnNow: new Date().toLocaleString('en-US', {timeZone: 'Asia/Ho_Chi_Minh'}), isPast });
+                        console.log('[tour page] merge slot', { dDate: d.date, slotDateIso: slot.dateIso, startIsoCandidate, startMs: startIsoCandidate ? new Date(startIsoCandidate).getTime() : null, now: Date.now(), vnNow: new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }), isPast });
                         return { ...d, startIso: startIsoCandidate, isPast, capacity: slot.capacity ?? d.capacity, reserved: slot.reserved ?? 0, available: (typeof slot.available === 'number' ? slot.available : ((slot.capacity ?? d.capacity) - (slot.reserved ?? 0))) };
                     }
                     return d;
@@ -1459,217 +1465,219 @@ export default function ChiTietTour() {
                                                     onClick={() => updateParticipantCount('infants', true)}
                                                     // disable if infants already equal to adults (infant = adult rule)
                                                     disabled={participants.infants >= participants.adults}
-                                                
+
                                                 >
+                                                    <Plus className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Single Room Supplement */}
+                                <div>
+                                    <Label className="text-base font-medium   block">Phụ thu phòng đơn</Label>
+                                    <div className="text-xs text-muted-foreground mb-2 text-shadow-gray-200">
+                                        <i>
+                                            Phụ thu phòng đơn dành cho khách đi một mình hoặc có nhu cầu sử dụng phòng đơn. Số phòng đơn ≤ số người lớn.
+                                        </i>                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <div className="font-medium">Số phòng đơn</div>
+                                            <div className="text-sm text-muted-foreground">+{formatPrice(tourDetails.pricing.singleSupplement)}/phòng</div>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => updateSingleRooms(false)}
+                                                disabled={singleRooms <= 0}
+                                            >
+                                                <Minus className="h-4 w-4" />
+                                            </Button>
+                                            <span className="w-8 text-center">{singleRooms}</span>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => updateSingleRooms(true)}
+                                                disabled={singleRooms >= Math.max(1, participants.adults)}
+                                            >
                                                 <Plus className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Single Room Supplement */}
-                            <div>
-                                <Label className="text-base font-medium   block">Phụ thu phòng đơn</Label>
-                                <div className="text-xs text-muted-foreground mb-2 text-shadow-gray-200">
-                                    <i>
-                                        Phụ thu phòng đơn dành cho khách đi một mình hoặc có nhu cầu sử dụng phòng đơn. Số phòng đơn ≤ số người lớn.
-                                    </i>                                    </div>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="font-medium">Số phòng đơn</div>
-                                        <div className="text-sm text-muted-foreground">+{formatPrice(tourDetails.pricing.singleSupplement)}/phòng</div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => updateSingleRooms(false)}
-                                            disabled={singleRooms <= 0}
-                                        >
-                                            <Minus className="h-4 w-4" />
-                                        </Button>
-                                        <span className="w-8 text-center">{singleRooms}</span>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => updateSingleRooms(true)}
-                                            disabled={singleRooms >= Math.max(1, participants.adults)}
-                                        >
-                                            <Plus className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <Separator />
-
-                            {/* Pricing Breakdown */}
-                            <div className="space-y-2">
-                                {(() => {
-                                    const unit = getUnitPrices();
-                                    return (
-                                        <>
-                                            <div className="flex justify-between">
-                                                <span>Người lớn ({participants.adults} × {formatPrice(unit.adult)})</span>
-                                                <span>{formatPrice(participants.adults * unit.adult)}</span>
-                                            </div>
-
-                                            {participants.children > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span>Trẻ em ({participants.children} × {formatPrice(unit.child)})</span>
-                                                    <span>{formatPrice(participants.children * unit.child)}</span>
-                                                </div>
-                                            )}
-
-                                            {participants.infants > 0 && (
-                                                <div className="flex justify-between">
-                                                    <span>Em bé ({participants.infants} × {formatPrice(unit.infant)})</span>
-                                                    <span>{formatPrice(participants.infants * unit.infant)}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-
-
-
-                                {singleRooms > 0 && (
-                                    <div className="flex justify-between">
-                                        <span>Phụ thu phòng đơn ({singleRooms})</span>
-                                        <span>{formatPrice(singleRooms * tourDetails.pricing.singleSupplement)}</span>
-                                    </div>
-                                )}
 
                                 <Separator />
 
-                                <div className="flex justify-between font-bold text-lg">
-                                    <span>Tổng cộng</span>
-                                    <span className="text-primary">{formatPrice(calculateTotal())}</span>
+                                {/* Pricing Breakdown */}
+                                <div className="space-y-2">
+                                    {(() => {
+                                        const unit = getUnitPrices();
+                                        return (
+                                            <>
+                                                <div className="flex justify-between">
+                                                    <span>Người lớn ({participants.adults} × {formatPrice(unit.adult)})</span>
+                                                    <span>{formatPrice(participants.adults * unit.adult)}</span>
+                                                </div>
+
+                                                {participants.children > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Trẻ em ({participants.children} × {formatPrice(unit.child)})</span>
+                                                        <span>{formatPrice(participants.children * unit.child)}</span>
+                                                    </div>
+                                                )}
+
+                                                {participants.infants > 0 && (
+                                                    <div className="flex justify-between">
+                                                        <span>Em bé ({participants.infants} × {formatPrice(unit.infant)})</span>
+                                                        <span>{formatPrice(participants.infants * unit.infant)}</span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+
+
+
+                                    {singleRooms > 0 && (
+                                        <div className="flex justify-between">
+                                            <span>Phụ thu phòng đơn ({singleRooms})</span>
+                                            <span>{formatPrice(singleRooms * tourDetails.pricing.singleSupplement)}</span>
+                                        </div>
+                                    )}
+
+                                    <Separator />
+
+                                    <div className="flex justify-between font-bold text-lg">
+                                        <span>Tổng cộng</span>
+                                        <span className="text-primary">{formatPrice(calculateTotal())}</span>
+                                    </div>
+
+                                    <div className="text-xs text-muted-foreground">
+                                        Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
+                                    </div>
                                 </div>
 
-                                <div className="text-xs text-muted-foreground">
-                                    Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
+                                <Separator />
+
+                                {/* Important Notes */}
+                                <div className="space-y-2">
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá tour có thể thay đổi tùy theo ngày khởi hành</div>
+                                    </div>
+                                    <div className="flex items-start gap-2">
+                                        <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Tour sẽ được xác nhận sau khi thanh toán</div>
+                                    </div>
                                 </div>
-                            </div>
 
-                            <Separator />
+                                {/* Action Buttons */}
+                                <div className="space-y-2 ">
+                                    <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
+                                        if (!selectedDate) return;
+                                        const selectedDateInfo = getSelectedDateInfo();
+                                        const unit = getUnitPrices();
+                                        const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
+                                        const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
+                                        const addOns = 0; // tour chưa có dịch vụ thêm
+                                        const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
+                                        const total = basePrice + taxes + addOns - discount;
 
-                            {/* Important Notes */}
-                            <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                    <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá tour có thể thay đổi tùy theo ngày khởi hành</div>
-                                </div>
-                                <div className="flex items-start gap-2">
-                                    <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">Tour sẽ được xác nhận sau khi thanh toán</div>
-                                </div>
-                            </div>
+                                        // breakdown per passenger type
+                                        const passengers: any[] = [];
+                                        if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
+                                        if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
+                                        if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
 
-                            {/* Action Buttons */}
-                            <div className="space-y-2 ">
-                                <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
-                                    if (!selectedDate) return;
-                                    const selectedDateInfo = getSelectedDateInfo();
-                                    const unit = getUnitPrices();
-                                    const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
-                                    const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
-                                    const addOns = 0; // tour chưa có dịch vụ thêm
-                                    const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
-                                    const total = basePrice + taxes + addOns - discount;
+                                        const params = new URLSearchParams();
+                                        params.set('type', 'tour');
+                                        params.set('route', tourDetails.name);
+                                        params.set('date', selectedDateInfo?.date || '');
+                                        params.set('time', '');
+                                        params.set('basePrice', String(basePrice));
+                                        params.set('taxes', String(taxes));
+                                        params.set('addOns', String(addOns));
+                                        params.set('discount', String(discount));
+                                        params.set('total', String(total));
+                                        params.set('adults', String(participants.adults));
+                                        params.set('children', String(participants.children));
+                                        params.set('infants', String(participants.infants));
+                                        // additional requested fields
+                                        params.set('unitAdult', String(unit.adult));
+                                        params.set('unitChild', String(unit.child));
+                                        params.set('unitInfant', String(unit.infant));
+                                        params.set('singleRooms', String(singleRooms));
+                                        params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
+                                        params.set('breakdown', JSON.stringify(passengers));
 
-                                    // breakdown per passenger type
-                                    const passengers: any[] = [];
-                                    if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
-                                    if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
-                                    if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
-
-                                    const params = new URLSearchParams();
-                                    params.set('type', 'tour');
-                                    params.set('route', tourDetails.name);
-                                    params.set('date', selectedDateInfo?.date || '');
-                                    params.set('time', '');
-                                    params.set('basePrice', String(basePrice));
-                                    params.set('taxes', String(taxes));
-                                    params.set('addOns', String(addOns));
-                                    params.set('discount', String(discount));
-                                    params.set('total', String(total));
-                                    params.set('adults', String(participants.adults));
-                                    params.set('children', String(participants.children));
-                                    params.set('infants', String(participants.infants));
-                                    // additional requested fields
-                                    params.set('unitAdult', String(unit.adult));
-                                    params.set('unitChild', String(unit.child));
-                                    params.set('unitInfant', String(unit.infant));
-                                    params.set('singleRooms', String(singleRooms));
-                                    params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
-                                    params.set('breakdown', JSON.stringify(passengers));
-
-                                    // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
-                                    // tourCode: use db id or fallback to generated id
-                                    const tourCode = String(tourDetails.id ?? id ?? '');
-                                    params.set('tourCode', tourCode);
-                                    // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
-                                    const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
-                                    params.set('startDateTime', startIso);
-                                    // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
-                                    let endIso = (selectedDateInfo as any)?.endIso ?? '';
-                                    if (!endIso) {
-                                        try {
-                                            const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
-                                            const days = m ? Number(m[1]) : 1;
-                                            if (selectedDateInfo?.date) {
-                                                const sd = new Date(selectedDateInfo.date);
-                                                sd.setDate(sd.getDate() + Math.max(0, days - 1));
-                                                sd.setHours(23, 59, 0, 0);
-                                                endIso = sd.toISOString();
-                                            }
-                                        } catch (e) { endIso = ''; }
-                                    }
-                                    params.set('endDateTime', endIso);
-                                    router.push(`/thanh-toan?${params.toString()}`);
-                                }}>
-                                    Đặt tour ngay
-                                </Button>
-                                {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>
+                                        // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
+                                        // tourCode: use db id or fallback to generated id
+                                        const tourCode = String(tourDetails.id ?? id ?? '');
+                                        params.set('tourCode', tourCode);
+                                        const startLocation = tourDetails.startLocation;
+                                        params.set('pickupDropoff', startLocation?.pickupDropoff || "");
+                                        // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
+                                        const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
+                                        params.set('startDateTime', startIso);
+                                        // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
+                                        let endIso = (selectedDateInfo as any)?.endIso ?? '';
+                                        if (!endIso) {
+                                            try {
+                                                const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
+                                                const days = m ? Number(m[1]) : 1;
+                                                if (selectedDateInfo?.date) {
+                                                    const sd = new Date(selectedDateInfo.date);
+                                                    sd.setDate(sd.getDate() + Math.max(0, days - 1));
+                                                    sd.setHours(23, 59, 0, 0);
+                                                    endIso = sd.toISOString();
+                                                }
+                                            } catch (e) { endIso = ''; }
+                                        }
+                                        params.set('endDateTime', endIso);
+                                        router.push(`/thanh-toan?${params.toString()}`);
+                                    }}>
+                                        Đặt tour ngay
+                                    </Button>
+                                    {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         Thêm vào giỏ hàng
                                     </Button> */}
-                            </div>
-
-                            {/* Contact */}
-                            <div className="pt-4 border-t text-center">
-                                <div className="text-sm font-medium mb-1">Cần tư vấn?</div>
-                                <div className="flex items-center justify-center gap-1 text-sm text-primary">
-                                    <Phone className="h-3 w-3" />
-                                    <span>1900 1234</span>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </div >
 
-            {/* Image Modal */ }
-    {
-        showImageModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowImageModal(false)}>
-                <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-                    <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow" onClick={() => setShowImageModal(false)}>
-                        <XCircle className="h-6 w-6 text-black" />
-                    </button>
-                    <img
-                        src={tourDetails.images[modalImageIndex].url}
-                        alt={tourDetails.images[modalImageIndex].title}
-                        className="w-full max-h-[80vh] object-contain rounded"
-                    />
-                    <div className="text-center text-white mt-2">{tourDetails.images[modalImageIndex].title}</div>
+                                {/* Contact */}
+                                <div className="pt-4 border-t text-center">
+                                    <div className="text-sm font-medium mb-1">Cần tư vấn?</div>
+                                    <div className="flex items-center justify-center gap-1 text-sm text-primary">
+                                        <Phone className="h-3 w-3" />
+                                        <span>1900 1234</span>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
-            </div>
-        )
-    }
+            </div >
+
+            {/* Image Modal */}
+            {
+                showImageModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80" onClick={() => setShowImageModal(false)}>
+                        <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                            <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow" onClick={() => setShowImageModal(false)}>
+                                <XCircle className="h-6 w-6 text-black" />
+                            </button>
+                            <img
+                                src={tourDetails.images[modalImageIndex].url}
+                                alt={tourDetails.images[modalImageIndex].title}
+                                className="w-full max-h-[80vh] object-contain rounded"
+                            />
+                            <div className="text-center text-white mt-2">{tourDetails.images[modalImageIndex].title}</div>
+                        </div>
+                    </div>
+                )
+            }
         </>
     );
 }

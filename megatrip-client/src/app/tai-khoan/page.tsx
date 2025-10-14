@@ -37,6 +37,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@radix-ui/react-dialog';
 import { DialogFooter, DialogHeader } from '../components/ui/dialog';
 import Modal, { ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '../components/ui/Modal';
+ 
 const FAKE_CUSTOMER_ID = '64e65e8d3d5e2b0c8a3e9f12';
 // Sample user data
 const userData = {
@@ -587,6 +588,7 @@ export default function TaiKhoan() {
             if (!res.ok) throw new Error('Failed to load order details');
             const data = await res.json();
             setOrderDetails(data);
+            console.log('Loaded order details:', data);
         } catch (err) {
             console.error('Error loading order details:', err);
             setOrderDetails(null);
@@ -1225,6 +1227,25 @@ export default function TaiKhoan() {
                                             return serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '--';
                                         })()}</div>
                                         <div><strong>Trạng thái:</strong> {getStatusText(orderDetails.order.orderStatus)}</div>
+                                        {/* Pickup / Dropoff details (tour or bus) */}
+                                        {(() => {
+                                            const snap = orderDetails.order.metadata?.bookingDataSnapshot;
+                                            const d = snap?.details || snap?.meta || {};
+                                            if (!d) return null;
+                                            return (
+                                                <div className=" grid grid-cols-1 gap-2 text-sm">
+                                                    {d.pickupDropoff && (
+                                                        <div><strong>Pickup/Dropoff:</strong> {d.pickupDropoff}</div>
+                                                    )}
+                                                    {d.selectedPickup && (
+                                                        <div><strong>Điểm đón:</strong> {d.selectedPickup}</div>
+                                                    )}
+                                                    {d.selectedDropoff && (
+                                                        <div><strong>Điểm trả:</strong> {d.selectedDropoff}</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
 
                                 {/* Thông tin hành khách */}
@@ -1254,40 +1275,47 @@ export default function TaiKhoan() {
                                             <div>
                                                 <h4 className="font-semibold">Vé cũ</h4>
                                                 <div className="space-y-2">
-                                                    {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
-                                                        <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                            <div>
-                                                                <div className="font-medium">{ticket.ticketNumber}</div>
-                                                                <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                    {orderDetails.oldTickets
+                                                        .filter((ticket: any) => ticket.status === 'cancelled')
+                                                        .map((ticket: any) => (
+                                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                                <div>
+                                                                    <div className="font-medium">{ticket.ticketNumber}</div>
+                                                                    <div className="text-sm text-muted-foreground">{ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}</div>
+                                                                </div>
+                                                                <div className="text-sm">
+                                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                                    <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                                </div>
                                                             </div>
-                                                            <div className="text-sm">
-                                                                <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                                <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                                        ))}
                                                 </div>
                                             </div>
                                         )}
+
                                         {orderDetails.tickets && orderDetails.tickets.length > 0 && (
                                             <div>
-                                                <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
+                                                <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi / Vé' : 'Vé'}</h4>
                                                 <div className="space-y-2">
-                                                    {orderDetails.tickets.filter((ticket) => ticket.status === 'changed').map((ticket) => (
+                                                    {(
+                                                        // ưu tiên show vé 'changed' nếu có, nếu không thì show tất cả vé (paid,...)
+                                                        orderDetails.tickets.filter((t: any) => t.status === 'changed').length
+                                                            ? orderDetails.tickets.filter((t: any) => t.status === 'changed')
+                                                            : orderDetails.tickets
+                                                    ).map((ticket: any) => (
                                                         <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                             <div>
                                                                 <div className="font-medium">{ticket.ticketNumber}</div>
-                                                                <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                                <div className="text-sm text-muted-foreground">
+                                                                    <span className='text-sm font-bold'>Họ và tên hành khách : </span>
+                                                                    {ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate} </div>
                                                             </div>
                                                             <div className="text-sm">
                                                                 <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
                                                                 <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                                {/* <Button size="sm" variant="outline" className="ml-2" asChild>
-                                                                    <a href={`/thanh-toan-thanh-cong?orderId=${orderDetails.order.orderNumber}`} target="_blank">
-                                                                        <Download className="h-3 w-3 mr-1" />
-                                                                        Vé điện tử
-                                                                    </a>
-                                                                </Button> */}
+                                                                <div className="text-xs mt-1">{formatPrice(Number(ticket.price || 0))}</div>
                                                             </div>
                                                         </div>
                                                     ))}

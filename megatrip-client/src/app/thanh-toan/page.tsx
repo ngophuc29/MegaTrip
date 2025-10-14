@@ -117,6 +117,7 @@ const getBookingData = (searchParams: URLSearchParams) => {
                     tourCode: searchParams.get('tourCode') || null,
                     startDateTime: searchParams.get('startDateTime') || null,
                     endDateTime: searchParams.get('endDateTime') || null,
+                    pickupDropoff: searchParams.get('pickupDropoff') || '', // added
                 },
                 pricing: {
                     basePrice: Number(searchParams.get('basePrice')) || 0,
@@ -1010,6 +1011,7 @@ export default function ThanhToan() {
                 paymentMethod: selectedPayment,
                 paymentStatus: 'pending',
                 orderStatus: 'pending',
+                pickupDropoff: bookingData.details?.pickupDropoff || '', // added for tour orders
                 metadata: {
                     bookingKey: bookingKey || null,
                     bookingDataSnapshot: bookingSnapshot
