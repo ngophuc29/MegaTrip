@@ -952,6 +952,7 @@ export default function Tours() {
             endDates: endDatesIso,
             itinerary: normalizedItin,
             isVisible: Boolean(data.isVisible),
+            highlight: Boolean(data.highlight),
         };
 
         // remove undefined keys
@@ -1614,6 +1615,13 @@ export default function Tours() {
                 >
                     {value ? "Hiện" : "Ẩn"}
                 </Badge>
+            ),
+        },
+        {
+            key: "highlight",
+            title: "Nổi bật",
+            render: (value: boolean) => (
+                value ? <Star className="w-4 h-4 text-yellow-500 fill-current" /> : null
             ),
         },
     ];

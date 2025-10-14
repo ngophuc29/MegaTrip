@@ -264,6 +264,7 @@ export default function Index() {
   const [favorites, setFavorites] = useState<any[]>([]);
   // fetch promotions from API and pick one per service type (flights, buses, tours)
   const [remotePromotions, setRemotePromotions] = useState<any[]>([]);
+
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const handleCopyCode = async (code?: string | null) => {
     if (!code) return;
@@ -350,6 +351,26 @@ export default function Index() {
   const toggleFavorite = (id: any) => {
     setFavorites(prev => (prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]));
   };
+
+  // Thêm state cho featured tours
+  const [featuredTours, setFeaturedTours] = useState<any[]>([]);
+
+  // Trong useEffect, sửa fetch featured tours
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('http://localhost:7700/api/tours?highlight=true&pageSize=4&isVisible=true');
+        if (!res.ok) return;
+        const json = await res.json();
+        const tours = Array.isArray(json.data) ? json.data.filter((t: any) => t.highlight).slice(0, 4) : [];
+        setFeaturedTours(tours);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const raw = localStorage.getItem('recentTours');
@@ -412,8 +433,8 @@ export default function Index() {
       maxGroup: db.maxGroupSize ?? db.maxGroup ?? 0,
       rating: db.ratingsAverage ?? db.rating ?? 0,
       reviews: db.ratingsQuantity ?? db.reviews ?? 0,
-      badge: db.badge ?? '',
-      badgeColor: db.badgeColor ?? 'default',
+      badge: db.highlight ? 'Nổi bật' : 'Mới',
+      badgeColor: db.highlight ? 'destructive' : 'default',
     };
   }).filter(Boolean);
   return (
@@ -511,46 +532,51 @@ export default function Index() {
             </Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredTours.map((tour) => (
-              <Card key={tour.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="relative">
-                  <img
-                    src={tour.image}
-                    alt={tour.name}
-                    className="w-full h-48 object-cover"
-                  />
-                  <Badge className="absolute top-2 left-2" variant="secondary">
-                    {tour.badge}
-                  </Badge>
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-semibold mb-2 line-clamp-2">{tour.name}</h3>
-                  <div className="flex items-center text-sm text-muted-foreground mb-2">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    {tour.departure}
+            {featuredTours.map((tour) => {
+              const id = tour._id?.$oid ?? tour._id;
+              const name = tour.name;
+              const departure = tour.departureFrom ?? tour.startLocation?.address ?? '';
+              const duration = `${tour.duration} ngày ${tour.duration > 1 ? `${tour.duration - 1} đêm` : 'đêm'}`;
+              const price = `từ ${formatPrice(tour.adultPrice)}`;
+              const rating = tour.ratingsAverage ?? 0;
+              const reviews = tour.ratingsQuantity ?? 0;
+              const image = tour.images?.[0] ?? '/placeholder.svg';
+              const badge = tour.highlight ? 'Nổi bật' : '';
+              return (
+                <Card key={id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                  <div className="relative">
+                    <img src={image} alt={name} className="w-full h-48 object-cover" />
+                    {badge && <Badge className="absolute top-2 left-2" variant="destructive">{badge}</Badge>}
                   </div>
-                  <div className="flex items-center text-sm text-muted-foreground mb-2">
-                    <Timer className="h-4 w-4 mr-1" />
-                    {tour.duration}
-                  </div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center">
-                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                      <span className="text-sm font-medium">{tour.rating}</span>
-                      <span className="text-sm text-muted-foreground ml-1">
-                        ({tour.reviews})
-                      </span>
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold mb-2 line-clamp-2">{name}</h3>
+                    <div className="flex items-center text-sm text-muted-foreground mb-2">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      {departure}
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-lg font-bold text-[hsl(var(--primary))]">{tour.price}</span>
+                    <div className="flex items-center text-sm text-muted-foreground mb-2">
+                      <Timer className="h-4 w-4 mr-1" />
+                      {duration}
                     </div>
-                    <Button size="sm">Xem chi tiết</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
+                        <span className="text-sm font-medium">{rating}</span>
+                        <span className="text-sm text-muted-foreground ml-1">({reviews})</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-lg font-bold text-[hsl(var(--primary))]">{price}</span>
+                      </div>
+                      <Button size="sm" asChild>
+                        <Link href={`/tour/${tour.slug}`}>Xem chi tiết</Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
