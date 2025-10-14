@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useRef, useMemo, useCallback } from "react";
 import JoditEditor from "jodit-react";
 
 interface JoditEditorWrapperProps {
@@ -15,6 +15,7 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
     const editor = useRef<any>(null);
 
     const config = useMemo(() => ({
+        iframe: true,
         readonly: false,
         placeholder: placeholder || "Start typing...",
         height: 400,
@@ -50,15 +51,58 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
             "source",
         ],
         toolbarAdaptive: false,
-        askBeforePasteHTML: false,
-        defaultActionOnPaste: "insert_only_text",
-        style: { fontFamily: "Inter, sans-serif" },
+        iframeStyle: `
+            body {
+                font-family: Inter, sans-serif;
+            }
+            img {
+                display: block;
+                margin: 20px auto;
+                max-width: 100%;
+                height: auto;
+            }
+        `,
         uploader: {
             insertImageAsBase64URI: true,
             imagesExtensions: ["jpg", "jpeg", "png", "gif", "webp"],
         },
         allowDragAndDropFiles: true,
         convertToXhtml: false,
+        events: {
+            beforePaste: function (pasteEvent: ClipboardEvent) {
+                const self = this;
+                pasteEvent.preventDefault();
+                pasteEvent.stopPropagation();
+                const clipboardData = pasteEvent.clipboardData;
+                if (!clipboardData) return;
+                const files = Array.from(clipboardData.files || []);
+                if (files.length) {
+                    files.forEach((file: File) => {
+                        if (/^image\//.test(file.type)) {
+                            const reader = new FileReader();
+                            reader.onload = (loadEvent: ProgressEvent<FileReader>) => {
+                                const img = self.createInside.element('img') as HTMLImageElement;
+                                img.src = loadEvent.target?.result as string;
+                                self.s.insertImage(img);
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    });
+                } else {
+                    let html = clipboardData.getData('text/html');
+                    if (html) {
+                        const doc = new DOMParser().parseFromString(html, 'text/html');
+                        html = doc.body.innerHTML;
+                        self.s.insertHTML(html);
+                    } else {
+                        const text = clipboardData.getData('text/plain');
+                        if (text) {
+                            self.s.insertHTML(text.replace(/\n/g, '<br>'));
+                        }
+                    }
+                }
+            },
+        },
     }), [placeholder]);
 
     const handleChange = useCallback((newContent: string) => {
