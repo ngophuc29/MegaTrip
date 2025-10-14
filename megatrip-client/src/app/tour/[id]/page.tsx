@@ -445,6 +445,7 @@ export default function ChiTietTour() {
             }
         }
         fetchBySlug();
+        
         return () => { mounted = false; };
     }, [id]);
 
@@ -574,6 +575,19 @@ export default function ChiTietTour() {
     const totalParticipants = participants.adults + participants.children + participants.infants;
     const [slotInfo, setSlotInfo] = useState<{ dateIso?: string, capacity?: number, reserved?: number, available?: number } | null>(null);
 
+    const [reviews, setReviews] = useState<any[]>([]);
+
+    const fetchReviews = async (productId: string) => {
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/product/${productId}`);
+            if (res.ok) {
+                const json = await res.json();
+                setReviews(json.data || []);
+            }
+        } catch (e) {
+            console.error('Failed to fetch reviews', e);
+        }
+    };
     useEffect(() => {
         let mounted = true;
         if (!id) return;
@@ -682,13 +696,23 @@ export default function ChiTietTour() {
                 tourDetails.reviews = db.reviews ? mapped.reviews : keepReviews;
 
                 if (mounted) setDbLoaded(true); // trigger re-render
+                 
+                // Fetch reviews only if tour data is successfully loaded
+                fetchReviews(tourDetails.id);
             } catch (err) {
                 console.error('Fetch tour by slug error', err);
             }
         }
         fetchBySlug();
+
+
+       
+
         return () => { mounted = false; };
     }, [id]);
+
+    const overallRating = reviews.length > 0 ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1) : 0;
+    const distribution = [5, 4, 3, 2, 1].map(star => ({ star, count: reviews.filter(r => r.rating === star).length }));
     const getCurrentAvailable = () => {
         // if (slotInfo && typeof slotInfo.available === 'number') return slotInfo.available;
         // const sel = getSelectedDateInfo();
@@ -1165,29 +1189,28 @@ export default function ChiTietTour() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
                                         <div className="text-center">
-                                            <div className="text-4xl font-bold text-primary mb-2">{tourDetails.reviews.overall}</div>
+                                            <div className="text-4xl font-bold text-primary mb-2">{overallRating}</div>
                                             <div className="flex justify-center mb-2">
                                                 {[...Array(5)].map((_, i) => (
                                                     <Star
                                                         key={i}
-                                                        className={`h-5 w-5 ${i < Math.floor(tourDetails.reviews.overall)
+                                                        className={`h-5 w-5 ${i < Math.floor(overallRating)
                                                             ? 'fill-yellow-400 text-yellow-400'
                                                             : 'text-gray-300'
                                                             }`}
                                                     />
                                                 ))}
                                             </div>
-                                            <div className="text-sm text-muted-foreground">
-                                                Dựa trên {tourDetails.reviews.comments.length} đánh giá
-                                            </div>
+                                            <div className="text-sm text-muted-foreground">Dựa trên {reviews.length} đánh giá</div>
                                         </div>
                                     </div>
 
                                     <div className="space-y-2">
-                                        {Object.entries(tourDetails.reviews.distribution).reverse().map(([stars, count]) => (
+                                        
+                                        {Object.entries(distribution.reduce((acc, d) => ({ ...acc, [d.star]: d.count }), {})).reverse().map(([stars, count]) => (
                                             <div key={stars} className="flex items-center gap-2">
                                                 <span className="text-sm w-8">{stars}★</span>
-                                                <Progress value={(count / 100) * 100} className="flex-1" />
+                                                <Progress value={(count / reviews.length) * 100} className="flex-1" />
                                                 <span className="text-sm text-muted-foreground w-8">{count}%</span>
                                             </div>
                                         ))}
@@ -1267,24 +1290,22 @@ export default function ChiTietTour() {
                                 {/* Reviews List */}
                                 <div className="space-y-4">
                                     <h4 className="font-semibold">Đánh giá từ khách hàng</h4>
-                                    {tourDetails.reviews.comments.map((review) => (
-                                        <Card key={review.id}>
+                                    {reviews.map((review) => (
+                                        <Card key={review._id}>
                                             <CardContent className="p-4">
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div className="flex items-center gap-3">
                                                         <Avatar className="h-10 w-10">
-                                                            <AvatarImage src={review.user.avatar} />
-                                                            <AvatarFallback>{review.user.name.charAt(0)}</AvatarFallback>
+                                                            <AvatarImage src="" />
+                                                            <AvatarFallback>{review.customerId?.name?.charAt(0) || 'U'}</AvatarFallback>
                                                         </Avatar>
                                                         <div>
                                                             <div className="flex items-center gap-2">
-                                                                <span className="font-medium">{review.user.name}</span>
-                                                                {review.user.verified && (
-                                                                    <Badge variant="secondary" className="text-xs">Verified</Badge>
-                                                                )}
+                                                                <span className="font-medium">{review.customerId?.name || 'Anonymous'}</span>
+                                                                <Badge variant="secondary">Đã trải nghiệm</Badge>
                                                             </div>
                                                             <div className="text-xs text-muted-foreground">
-                                                                {review.user.trips} chuyến đi • {review.date}
+                                                               Đã gửi • {new Date(review.createdAt).toLocaleDateString('vi-VN')}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1298,52 +1319,27 @@ export default function ChiTietTour() {
                                                         {[...Array(5)].map((_, i) => (
                                                             <Star
                                                                 key={i}
-                                                                className={`h-4 w-4 ${i < review.rating
-                                                                    ? 'fill-yellow-400 text-yellow-400'
-                                                                    : 'text-gray-300'
-                                                                    }`}
+                                                                className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
                                                             />
                                                         ))}
                                                     </div>
-                                                    <span className="font-medium">{review.title}</span>
+                                                    <span className="font-medium">Đánh giá</span>
                                                 </div>
 
-                                                <p className="text-sm text-muted-foreground mb-3">{review.content}</p>
+                                                <p className="text-sm text-muted-foreground mb-3">{review.comment}</p>
 
-                                                {review.photos && review.photos.length > 0 && (
-                                                    <div className="flex gap-2 mb-3">
-                                                        {review.photos.map((photo, index) => (
-                                                            <img
-                                                                key={index}
-                                                                src={photo}
-                                                                alt={`Review photo ${index + 1}`}
-                                                                className="w-16 h-16 object-cover rounded"
-                                                            />
-                                                        ))}
-                                                    </div>
-                                                )}
-
-                                                <div className="flex items-center justify-between">
+                                                {/* <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-4">
                                                         <Button variant="ghost" size="sm">
                                                             <ThumbsUp className="h-4 w-4 mr-1" />
-                                                            Hữu ích ({review.helpful})
+                                                            Hữu ích (0)
                                                         </Button>
                                                         <Button variant="ghost" size="sm">
                                                             <Flag className="h-4 w-4 mr-1" />
                                                             Báo cáo
                                                         </Button>
                                                     </div>
-                                                </div>
-
-                                                {review.response && (
-                                                    <div className="mt-3 p-3 bg-blue-50 rounded">
-                                                        <div className="text-sm font-medium text-blue-900 mb-1">
-                                                            Phản hồi từ {review.response.from}
-                                                        </div>
-                                                        <div className="text-sm text-blue-800">{review.response.content}</div>
-                                                    </div>
-                                                )}
+                                                </div> */}
                                             </CardContent>
                                         </Card>
                                     ))}
