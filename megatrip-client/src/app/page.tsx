@@ -370,6 +370,37 @@ export default function Index() {
     })();
   }, []);
 
+  // map featured tours to TourResults format
+  const mappedFeatured = featuredTours.map((db: any, i: number) => {
+    if (!db) return null;
+    const id = db._id?.$oid ?? db._id ?? db.id ?? (db.slug ?? `featured-${i}`);
+    const images = Array.isArray(db.images) && db.images.length ? db.images : (db.image ? [db.image] : ['/placeholder.svg']);
+    const startDates = Array.isArray(db.startDates) ? db.startDates : (Array.isArray(db.availableDates) ? db.availableDates : []);
+    const availableDates = startDates.slice(0, 30).map((d: any) => (typeof d === 'string' ? d : (d.date || d.$date || d)));
+    const durationStr = typeof db.duration === 'number' ? `${db.duration} ngày ${db.duration > 1 ? `${db.duration - 1} đêm` : 'đêm'}` : (db.duration ?? '');
+    return {
+      id,
+      slug: db.slug ?? id,
+      name: db.name ?? 'Tour',
+      departure: db.departureFrom ?? db.startLocation?.address ?? db.departure ?? '',
+      duration: durationStr,
+      priceFrom: Number(db.adultPrice ?? db.priceFrom ?? 0),
+      originalPrice: Number(db.originalPrice ?? db.listPrice ?? 0) || undefined,
+      images,
+      availableDates: availableDates,
+      highlights: db.highlights || [],
+      includes: db.services || db.includes || [],
+      transport: db.transport || '',
+      hotel: db.hotel || '',
+      meals: db.meals || '',
+      maxGroup: db.maxGroupSize ?? db.maxGroup ?? 0,
+      rating: db.ratingsAverage ?? db.rating ?? 0,
+      reviews: db.ratingsQuantity ?? db.reviews ?? 0,
+      badge: 'Nổi bật',
+      badgeColor: 'destructive',
+    };
+  }).filter(Boolean);
+
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -437,6 +468,21 @@ export default function Index() {
       badgeColor: db.highlight ? 'destructive' : 'default',
     };
   }).filter(Boolean);
+  const saveRecentTour = (tour: any) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const key = 'recentTours';
+      const raw = localStorage.getItem(key);
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      const id = tour.slug ?? String(tour.id ?? '');
+      if (!id) return;
+      const filtered = list.filter(x => x !== id);
+      filtered.unshift(id);
+      localStorage.setItem(key, JSON.stringify(filtered.slice(0, 10)));
+    } catch (e) {
+      // ignore
+    }
+  };
   return (
     <>
       {/* Traveloka-style Banner */}
@@ -531,53 +577,17 @@ export default function Index() {
               </Link>
             </Button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredTours.map((tour) => {
-              const id = tour._id?.$oid ?? tour._id;
-              const name = tour.name;
-              const departure = tour.departureFrom ?? tour.startLocation?.address ?? '';
-              const duration = `${tour.duration} ngày ${tour.duration > 1 ? `${tour.duration - 1} đêm` : 'đêm'}`;
-              const price = `từ ${formatPrice(tour.adultPrice)}`;
-              const rating = tour.ratingsAverage ?? 0;
-              const reviews = tour.ratingsQuantity ?? 0;
-              const image = tour.images?.[0] ?? '/placeholder.svg';
-              const badge = tour.highlight ? 'Nổi bật' : '';
-              return (
-                <Card key={id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="relative">
-                    <img src={image} alt={name} className="w-full h-48 object-cover" />
-                    {badge && <Badge className="absolute top-2 left-2" variant="destructive">{badge}</Badge>}
-                  </div>
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold mb-2 line-clamp-2">{name}</h3>
-                    <div className="flex items-center text-sm text-muted-foreground mb-2">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      {departure}
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground mb-2">
-                      <Timer className="h-4 w-4 mr-1" />
-                      {duration}
-                    </div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center">
-                        <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                        <span className="text-sm font-medium">{rating}</span>
-                        <span className="text-sm text-muted-foreground ml-1">({reviews})</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-lg font-bold text-[hsl(var(--primary))]">{price}</span>
-                      </div>
-                      <Button size="sm" asChild>
-                        <Link href={`/tour/${tour.slug}`}>Xem chi tiết</Link>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+          {mappedFeatured.length ? (
+            <TourResults
+              isLoading={false}
+              sortedTours={mappedFeatured}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
+              formatPrice={formatPrice}
+            />
+          ) : (
+            <div className="text-[hsl(var(--muted-foreground))]">Chưa có tour nổi bật.</div>
+          )}
         </div>
       </section>
 

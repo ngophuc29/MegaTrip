@@ -112,14 +112,14 @@ export default function TourResults({
                     <div className="flex items-center">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
                       <span className="text-sm font-medium">{tour.rating}</span>
-                      <span className="text-sm text-[hsl(var(--muted-foreground))] ml-1">({tour.reviews})</span>
+                      {/* <span className="text-sm text-[hsl(var(--muted-foreground))] ml-1">({tour.reviews})</span> */}
                     </div>
                     <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))] gap-1">
-                      <span className='ml-2'>
+                      <span className='ml-1'>
 
                         <Users size={12} />
                       </span>
-                      <span className="mr-1"> Max</span>{tour.maxGroup}
+                      <span className="mr-1"></span>{tour.maxGroup}
                     </div>
                   </div>
                   <div className="space-y-2 mb-3">
@@ -153,9 +153,10 @@ export default function TourResults({
                       })()}
                     </div>
                   </div>
-                  <div className="space-y-1 mb-3 text-xs text-[hsl(var(--muted-foreground))]">
+                  {/* Điểm nổi bật */}
+                  {/* <div className="space-y-1 mb-3 text-xs text-[hsl(var(--muted-foreground))]">
                     <div className="line-clamp-2">Điểm nổi bật: {tour.highlights.join(' • ')}</div>
-                  </div>
+                  </div> */}
                   <div className="border-t pt-3">
                     <div className="flex items-center justify-between">
                       <div>
