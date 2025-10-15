@@ -414,7 +414,7 @@ export default function Orders() {
     const [newNote, setNewNote] = useState("");
     const [orderDetails, setOrderDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
-    
+    const [isSelectingCompletable, setIsSelectingCompletable] = useState(false);
     const [refundData, setRefundData] = useState({
         amount: 0,
         reason: "",
@@ -797,8 +797,17 @@ export default function Orders() {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Kiểm tra nếu ngày sử dụng chưa qua
-        if (serviceDate && serviceDate >= today) {
+        // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+        const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+
+        console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+        console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+        console.log("Is past service date:", isPastServiceDate);
+
+        // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép hoàn thành nếu dịch vụ đã diễn ra trong ngày)
+        if (!isPastServiceDate) {
             toast({
                 title: "Không thể hoàn thành",
                 description: "Đơn hàng chưa đến ngày sử dụng, không thể đánh dấu hoàn thành",
@@ -807,7 +816,7 @@ export default function Orders() {
             return; // Dừng lại, không cập nhật
         }
 
-        // Nếu đã qua hoặc không có ngày, tiến hành cập nhật
+        // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
         updateOrderMutation.mutate({
             id: order.id,
             status: "completed",
@@ -845,17 +854,52 @@ export default function Orders() {
             description: `Hóa đơn ${order.orderNumber} đang được in`,
         });
     };
+     
+    const getCompletableOrders = () => {
+        return orders
+            .map((order, index) => ({ order, index }))
+            .filter(({ order }) => {
+                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
+                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
 
+                // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                const snap = order.metadata?.bookingDataSnapshot;
+                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                return isValidStatus && isServiceDateValid;
+            })
+            .map(({ index }) => index.toString());
+    };
+
+    const handleSelectCompletable = () => {
+        if (isSelectingCompletable) {
+            setSelectedOrders([]);
+            setIsSelectingCompletable(false);
+        } else {
+            setSelectedOrders(getCompletableOrders());
+            setIsSelectingCompletable(true);
+        }
+    };
     const bulkActions = [
-        {
-            label: "Xác nhận",
-            action: (keys: string[]) => {
-                keys.forEach(id => {
-                    updateOrderMutation.mutate({ id, status: "confirmed" });
-                });
-            },
-            icon: <CheckCircle className="w-4 h-4 mr-2" />,
-        },
+        // {
+        //     label: "Xác nhận",
+        //     action: (keys: string[]) => {
+        //         keys.forEach(id => {
+        //             updateOrderMutation.mutate({ id, status: "confirmed" });
+        //         });
+        //     },
+        //     icon: <CheckCircle className="w-4 h-4 mr-2" />,
+        // },
+
+        //ở đây cần 1 button để lọc những đơn nào có thể hoàn thành 
+        // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
         {
             label: "Hoàn thành",
             action: (keys: string[]) => {
@@ -878,9 +922,17 @@ export default function Orders() {
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
 
-                    // Kiểm tra nếu ngày sử dụng chưa qua
-                    if (serviceDate && serviceDate >= today) {
-                        console.log("Ngày chưa qua, không cập nhật"); // Thêm log
+                    // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                    const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+
+                    console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                    console.log("Is past service date:", isPastServiceDate);
+
+                    // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                    if (!isPastServiceDate) {
+                        console.log("Ngày chưa đến, không cập nhật"); // Thêm log
                         toast({
                             title: "Không thể hoàn thành",
                             description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
@@ -890,7 +942,7 @@ export default function Orders() {
                     }
 
                     console.log("Cập nhật đơn hàng:", id); // Thêm log
-                    // Nếu đã qua hoặc không có ngày, tiến hành cập nhật
+                    // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
                     updateOrderMutation.mutate({
                         id: order.id, // Dùng order.id thật
                         status: "completed",
@@ -918,30 +970,32 @@ export default function Orders() {
             action: handleView,
             icon: <Eye className="mr-2 h-4 w-4" />,
         },
-        {
-            label: "Xác nhận",
-            action: handleConfirmOrder,
-            icon: <CheckCircle className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => order.orderStatus === "pending",
-        },
+        // {
+        //     label: "Xác nhận",
+        //     action: handleConfirmOrder,
+        //     icon: <CheckCircle className="mr-2 h-4 w-4" />,
+        //     condition: (order: Order) => order.orderStatus === "pending",
+        // },
         {
             label: "Hoàn thành",
             action: handleCompleteOrder,
             icon: <Package className="mr-2 h-4 w-4" />,
             condition: (order: Order) => {
-                // Kiểm tra trạng thái đơn hàng
-                const isValidStatus = order.orderStatus === "confirmed" || order.orderStatus === "processing";
+                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
+                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
 
-                // Kiểm tra ngày sử dụng
+                // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
                 const snap = order.metadata?.bookingDataSnapshot;
                 const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
                 const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
                 const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const isPastServiceDate = !serviceDate || serviceDate < today;
+                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
 
-                return isValidStatus && isPastServiceDate;
+                return isValidStatus && isServiceDateValid;
             },
         },
         {
@@ -1461,6 +1515,12 @@ export default function Orders() {
                             <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái</CardDescription>
                         </div>
                         <div className="flex items-center space-x-2">
+                            <Button
+                                variant="outline"
+                                onClick={handleSelectCompletable}
+                            >
+                                {isSelectingCompletable ? "Hủy chọn đơn có thể hoàn thành" : "Chọn đơn có thể hoàn thành"}
+                            </Button>
                             <Select value={filters.orderStatus} onValueChange={(value) => setFilters(prev => ({ ...prev, orderStatus: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
