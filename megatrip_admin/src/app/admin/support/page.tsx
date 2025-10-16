@@ -1113,8 +1113,8 @@ const Support: React.FC = () => {
         try {
             if (isCancel && (selectedTicket as any).refundInfo) {
                 const refundInfo = (selectedTicket as any).refundInfo;
-                // const amount = 10000;
-                const amount = refundInfo.refundAmount; // Sử dụng số tiền hoàn dự kiến từ refundInfo
+                const amount = 10000;
+                // const amount = refundInfo.refundAmount; // Sử dụng số tiền hoàn dự kiến từ refundInfo
 
                 let refundResult: any = null;
 
@@ -1179,6 +1179,21 @@ const Support: React.FC = () => {
                 const orderRef = refundInfo.orderRef;
                 if (orderRef) {
                     try {
+                        // Fetch current order metadata to merge
+                        const currentOrderResp = await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderRef)}`);
+                        let currentMetadata = {};
+                        if (currentOrderResp.ok) {
+                            const currentOrder = await currentOrderResp.json();
+                            currentMetadata = currentOrder.metadata || {};
+                        }
+
+                        // Merge metadata
+                        const updatedMetadata = {
+                            ...currentMetadata,
+                            refundHandledBy: ticketId,
+                            refundResult,
+                        };
+
                         await fetch(`${API_BASE}/api/orders/${encodeURIComponent(orderRef)}`, {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
@@ -1187,7 +1202,7 @@ const Support: React.FC = () => {
                                 orderStatus: "cancelled",
                                 transId: refundInfo.transId || null,
                                 zp_trans_id: refundInfo.zp_trans_id || null,
-                                metadata: { refundHandledBy: ticketId, refundResult },
+                                metadata: updatedMetadata,
                             }),
                         });
                     } catch (e) {

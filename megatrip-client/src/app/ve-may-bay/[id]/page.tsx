@@ -750,7 +750,7 @@ export default function ChiTietVeMayBay() {
         const hasCH = chars.includes("CH");
         const explicitPrice = Number(seat.price || 0) > 0;
         const isPaidSeat = hasCH && explicitPrice;
-        const max = participants.adults + participants.children + participants.infants;
+        const max = participants.adults + participants.children; // Chỉ tính chỗ cho adults và children, không tính infants
 
         if (isPaidSeat) {
             const msgPrice =
@@ -909,7 +909,7 @@ export default function ChiTietVeMayBay() {
     // }, [participants.adults, participants.children, participants.infants, seatRows]);
 
     useEffect(() => {
-        const max = participants.adults + participants.children + participants.infants;
+        const max = participants.adults + participants.children; // Chỉ tính chỗ cho adults và children, không tính infants
         const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
         legs.forEach((leg) => {
             const currentSeats = selectedSeatsByLeg[leg] || [];
@@ -940,7 +940,7 @@ export default function ChiTietVeMayBay() {
                 }
             }
         });
-    }, [participants.adults, participants.children, participants.infants, parsedSeatmaps, isRoundtrip, selectedLeg]);
+    }, [participants.adults, participants.children, parsedSeatmaps, isRoundtrip, selectedLeg]);
 
     // --- NEW: safe number parser + derive traveler-level pricing when available ---
     const parseNumberSafe = (v: any) => {
@@ -1546,7 +1546,7 @@ export default function ChiTietVeMayBay() {
                             </div>
 
                             <p className="text-xs text-gray-500 mt-2">
-                                Ghế miễn phí sẽ tự gán nếu còn đủ cho {totalParticipants} khách.
+                                Ghế miễn phí sẽ tự gán nếu còn đủ cho {participants.adults + participants.children} khách. (em bé sẽ ngồi cùng người lớn)
                             </p>
                         </div>
 

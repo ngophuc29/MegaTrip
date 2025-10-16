@@ -875,17 +875,13 @@ export default function ThanhToan() {
         }
 
         // persist UI state (participants & booking payload)
-
-        // make payloadToSave available after try/catch
-        let payloadToSave: any = null;
+        let payloadToSave = null;
         try {
             if (typeof window !== 'undefined') {
                 window.localStorage.setItem('participants', JSON.stringify(passengers));
-                // build details snapshot using current UI state so selectedPickup and passengers are preserved
                 const detailsSnapshot = {
                     ...((bookingData && bookingData.details) || {}),
                     selectedPickup: shuttlePickup || ((bookingData && bookingData.details && bookingData.details.selectedPickup) || ''),
-                    // persist selected passenger list from UI (not just original bookingData)
                     passengers: Array.isArray(passengers) ? passengers.map(p => ({
                         type: p.type,
                         title: p.title,
@@ -896,7 +892,6 @@ export default function ThanhToan() {
                         idNumber: p.idNumber,
                         idType: p.idType
                     })) : ((bookingData && bookingData.details && bookingData.details.passengers) || []),
-                    // preserve any passengerInfo/contact info if present
                     passengerInfo: {
                         name: contactInfo.fullName || ((bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.name) || ''),
                         phone: contactInfo.phone || ((bookingData && bookingData.details && bookingData.details.passengerInfo && bookingData.details.passengerInfo.phone) || ''),
@@ -907,7 +902,6 @@ export default function ThanhToan() {
                 payloadToSave = {
                     ...(bookingData || {}),
                     details: detailsSnapshot,
-                    // ensure pricing keeps seats etc.
                     pricing: { ...(bookingData?.pricing || {}), ...(bookingData?.pricing ? {} : {}) }
                 };
                 if (bookingKey) {
@@ -930,7 +924,6 @@ export default function ThanhToan() {
 
         // Build order payload and create order on server before redirecting to payment
         let createdOrder = null;
-        // ensure itemName is available after the try/catch (used to build paymentDescription)
         let itemName = '';
         try {
             const payloadTotal = Number(normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData?.pricing?.total ?? 0);
@@ -939,11 +932,9 @@ export default function ThanhToan() {
             const qty = Math.max(1, passengers.length || ((bookingData?.passengers && bookingData.passengers.counts) ? (bookingData.passengers.counts.adults || 1) : 1));
             const totalAmount = Math.round(Math.max(0, (Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0) - (discountAmount || 0))));
             const perUnit = Math.round(totalAmount / Math.max(1, qty));
-            // determine product id coming from detail page (tour / bus / flight). If not provided, leave undefined.
-            // determine product id coming from detail page (tour / bus / flight). If not provided, leave undefined.
-            // try multiple places: meta.*, top-level id/_id, details.tourCode/tourId, flights.outbound.id/number
-            const detailItemId =
-                bookingData?.meta?.id ??
+
+            // determine product id and item name for flight
+            let detailItemId = bookingData?.meta?.id ??
                 bookingData?.meta?.tourId ??
                 bookingData?.meta?.busId ??
                 bookingData?.meta?.flightId ??
@@ -955,35 +946,63 @@ export default function ThanhToan() {
                 bookingData?.flights?.outbound?.flightNumber ??
                 undefined;
 
-            // Determine a short human-friendly item name required by backend:
-            const detailItemName =
-                (bookingData?.meta && (bookingData.meta.label || bookingData.meta.name)) ||
+            let productId = detailItemId;
+            itemName = (bookingData?.meta && (bookingData.meta.label || bookingData.meta.name)) ||
                 normalizedDetails?.flightNumber ||
                 normalizedDetails?.route ||
                 (bookingType === 'tour' ? 'Tour' : bookingType === 'bus' ? 'Vé xe' : 'Vé máy bay') ||
                 bookingType;
 
-            // items should store final total (after discounts/fees)
-            // include required `name` field (backend validation) and productId if provided
+            if (bookingType === 'flight' && bookingData?.flights?.outbound) {
+                const outbound = bookingData.flights.outbound;
+                const inbound = bookingData.flights.inbound;
+                const formatDate = (date) => date ? date.replace(/-/g, '') : 'YYYYMMDD';
+                const formatTime = (time) => time ? time.split('-')[0].replace(':', '').slice(0, 4) : 'HHMM';
+                const formatRoute = (dep, arr) => dep && arr ? `${dep}-${arr}` : '';
+
+                const outboundSegment = outbound.itineraries?.[0]?.segments?.[0];
+                const outboundKey = outboundSegment?.carrierCode && outboundSegment?.number && outbound.date && outbound.time && outboundSegment?.departure?.iataCode && outboundSegment?.arrival?.iataCode
+                    ? `${outboundSegment.carrierCode}${outboundSegment.number}_${formatDate(outbound.date)}_${formatTime(outbound.time)}_${formatRoute(outboundSegment.departure.iataCode, outboundSegment.arrival.iataCode)}`
+                    : 'OUTBOUND_INVALID';
+
+                productId = outboundKey;
+                itemName = inbound ? `Vé khứ hồi ${formatRoute(outboundSegment?.departure?.iataCode, outboundSegment?.arrival?.iataCode)}` : `Vé một chiều ${formatRoute(outboundSegment?.departure?.iataCode, outboundSegment?.arrival?.iataCode)}`;
+
+                if (inbound && inbound.itineraries?.[0]?.segments?.[0]?.carrierCode && inbound.itineraries?.[0]?.segments?.[0]?.number && inbound.date && inbound.time && inbound.itineraries?.[0]?.segments?.[0]?.departure?.iataCode && inbound.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode) {
+                    const inboundSegment = inbound.itineraries[0].segments[0];
+                    const inboundKey = `${inboundSegment.carrierCode}${inboundSegment.number}_${formatDate(inbound.date)}_${formatTime(inbound.time)}_${formatRoute(inboundSegment.departure.iataCode, inboundSegment.arrival.iataCode)}`;
+                    productId = `${outboundKey}_${inboundKey}`;
+                    itemName = `Vé khứ hồi ${formatRoute(outboundSegment?.departure?.iataCode, outboundSegment?.arrival?.iataCode)} - ${formatRoute(inboundSegment.departure.iataCode, inboundSegment.arrival.iataCode)}`;
+                } else if (inbound) {
+                    console.warn('Thông tin chuyến inbound không đầy đủ, xử lý như oneway:', inbound);
+                }
+
+                // Lưu originalProductId vào metadata
+                payloadToSave = {
+                    ...payloadToSave,
+                    metadata: {
+                        ...payloadToSave?.metadata,
+                        originalProductId: productId
+                    }
+                };
+            }
+
             const items = [{
-                // prefer real product id as itemId so backend that expects itemId gets it
-                itemId: detailItemId ?? bookingKey ?? undefined,
-                // keep productId explicit as well
-                productId: detailItemId ?? undefined,
+                itemId: productId ?? bookingKey ?? undefined,
+                productId: productId ?? undefined,
                 type: bookingType,
-                name: detailItemName,
+                name: itemName,
                 sku: bookingData?.meta?.sku ?? undefined,
                 quantity: 1,
                 unitPrice: totalAmount,
                 subtotal: totalAmount
             }];
-            // build snapshot that reflects applied promo
+
             const bookingSnapshot = {
                 ...(bookingData || {}),
                 details: (payloadToSave && payloadToSave.details) ? payloadToSave.details : (bookingData?.details || {}),
                 pricing: {
                     ...(bookingData?.pricing || {}),
-                    // override to reflect applied discount and final total
                     discount: Math.round(discountAmount || Number(bookingData?.pricing?.discount || 0)),
                     total: totalAmount
                 }
@@ -1003,7 +1022,7 @@ export default function ThanhToan() {
                 customerPhone: contactInfo.phone || '',
                 customerAddress: '',
                 items,
-                subtotal: Math.round(Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0)), // pre-discount subtotal
+                subtotal: Math.round(Number(normalizedPricing?.total ?? bookingData?.pricing?.total ?? 0)),
                 discounts: discounts,
                 fees: [],
                 tax: Math.round(tax),
@@ -1011,10 +1030,11 @@ export default function ThanhToan() {
                 paymentMethod: selectedPayment,
                 paymentStatus: 'pending',
                 orderStatus: 'pending',
-                pickupDropoff: bookingData.details?.pickupDropoff || '', // added for tour orders
+                pickupDropoff: bookingData.details?.pickupDropoff || '',
                 metadata: {
                     bookingKey: bookingKey || null,
-                    bookingDataSnapshot: bookingSnapshot
+                    bookingDataSnapshot: bookingSnapshot,
+                    originalProductId: payloadToSave?.metadata?.originalProductId || null
                 }
             };
 
@@ -1037,18 +1057,16 @@ export default function ThanhToan() {
             alert('Lỗi khi tạo đơn hàng. Vui lòng thử lại.');
             return;
         }
-        // build human-friendly payment description including order ref (no item name)
+
         const paymentLabel = `Thanh toán cho đơn ${createdOrder?.orderNumber || createdOrder?._id || ''}`;
         const paymentDescription = paymentLabel;
 
-        // Proceed to payment flows - include order reference so backend/payment gateways can reconcile
         try {
             if (selectedPayment === 'vnpay') {
                 const resp = await fetch('http://localhost:7000/vnpay/create_payment_url', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        // use final paid amount (order total after discounts) and include human-readable description
                         amount: (createdOrder?.total ?? finalTotal ?? (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000)),
                         orderInfo: paymentDescription,
                         orderId: createdOrder?.orderNumber || createdOrder?._id,
@@ -1077,17 +1095,11 @@ export default function ThanhToan() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        // amount: (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000),
-                        // orderInfo: (normalizedDetails?.flightNumber ?? normalizedDetails?.route ?? 'Thanh toan MegaTrip'),
-                        // orderId: createdOrder?.orderNumber || createdOrder?._id
-                        // send discounted total and description; backend will derive app_trans_id from orderId
                         amount: (createdOrder?.total ?? finalTotal ?? (normalizedPricing?.total ?? normalizedPricing?.estimatedTotal ?? bookingData.pricing?.total ?? 50000)),
                         description: paymentDescription,
                         orderId: createdOrder?.orderNumber || createdOrder?._id,
                         app_user: contactInfo.email || 'guest',
                         embed_data: { orderNumber: createdOrder?.orderNumber || createdOrder?._id }
-
-
                     }),
                 });
                 const data = await resp.json();
@@ -1121,13 +1133,11 @@ export default function ThanhToan() {
                 return;
             }
 
-            // bank transfer: show instructions page and include orderNumber for reference
             if (selectedPayment === 'bank_transfer') {
                 router.push(`/chuyen-khoan?orderNumber=${encodeURIComponent(createdOrder?.orderNumber || createdOrder?._id)}${bookingKey ? `&bookingKey=${encodeURIComponent(bookingKey)}` : ''}`);
                 return;
             }
 
-            // other instant methods or credit card (simulated) -> success page with orderNumber
             if (createdOrder?.orderNumber) {
                 router.push(`/thanh-toan-thanh-cong?orderNumber=${encodeURIComponent(createdOrder.orderNumber)}${bookingKey ? `&bookingKey=${encodeURIComponent(bookingKey)}` : ''}`);
             } else if (createdOrder?._id) {
@@ -1138,8 +1148,7 @@ export default function ThanhToan() {
         } catch (err) {
             console.error('Payment flow error:', err);
             alert('Lỗi khi chuyển tới cổng thanh toán. Vui lòng thử lại.');
-        }
-        finally {
+        } finally {
             setIsProcessingPayment(false);
         }
     };

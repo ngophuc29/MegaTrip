@@ -415,6 +415,8 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
         </div>
     );
 }
+
+
 function mapOrderToBooking(order: any) {
     const snap = order.metadata?.bookingDataSnapshot;
     const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
@@ -430,21 +432,22 @@ function mapOrderToBooking(order: any) {
     // compute serviceDate and days until service
     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
     const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-    console.log('Order ID:', order.orderNumber);
-    console.log('changeCalendar:', order.changeCalendar);
-    console.log('dateChangeCalendar:', order.dateChangeCalendar);
-    console.log('originalServiceDateRaw:', originalServiceDateRaw);
-    console.log('serviceDateRaw:', serviceDateRaw);
-    const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : (order.createdAt ? new Date(order.createdAt) : null);
-    const serviceDate = serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '';
-    let daysUntilService = null;
-    if (serviceDateObj) {
-        const today = new Date();
-        // normalize to midnight to count full days
-        const t0 = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
-        const t1 = Date.UTC(serviceDateObj.getFullYear(), serviceDateObj.getMonth(), serviceDateObj.getDate());
-        daysUntilService = Math.ceil((t1 - t0) / (1000 * 60 * 60 * 24));
+    let serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
+
+    // Nếu là flight, lấy ngày từ flights
+    if (item?.type === 'flight') {
+        const flights = snap?.flights;
+        if (flights?.outbound && flights?.inbound) {
+            serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+        } else if (flights?.outbound) {
+            serviceDate = flights.outbound.date;
+        } else if (flights?.inbound) {
+            serviceDate = flights.inbound.date;
+        }
     }
+
+    const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : (order.createdAt ? new Date(order.createdAt) : null);
+    const daysUntilService = serviceDateObj ? Math.ceil((Date.UTC(serviceDateObj.getFullYear(), serviceDateObj.getMonth(), serviceDateObj.getDate()) - Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) / (1000 * 60 * 60 * 24)) : null;
 
     const paymentStatus = order.paymentStatus || 'pending';
     // cancel only when paymentStatus === 'paid'
@@ -603,6 +606,22 @@ export default function TaiKhoan() {
             setLoadingDetails(false);
         }
     };
+
+    function getTravelDateForFlight(ticket: any) {
+        if (ticket.type !== 'flight') return ticket.travelDate;
+        const leg = getLegFromUniq(ticket.uniq);
+        if (leg === 'Chuyến đi (Outbound)') {
+            return ticket.reservationInfo?.flights?.outbound?.date || ticket.travelDate;
+        } else if (leg === 'Chuyến về (Inbound)') {
+            return ticket.reservationInfo?.flights?.inbound?.date || ticket.travelDate;
+        }
+        return ticket.travelDate;
+    }
+    function getLegFromUniq(uniq: string) {
+        if (uniq?.includes('outbound')) return 'Chuyến đi (Outbound)';
+        if (uniq?.includes('inbound')) return 'Chuyến về (Inbound)';
+        return 'Chuyến bay';
+    }
     return (
         <>
             <div className="container py-6">
@@ -922,8 +941,7 @@ export default function TaiKhoan() {
                                                                     <div>Ngày đặt: {booking.bookingDate}</div>
                                                                     {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
                                                                     <div>
-                                                                        Ngày sử dụng: {booking.serviceDate}
-
+                                                                        <strong>Ngày sử dụng:</strong> {booking.serviceDate}
                                                                     </div>
                                                                     {/* <div>Số khách: {booking.passengers}</div> */}
                                                                     {/* {booking.refunded && (
@@ -1299,20 +1317,32 @@ export default function TaiKhoan() {
                                         <div>
                                             <h4 className="font-semibold">Vé cũ</h4>
                                             <div className="space-y-2">
-                                                {orderDetails.oldTickets
-                                                    .filter((ticket: any) => ticket.status === 'cancelled')
-                                                    .map((ticket: any) => (
-                                                        <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                            <div>
-                                                                <div className="font-medium">{ticket.ticketNumber}</div>
-                                                                <div className="text-sm text-muted-foreground">{ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}</div>
+                                                {orderDetails.oldTickets.map((ticket: any) => (
+                                                    <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-medium">{ticket.productId}</div>
+                                                            <div className="font-medium">{ticket.ticketNumber}</div>
+
+                                                            <div className="text-sm text-muted-foreground">
+                                                                <span className='text-sm font-bold'>Họ và tên hành khách : </span>
+                                                                {ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}
                                                             </div>
-                                                            <div className="text-sm">
-                                                                <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                                <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                            </div>
+                                                            <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div>
+                                                            {/* Thêm chuyến và ghế nếu là flight */}
+                                                            {ticket.type === 'flight' && (
+                                                                <>
+                                                                    <div className="text-xs text-muted-foreground">Chuyến: {getLegFromUniq(ticket.uniq)}</div>
+                                                                </>
+                                                            )}
+                                                            <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : ''}</div>
                                                         </div>
-                                                    ))}
+                                                        <div className="text-sm">
+                                                            <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                            <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                            <div className="text-xs mt-1">{formatPrice(Number(ticket.price || 0))}</div>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
                                     )}
@@ -1322,19 +1352,27 @@ export default function TaiKhoan() {
                                             <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi / Vé' : 'Vé'}</h4>
                                             <div className="space-y-2">
                                                 {(
-                                                    // ưu tiên show vé 'changed' nếu có, nếu không thì show tất cả vé (paid,...)
-                                                    orderDetails.tickets.filter((t: any) => t.status === 'changed').length
-                                                        ? orderDetails.tickets.filter((t: any) => t.status === 'changed')
-                                                        : orderDetails.tickets
+                                                    // Chỉ show vé mới (không phải vé cũ)
+                                                    orderDetails.tickets.filter((t: any) => !orderDetails.oldTickets?.some((o: any) => o._id === t._id))
                                                 ).map((ticket: any) => (
                                                     <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                         <div>
+                                                            <div className="font-medium">{ticket.productId}</div>
                                                             <div className="font-medium">{ticket.ticketNumber}</div>
+
                                                             <div className="text-sm text-muted-foreground">
                                                                 <span className='text-sm font-bold'>Họ và tên hành khách : </span>
                                                                 {ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}
                                                             </div>
-                                                            <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate} </div>
+                                                            {/* <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div> */}
+                                                            <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {getTravelDateForFlight(ticket)}</div>
+                                                            {/* Thêm chuyến và ghế nếu là flight */}
+                                                            {ticket.type === 'flight' && (
+                                                                <>
+                                                                    <div className="text-xs text-muted-foreground">Chuyến: {getLegFromUniq(ticket.uniq)}</div>
+                                                                </>
+                                                            )}
+                                                            <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Chưa có'}</div>
                                                         </div>
                                                         <div className="text-sm">
                                                             <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>

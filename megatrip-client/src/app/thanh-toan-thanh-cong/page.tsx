@@ -310,12 +310,12 @@ export default function ThanhToanThanhCong() {
                                             Về trang chủ
                                         </Link>
                                     </Button>
-                                    <Button variant="outline" className="w-full" asChild>
+                                    {/* <Button variant="outline" className="w-full" asChild>
                                         <Link prefetch={false} href="/ve-may-bay">
                                             <Plane className="h-4 w-4 mr-2" />
                                             Đặt vé mới
                                         </Link>
-                                    </Button>
+                                    </Button> */}
                                 </CardContent>
                             </Card>
 

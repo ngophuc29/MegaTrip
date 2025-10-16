@@ -117,6 +117,7 @@ export default function HuyDonPage() {
     const [order, setOrder] = useState<any | null>(null);
     const [loadingOrder, setLoadingOrder] = useState(false);
     // derive booking view-model from fetched order (fallback to sample if not found)
+    // derive booking view-model from fetched order (fallback to sample if not found)
     const booking = useMemo<Booking | null>(() => {
         if (!order) {
             // fallback: try sample by id
@@ -135,7 +136,20 @@ export default function HuyDonPage() {
             return 1;
         })();
         const serviceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date ?? order.createdAt;
-        const serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
+        let serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
+
+        // Nếu là flight, lấy ngày từ flights
+        if (item?.type === 'flight') {
+            const flights = snap?.flights;
+            if (flights?.outbound && flights?.inbound) {
+                serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+            } else if (flights?.outbound) {
+                serviceDate = flights.outbound.date;
+            } else if (flights?.inbound) {
+                serviceDate = flights.inbound.date;
+            }
+        }
+
         return {
             id: order.orderNumber || order._id,
             type: item?.type || 'tour',

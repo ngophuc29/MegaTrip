@@ -16,8 +16,8 @@ import { Badge } from '../components/ui/badge';
 export default function VeDienTu({ bookingType, bookingData, passengers, ticket, countdown, expired, bookingCode, status }: any) {
     const flightBenefits = [
         { label: 'Quyền sử dụng phòng chờ', icon: <Users className="h-4 w-4 text-blue-600" /> },
-        { label: 'Lên máy bay ưu tiên', icon: <CheckCircle className="h-4 w-4 text-blue-600" /> },
-        { label: 'Bữa ăn cao cấp', icon: <FileText className="h-4 w-4 text-blue-600" /> },
+        { label: 'Màn hình giải trí', icon: <CheckCircle className="h-4 w-4 text-blue-600" /> },
+        { label: 'Bữa ăn nhẹ', icon: <FileText className="h-4 w-4 text-blue-600" /> },
     ];
     const flightBaggage = [
         { label: 'Hành lý ký gửi', value: '40kg' },
@@ -62,6 +62,44 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
         }
     
     }
+    // Thêm debug logging để kiểm tra dữ liệu
+    console.log('bookingData:', bookingData);
+    console.log('ticket:', ticket);
+    console.log('passengers:', passengers);
+
+    // ...existing code...
+
+    function getTicketLeg(ticket: any) {
+        if (ticket?.uniq?.includes('outbound')) return 'outbound';
+        if (ticket?.uniq?.includes('inbound')) return 'inbound';
+        return null; // Nếu không xác định, hiển thị cả hai
+    }
+
+    // Hàm lấy seats cho ticket (ưu tiên ticket.seats, nếu rỗng thì filter từ bookingData.pricing.seats theo leg)
+    function getTicketSeats(ticket: any, bookingData: any, leg: string) {
+        if (ticket?.seats && ticket.seats.length > 0) {
+            return ticket.seats.join(', ');
+        }
+        // Filter từ bookingData.pricing.seats theo leg
+        if (leg && bookingData?.pricing?.seats) {
+            const filteredSeats = bookingData.pricing.seats
+                .filter((s: any) => s.leg === leg)
+                .map((s: any) => s.number);
+            return filteredSeats.length > 0 ? filteredSeats.join(', ') : '';
+        }
+        return ''; // Để trống nếu không có
+    }
+    function getFlightBenefits(pricing: any) {
+        const addOns = pricing?.addOns || [];
+        if (addOns.length === 0) {
+            // Load default flightBenefits nếu không có addOns
+            return flightBenefits;
+        }
+        return addOns.map((addon: any) => ({
+            label: addon.name || addon.id || 'Quyền lợi không xác định',
+            icon: <CheckCircle className="h-4 w-4 text-blue-600" />,
+        }));
+    }
     return (
         <div className="bg-white rounded-2xl shadow-lg border relative overflow-hidden max-w-5xl mx-auto mb-8">
             {/* Header vé */}
@@ -70,7 +108,9 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
                     <div className="flex items-center gap-2 text-xl font-bold text-blue-700">
                         <CreditCard className="h-6 w-6 text-blue-500" /> Vé Điện Tử
                     </div>
-                    <div className="bg-white border rounded-lg px-4 py-2 flex flex-col items-center shadow-sm">
+                    <div className="bg-white border rounded-lg px-4 py-2 flex flex-col items-center shadow-sm justify-center"
+                    style={{margin:'2px auto'}}
+                    >
                         <div className="text-xs text-gray-400 mb-1">MÃ VÉ</div>
                         <div className="font-mono text-2xl tracking-widest text-black">{ticket?.ticketNumber}</div>
                         <div className="mt-1"><span className="block w-24 h-6 bg-[repeating-linear-gradient(90deg,#222_0_2px,transparent_2px_6px)] rounded-sm"></span></div>
@@ -131,14 +171,48 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
                                 <div className="flex items-center gap-2 mb-3 text-blue-700 font-semibold text-base">
                                     <Plane className="h-5 w-5" /> Thông Tin Chuyến Bay
                                 </div>
-                                <div className="text-sm space-y-1">
-                                    <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.route}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{bookingData.details.flightNumber}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Số hiệu:</span><span className="font-medium">{getFlightCode()}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Khởi hành:</span><span>{bookingData.details.departureTime ? `${bookingData.details.departureTime} ${bookingData.details.departureDate || ''}` : (bookingData.details.time && bookingData.details.date ? `${bookingData.details.time} ${bookingData.details.date}` : '--')}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Đến nơi:</span><span>{getArrival()}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{bookingData.details.airline}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Hạng vé:</span><span>{bookingData.details.class}</span></div>
+                                <div className="text-sm space-y-2">
+                                    {/* Chỉ hiển thị leg tương ứng với ticket */}
+                                    {(() => {
+                                        const leg = getTicketLeg(ticket);
+                                        const seats = getTicketSeats(ticket, bookingData);
+                                        return (
+                                            <>
+                                                {/* Outbound - chỉ hiển thị nếu leg là outbound hoặc null */}
+                                                {(leg === 'outbound' || leg === null) && ticket?.reservationInfo?.flights?.outbound && (
+                                                    <div className="border-b pb-2">
+                                                        <div className="font-medium text-blue-700">Chuyến đi (Outbound)</div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{ticket.reservationInfo.flights.outbound.flightNumber}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{ticket.reservationInfo.flights.outbound.route}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{ticket.reservationInfo.flights.outbound.date}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{ticket.reservationInfo.flights.outbound.time}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{ticket.reservationInfo.flights.outbound.airline}</span></div>
+                                                        {seats && leg === 'outbound' && (
+                                                            <div className="flex justify-between"><span className="text-gray-500">Ghế:</span><span className="font-medium">{seats}</span></div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {/* Inbound - chỉ hiển thị nếu leg là inbound hoặc null */}
+                                                {(leg === 'inbound' || leg === null) && ticket?.reservationInfo?.flights?.inbound && (
+                                                    <div className={leg === 'outbound' ? 'pt-2' : ''}>
+                                                        <div className="font-medium text-blue-700">Chuyến về (Inbound)</div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{ticket.reservationInfo.flights.inbound.flightNumber}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{ticket.reservationInfo.flights.inbound.route}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{ticket.reservationInfo.flights.inbound.date}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{ticket.reservationInfo.flights.inbound.time}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{ticket.reservationInfo.flights.inbound.airline}</span></div>
+                                                        {seats && leg === 'inbound' && (
+                                                            <div className="flex justify-between"><span className="text-gray-500">Ghế:</span><span className="font-medium">{seats}</span></div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                    {/* Nếu không có flights, hiển thị thông báo */}
+                                    {!ticket?.reservationInfo?.flights?.outbound && !ticket?.reservationInfo?.flights?.inbound && (
+                                        <div className="text-gray-500">Không có thông tin chuyến bay.</div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -149,9 +223,13 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
                                 </div>
                                 <div className="text-sm space-y-1">
                                     <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.route}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{bookingData.details.date}</span></div>
+                                    {/* <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{bookingData.details.date}</span></div> */}
+                                    <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{ticket.travelDate}</span></div>
                                     <div className="flex justify-between"><span className="text-gray-500">Giờ xuất phát:</span><span>{bookingData.details.time}</span></div>
-                                    {bookingData.details.seat && <div className="flex justify-between"><span className="text-gray-500">Số ghế:</span><span>{bookingData.details.seat}</span></div>}
+                                    {/* {bookingData.details.seat && <div className="flex justify-between"><span className="text-gray-500">Số ghế:</span><span>{bookingData.details.seat}</span></div>} */}
+                                    <div className="text-xs text-muted-foreground">
+                                        Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Chưa có'}
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -179,7 +257,7 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
                                 <Users className="h-5 w-5" />{bookingType === 'flight' ? 'Quyền lợi' : bookingType === 'bus' ? 'Tiện ích' : 'Quyền lợi'}
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {(bookingType === 'flight' ? flightBenefits : bookingType === 'bus' ? busBenefits : tourBenefits).map((b, i) => (
+                                {(bookingType === 'flight' ? getFlightBenefits(bookingData.pricing) : bookingType === 'bus' ? busBenefits : tourBenefits).map((b, i) => (
                                     <span key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${bookingType === 'flight' ? 'bg-blue-100 text-blue-700' : bookingType === 'bus' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{b.icon}{b.label}</span>
                                 ))}
                             </div>
