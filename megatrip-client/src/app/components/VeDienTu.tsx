@@ -225,7 +225,7 @@ export default function VeDienTu({ bookingType, bookingData, passengers, ticket,
                                     <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.route}</span></div>
                                     {/* <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{bookingData.details.date}</span></div> */}
                                     <div className="flex justify-between"><span className="text-gray-500">Ngày đi:</span><span>{ticket.travelDate}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Giờ xuất phát:</span><span>{bookingData.details.time}</span></div>
+                                    <div className="flex justify-between"><span className="text-gray-500">Giờ xuất phát:</span><span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : bookingData.details.time}</span></div>
                                     {/* {bookingData.details.seat && <div className="flex justify-between"><span className="text-gray-500">Số ghế:</span><span>{bookingData.details.seat}</span></div>} */}
                                     <div className="text-xs text-muted-foreground">
                                         Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Chưa có'}

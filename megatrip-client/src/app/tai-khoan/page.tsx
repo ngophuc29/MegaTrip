@@ -1328,6 +1328,7 @@ export default function TaiKhoan() {
                                                                 {ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}
                                                             </div>
                                                             <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div>
+                                                            <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ""}</span></div>
                                                             {/* Thêm chuyến và ghế nếu là flight */}
                                                             {ticket.type === 'flight' && (
                                                                 <>
@@ -1366,6 +1367,8 @@ export default function TaiKhoan() {
                                                             </div>
                                                             {/* <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div> */}
                                                             <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {getTravelDateForFlight(ticket)}</div>
+                                                            <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ""}</span></div>
+
                                                             {/* Thêm chuyến và ghế nếu là flight */}
                                                             {ticket.type === 'flight' && (
                                                                 <>
