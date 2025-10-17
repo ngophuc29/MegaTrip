@@ -370,7 +370,7 @@ export default function ChiTietTour() {
                 title: it.title || it.name || '',
                 activities: it.activities || it.activitiesList || it.schedule || [],
                 // LẤY description từ BE (có thể là HTML) và strip HTML trước khi dùng
-                description: stripHtml(it.description || it.address || ''),
+                description: it.description || it.address || '',
                 // ưu tiên meals ở item, rồi meals ở tour-level, rồi sample tourDetails tương ứng ngày,
                 // nếu vẫn không có thì suy ra từ giờ khởi hành (mealsByStart)
                 meals: it.meals ?? mealsFromDb ?? fallbackDay.meals ?? mealsByStart ?? [],
@@ -970,12 +970,29 @@ export default function ChiTietTour() {
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 <div>
-                                    <p className="text-muted-foreground leading-relaxed">{tourDetails.description}</p>
+                                    <div
+                                        className="text-muted-foreground leading-relaxed prose prose-sm max-w-none text-center"
+                                        dangerouslySetInnerHTML={{
+                                            __html: tourDetails.description.replace(
+                                                /<img/g,
+                                                '<img style="display: block; margin: 20px auto; max-width: 100%; height: auto;"'
+                                            )
+                                        }}
+                                    />
+                                    <style jsx>{`
+                                         img {
+                                            display: block;
+                                            margin: 20px auto;
+                                            max-width: 100%;
+                                            height: auto;
+                                            text-align: center;
+                                        }
+                                    `}</style>
                                 </div>
 
                                 <Separator />
 
-                                <div>
+                                {/* <div>
                                     <h3 className="text-lg font-semibold mb-3">Điểm nổi bật (fake data)</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {tourDetails.highlights.map((highlight, index) => (
@@ -985,7 +1002,7 @@ export default function ChiTietTour() {
                                             </div>
                                         ))}
                                     </div>
-                                </div>
+                                </div> */}
 
                                 <Separator />
 
@@ -1009,7 +1026,7 @@ export default function ChiTietTour() {
                                 <CardTitle>Lịch trình chi tiết</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <Accordion type="single" collapsible className="w-full">
+                                <Accordion type="multiple"  className="w-full">
                                     {tourDetails.itinerary.map((day) => (
                                         <AccordionItem key={day.day} value={`day-${day.day}`}>
                                             <AccordionTrigger>
@@ -1023,9 +1040,15 @@ export default function ChiTietTour() {
                                             <AccordionContent>
                                                 <div className="space-y-4">
                                                     {(day as any).description && (
-                                                        <div className="text-sm text-muted-foreground leading-relaxed">
-                                                            {(day as any).description}
-                                                        </div>
+                                                        <div
+                                                            className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: (day as any).description.replace(
+                                                                    /<img/g,
+                                                                    '<img style="display: block; margin: 20px auto; max-width: 100%; height: auto;"'
+                                                                )
+                                                            }}
+                                                        />
                                                     )}
                                                     <div>
                                                         <h4 className="font-medium mb-2">Hoạt động</h4>
@@ -1062,7 +1085,7 @@ export default function ChiTietTour() {
                         </Card>
 
                         {/* Attractions */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle>Các điểm tham quan (fake data chua có db)</CardTitle>
                             </CardHeader>
@@ -1086,7 +1109,7 @@ export default function ChiTietTour() {
                                     </Card>
                                 ))}
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Included/Excluded */}
                         <Card>
