@@ -997,9 +997,14 @@ export default function ThanhToan() {
                 unitPrice: totalAmount,
                 subtotal: totalAmount
             }];
+            const correctedBookingData = { ...bookingData };
+            if (correctedBookingData.flights?.inbound?.itineraries?.[0]?.segments?.[0]) {
+                const seg = correctedBookingData.flights.inbound.itineraries[0].segments[0];
+                correctedBookingData.flights.inbound.route = `${seg.departure.iataCode} → ${seg.arrival.iataCode}`;
+            }
 
             const bookingSnapshot = {
-                ...(bookingData || {}),
+                ...(correctedBookingData || {}),
                 details: (payloadToSave && payloadToSave.details) ? payloadToSave.details : (bookingData?.details || {}),
                 pricing: {
                     ...(bookingData?.pricing || {}),
