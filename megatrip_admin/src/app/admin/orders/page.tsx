@@ -88,6 +88,7 @@ interface OrderFilters {
     orderStatus: string;
     paymentMethod: string;
     dateRange?: [string, string];
+    type: string;
 }
 
 const paymentMethods = [
@@ -403,7 +404,8 @@ export default function Orders() {
     const [filters, setFilters] = useState<OrderFilters>({
         paymentStatus: "all",
         orderStatus: "all",
-        paymentMethod: "all"
+        paymentMethod: "all",
+        type: "all" 
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
@@ -431,30 +433,72 @@ export default function Orders() {
     });
 
     // Fetch orders with API
+    // const { data: ordersData, isLoading, error, refetch } = useQuery({
+    //     queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters],
+    //     queryFn: async () => {
+    //         const params = new URLSearchParams({
+    //             page: pagination.current.toString(),
+    //             pageSize: pagination.pageSize.toString(),
+    //         });
+    //         if (searchQuery) params.append('q', searchQuery);
+    //         if (filters.paymentStatus !== 'all') params.append('paymentStatus', filters.paymentStatus);
+    //         if (filters.orderStatus !== 'all') params.append('orderStatus', filters.orderStatus);
+    //         if (filters.paymentMethod !== 'all') params.append('paymentMethod', filters.paymentMethod);
+    //         if (filters.type !== 'all') params.append('type', filters.type); // Thêm param type
+
+    //         const res = await fetch(`${API_BASE}/api/orders?${params.toString()}`);
+    //         if (!res.ok) throw new Error('Failed to fetch orders');
+    //         const json = await res.json();
+    //         // Map _id to id
+    //         const mappedData = json.data.map((order: any) => ({
+    //             ...order,
+    //             id: order._id,
+    //         }));
+    //         return { data: mappedData, pagination: json.pagination };
+    //     },
+    // });
     const { data: ordersData, isLoading, error, refetch } = useQuery({
-        queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters],
+        queryKey: ['orders', searchQuery, filters], // Bỏ pagination khỏi queryKey vì fetch all
         queryFn: async () => {
-            const params = new URLSearchParams({
-                page: pagination.current.toString(),
-                pageSize: pagination.pageSize.toString(),
-            });
+            const params = new URLSearchParams();
             if (searchQuery) params.append('q', searchQuery);
-            if (filters.paymentStatus !== 'all') params.append('paymentStatus', filters.paymentStatus);
-            if (filters.orderStatus !== 'all') params.append('orderStatus', filters.orderStatus);
-            if (filters.paymentMethod !== 'all') params.append('paymentMethod', filters.paymentMethod);
+            params.append('limit', '0'); // Thêm param để fetch tất cả orders
 
             const res = await fetch(`${API_BASE}/api/orders?${params.toString()}`);
             if (!res.ok) throw new Error('Failed to fetch orders');
             const json = await res.json();
             // Map _id to id
-            const mappedData = json.data.map((order: any) => ({
+            let allData = json.data.map((order: any) => ({
                 ...order,
                 id: order._id,
             }));
-            return { data: mappedData, pagination: json.pagination };
+
+            // Filter client-side theo type
+            if (filters.type !== 'all') {
+                allData = allData.filter((order: any) =>
+                    order.items && order.items.some((item: any) => item.type === filters.type)
+                );
+            }
+
+            // Filter theo paymentStatus, orderStatus, paymentMethod
+            if (filters.paymentStatus !== 'all') {
+                allData = allData.filter((order: any) => order.paymentStatus === filters.paymentStatus);
+            }
+            if (filters.orderStatus !== 'all') {
+                allData = allData.filter((order: any) => order.orderStatus === filters.orderStatus);
+            }
+            if (filters.paymentMethod !== 'all') {
+                allData = allData.filter((order: any) => order.paymentMethod === filters.paymentMethod);
+            }
+
+            // Paginate client-side
+            const startIndex = (pagination.current - 1) * pagination.pageSize;
+            const endIndex = startIndex + pagination.pageSize;
+            const paginatedData = allData.slice(startIndex, endIndex);
+
+            return { data: paginatedData, pagination: { ...json.pagination, total: allData.length } };
         },
     });
-  
     // Update order status mutation (mock implementation)
     // const updateOrderMutation = useMutation({
     //     mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
@@ -509,7 +553,7 @@ export default function Orders() {
             return res.json();
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['orders'] }); // Đảm bảo refetch full danh sách
             toast({
                 title: "Cập nhật đơn hàng thành công",
                 description: "Trạng thái đơn hàng đã được cập nhật",
@@ -1232,7 +1276,7 @@ export default function Orders() {
                                 <div>
                                     <h4 className="font-semibold">Vé cũ</h4>
                                     <div className="space-y-2">
-                                        {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                        {orderDetails.oldTickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
                                             <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                 <div>
                                                     <div className="font-medium">{ticket.ticketNumber}</div>
@@ -1251,7 +1295,7 @@ export default function Orders() {
                                 <div>
                                     <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
                                     <div className="space-y-2">
-                                        {orderDetails.tickets.filter((ticket) => ticket.status === 'changed').map((ticket) => (
+                                        {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
                                             <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                 <div>
                                                     <div className="font-medium">{ticket.ticketNumber}</div>
@@ -1270,7 +1314,7 @@ export default function Orders() {
                     </div>
                 )}
 
-                <Separator />
+               
 
                 {/* Change Calendar Information */}
                 {selectedOrder.changeCalendar && selectedOrder.inforChangeCalendar && (
@@ -1521,6 +1565,17 @@ export default function Orders() {
                             >
                                 {isSelectingCompletable ? "Hủy chọn đơn có thể hoàn thành" : "Chọn đơn có thể hoàn thành"}
                             </Button>
+                            <Select value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Tất cả loại</SelectItem>
+                                    <SelectItem value="flight">Flight</SelectItem>
+                                    <SelectItem value="tour">Tour</SelectItem>
+                                    <SelectItem value="bus">Bus</SelectItem>
+                                </SelectContent>
+                            </Select>
                             <Select value={filters.orderStatus} onValueChange={(value) => setFilters(prev => ({ ...prev, orderStatus: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />

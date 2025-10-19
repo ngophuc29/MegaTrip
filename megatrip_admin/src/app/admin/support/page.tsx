@@ -1797,11 +1797,16 @@ const Support: React.FC = () => {
                                                                 </div>
                                                                 <Button
                                                                     onClick={handleAddResponse}
-                                                                    disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
+                                                                    disabled={
+                                                                        !responseContent.trim() ||
+                                                                        addResponseMutation.isPending ||
+                                                                        isProcessingResponse ||
+                                                                        selectedTicket?.status === "open" ||
+                                                                        selectedTicket?.status === "resolved"
+                                                                    }
                                                                     loading={addResponseMutation.isPending || isProcessingResponse}
                                                                 >
                                                                     {isCancel ? <CheckCircle className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                                                    {/* {isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi"} */}
                                                                     {(addResponseMutation.isPending || isProcessingResponse)
                                                                         ? "Đang xử lý"
                                                                         : (isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi")}

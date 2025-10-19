@@ -1279,7 +1279,9 @@ export default function ChiTietXeDuLich() {
                                             const discount = bus.originalPrice ? basePrice - calculateTotal() : 0;
                                             const total = basePrice + taxes + addOns - discount;
                                             // normalized date  ISO timestamp for checkout
-                                            const dateParamForCheckout = (departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString().split('T')[0] : (bus.date ?? ''));
+                                            // const dateParamForCheckout = (departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString().split('T')[0] : (bus.date ?? ''));
+                                            // const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
+                                            const dateParamForCheckout = toLocalYMD(departureDatesArr[selectedIndex]) || (bus.date ?? '');
                                             const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
                                             // passengerInfo JSON (encode)
                                             // prepare passenger payloads (let URLSearchParams handle encoding)

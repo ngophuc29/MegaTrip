@@ -166,7 +166,7 @@ const tourDetails = {
             '3-6 ngày': '75% tổng tiền tour',
             'Trong 2 ngày': '100% tổng tiền tour',
         },
-        children: 'Dưới 4 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). 2-11 tuổi: 80% giá tour người lớn.',
+        children: 'Dưới 4 tuổi: 25% giá tour người lớn (không ghế máy bay, chung giường). 4-11 tuổi: 80% giá tour người lớn.',
         documents: 'CCCD/CMND còn hạn ít nhất 6 tháng. Trẻ em dưới 14 tuổi: Giấy khai sinh.',
         megatrip: `Megatrip hủy trước 3 ngày do không đủ số lượng hành khách: Hoàn tiền 100%. Hoàn trả phần còn lại trong 14 ngày làm việc (trừ cuối tuần, lễ Tết). Đến trễ hoặc tự ý rời tour: mất 100%.`,
         reschedule: {
@@ -1205,7 +1205,7 @@ export default function ChiTietTour() {
                         {/* Reviews */}
                         <Card>
                             <CardHeader>
-                                <CardTitle>Đánh giá từ khách hàng (Fake data)</CardTitle>
+                                <CardTitle>Đánh giá từ khách hàng</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 {/* Rating Overview */}
@@ -1259,8 +1259,8 @@ export default function ChiTietTour() {
 
                                 {/* Write Review */}
                                 <div>
-                                    <h4 className="font-semibold mb-3">Viết đánh giá</h4>
-                                    <div className="space-y-4">
+                                    <h4 className="text-sm font-semibold mb-3 italic">Hãy gửi đánh giá của bạn kèm theo phản hồi ở đơn hàng khi đã trải nghiệm nhé !</h4>
+                                    {/* <div className="space-y-4">
                                         <div>
                                             <Label className="text-sm font-medium">Đánh giá tổng thể</Label>
                                             <div className="flex gap-1 mt-1">
@@ -1305,7 +1305,7 @@ export default function ChiTietTour() {
                                             <Send className="h-4 w-4 mr-2" />
                                             Gửi đánh giá
                                         </Button>
-                                    </div>
+                                    </div> */}
                                 </div>
 
                                 <Separator />
@@ -1440,7 +1440,7 @@ export default function ChiTietTour() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Trẻ em</div>
-                                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">4-11 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button

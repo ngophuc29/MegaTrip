@@ -1237,24 +1237,24 @@ export default function Buses() {
                 </div>
             ),
         },
-        {
-            key: "seats",
-            title: "Ghế",
-            render: (_, record: BusRoute) => (
-                <div className="text-sm">
-                    <div className="flex items-center">
-                        <Users className="w-3 h-3 mr-1" />
-                        <span className="font-medium">{record.seatsAvailable}</span>
-                        <span className="text-gray-500">/{record.seatsTotal}</span>
-                    </div>
-                    <div className={`text-xs ${record.seatsAvailable <= record.seatsTotal * 0.2 ? 'text-red-600' :
-                        record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
-                        }`}>
-                        {record.seatsAvailable} chỗ trống
-                    </div>
-                </div>
-            ),
-        },
+        // {
+        //     key: "seats",
+        //     title: "Ghế",
+        //     render: (_, record: BusRoute) => (
+        //         <div className="text-sm">
+        //             <div className="flex items-center">
+        //                 <Users className="w-3 h-3 mr-1" />
+        //                 <span className="font-medium">{record.seatsAvailable}</span>
+        //                 <span className="text-gray-500">/{record.seatsTotal}</span>
+        //             </div>
+        //             <div className={`text-xs ${record.seatsAvailable <= record.seatsTotal * 0.2 ? 'text-red-600' :
+        //                 record.seatsAvailable <= record.seatsTotal * 0.5 ? 'text-yellow-600' : 'text-green-600'
+        //                 }`}>
+        //                 {record.seatsAvailable} chỗ trống
+        //             </div>
+        //         </div>
+        //     ),
+        // },
         {
             key: "status",
             title: "Trạng thái",
@@ -1540,7 +1540,16 @@ export default function Buses() {
         }
         return String(value);
     };
-
+    const { data: busSlotsData, isLoading: slotsLoading } = useQuery({
+        queryKey: ['busSlots', selectedBus?.id],
+        queryFn: async () => {
+            if (!selectedBus?.id) return null;
+            const res = await fetch(`${API_BASE}/api/buses/bus-slots/${selectedBus.id}`);
+            if (!res.ok) throw new Error('Failed to fetch bus slots');
+            return res.json();
+        },
+        enabled: modalOpen && modalMode === "view" && !!selectedBus?.id,
+    });
     const renderBusForm = () => {
         if (modalMode === "view" && selectedBus) {
             // Render schedule using arrays (departureDates / arrivalDates) if available,
@@ -1594,12 +1603,12 @@ export default function Buses() {
                                         Trẻ em: {new Intl.NumberFormat('vi-VN').format((selectedBus as any).childPrice ?? 0)} ₫
                                     </p>
                                 </div>
-                                <div>
+                                {/* <div>
                                     <Label className="text-sm font-medium text-gray-700">Ghế ngồi</Label>
                                     <p className="mt-1">
                                         {selectedBus.seatsAvailable} / {selectedBus.seatsTotal} ghế còn trống
                                     </p>
-                                </div>
+                                </div> */}
                                 <div>
                                     <Label className="text-sm font-medium text-gray-700">Loại xe</Label>
                                     <div className="mt-1 flex space-x-2">
@@ -1625,6 +1634,22 @@ export default function Buses() {
                                             const depDate = dep ? new Date(dep) : null;
                                             const arrDate = arr ? new Date(arr) : null;
                                             const duration = (dep && arr) ? calculateDuration(dep, arr) : (selectedBus.duration || "");
+
+                                            // Tìm slot cho ngày này
+                                            const dateIso = depDate ? depDate.toISOString().split('T')[0] : null;
+                                            const slotEntry = busSlotsData?.dateBookings?.find((d: any) => d.dateIso === dateIso);
+
+                                            // Debug log để kiểm tra
+                                            console.log('slotEntry:', slotEntry, 'dateIso:', dateIso, 'busSlotsData:', busSlotsData, 'dep:', dep, 'depDate:', depDate);
+
+                                            // Ưu tiên dùng slotEntry nếu có và seatsAvailable hợp lệ
+                                            let slotsAvailable = selectedBus.seatsAvailable;
+                                            let slotsTotal = selectedBus.seatsTotal;
+                                            if (slotEntry && typeof slotEntry.seatsAvailable === 'number') {
+                                                slotsAvailable = slotEntry.seatsAvailable;
+                                                slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                            }
+
                                             return (
                                                 <div key={i} className="bg-gray-50 p-3 rounded">
                                                     <div className="flex items-center justify-between">
@@ -1643,6 +1668,10 @@ export default function Buses() {
                                                             <div className="text-sm text-gray-500">Thời gian di chuyển</div>
                                                             <div className="font-medium">{duration || '—'}</div>
                                                         </div>
+                                                        <div className="text-right">
+                                                            <div className="text-sm text-gray-500">Số slot</div>
+                                                            <div className="font-medium">{slotsAvailable} / {slotsTotal}</div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -1652,7 +1681,6 @@ export default function Buses() {
                                     )}
                                 </div>
                             </div>
-
                         </div>
                     </div>
 

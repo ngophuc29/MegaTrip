@@ -539,8 +539,9 @@ export default function ChiTietVeMayBay() {
                     const ticketLeg = uniqParts.includes('outbound') ? 'outbound' : uniqParts.includes('inbound') ? 'inbound' : null;
 
                     // So khớp outbound
-                    if (outboundFlight && outboundCachedPricing && ticketLeg === 'outbound') {
-                        const offer = extractOfferFromPricing(outboundCachedPricing);
+                    if (outboundFlight && (outboundCachedPricing || cachedPricing) && ticketLeg === 'outbound') {
+                        const pricingToUse = outboundCachedPricing || cachedPricing;  // Sử dụng cachedPricing cho one-way
+                        const offer = extractOfferFromPricing(pricingToUse);
                         const segment = offer?.itineraries?.[0]?.segments?.[0];
                         if (segment && matchFlight(segment, outboundFlight, false)) {
                             const outboundSeats = (ticket.seats || []).map((s: any) => typeof s === 'string' ? s : s.number);
@@ -550,8 +551,9 @@ export default function ChiTietVeMayBay() {
                     }
 
                     // So khớp inbound (nếu roundtrip)
-                    if (inboundFlight && inboundCachedPricing && ticketLeg === 'inbound') {
-                        const offer = extractOfferFromPricing(inboundCachedPricing);
+                    if (inboundFlight && (inboundCachedPricing || cachedPricing) && ticketLeg === 'inbound') {
+                        const pricingToUse = inboundCachedPricing || cachedPricing;  // Sử dụng cachedPricing nếu cần
+                        const offer = extractOfferFromPricing(pricingToUse);
                         const segment = offer?.itineraries?.[0]?.segments?.[0];
                         if (segment && matchFlight(segment, inboundFlight, true)) {
                             const inboundSeats = (ticket.seats || []).map((s: any) => typeof s === 'string' ? s : s.number);
@@ -569,8 +571,9 @@ export default function ChiTietVeMayBay() {
                     inbound: [...new Set(inboundBooked)],
                 });
                 if (seatRows.length > 0) {
-                    const markedRows = markOccupiedSeats(seatRows, 'outbound'); // Mặc định outbound
+                    const markedRows = markOccupiedSeats(seatRows, selectedLeg);
                     setSeatRows(markedRows);
+                    setMarkedSeatRows(markedRows);  // Thêm dòng này để update markedSeatRows ngay lập tức
                 }
                 console.log('✅ Final bookedSeatsByLeg:', { outbound: [...new Set(outboundBooked)], inbound: [...new Set(inboundBooked)] });
             } catch (e) {
@@ -990,39 +993,65 @@ export default function ChiTietVeMayBay() {
             });
     };
 
-    // ensure selectedSeats always matches participants count:
+  
+
     // useEffect(() => {
-    //     const max = participants.adults + participants.children + participants.infants;
-    //     // trim if too many selected
-    //     if (selectedSeats.length > max) {
-    //         setSelectedSeats(prev => prev.slice(0, max));
-    //         return;
-    //     }
-
-    //     // if fewer than needed, try to auto-assign additional free seats
-    //     if (selectedSeats.length < max && seatRows.length > 0) {
-    //         const alreadyIds = new Set(selectedSeats.map(s => s.id));
-    //         // gather all seats from seatRows
-    //         const allSeats = seatRows.flatMap(r => r.seats || []);
-    //         // filter free seats: AVAILABLE, price === 0, NOT CH, and not already selected
-    //         const freeSeats = allSeats.filter(s => {
-    //             const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-    //             const hasCH = chars.includes('CH');
-    //             const priceIsZero = Number(s.price || 0) === 0;
-    //             return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
-    //         });
-    //         if (freeSeats.length > 0) {
-    //             const need = Math.min(max - selectedSeats.length, freeSeats.length);
-    //             setSelectedSeats(prev => [...prev, ...freeSeats.slice(0, need)]);
+    //     const max = participants.adults + participants.children;
+    //     const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
+    //     legs.forEach((leg) => {
+    //         const currentSeats = selectedSeatsByLeg[leg] || [];
+    //         if (currentSeats.length > max) {
+    //             setSelectedSeatsByLeg((prev) => ({
+    //                 ...prev,
+    //                 [leg]: prev[leg].slice(0, max),
+    //             }));
+    //             return;
     //         }
-    //     }
-    // }, [participants.adults, participants.children, participants.infants, seatRows]);
+    //         if (currentSeats.length < max && parsedSeatmaps[leg]?.length > 0) {
+    //             const alreadyIds = new Set(currentSeats.map((s) => s.id));
+    //             const allSeats = parsedSeatmaps[leg].flatMap((r) => r.seats || []);
+    //             const freeSeats = allSeats.filter((s) => {
+    //                 const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
+    //                 const hasCH = chars.includes('CH');
+    //                 const priceIsZero = Number(s.price || 0) === 0;
+    //                 return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+    //             });
+    //             if (freeSeats.length > 0) {
+    //                 const need = Math.min(max - currentSeats.length, freeSeats.length);
+    //                 setSelectedSeatsByLeg((prev) => ({
+    //                     ...prev,
+    //                     [leg]: [...prev[leg], ...freeSeats.slice(0, need)],
+    //                 }));
+    //             }
+    //         }
+    //         // Cập nhật seatRows sau khi chọn ghế
+    //         if (parsedSeatmaps[leg]?.length > 0) {
+    //             const markedRows = markOccupiedSeats(parsedSeatmaps[leg], leg);
+    //             setSeatRows(markedRows);
+    //             setMarkedSeatRows(markedRows);
+    //         }
+    //     });
+    // }, [participants.adults, participants.children, parsedSeatmaps, isRoundtrip, bookedSeatsByLeg]);
 
+    // --- NEW: safe number parser + derive traveler-level pricing when available ---
+   
+    useEffect(() => {
+        setSelectedSeatsByLeg((prev) => ({
+            outbound: prev.outbound.filter(s => !bookedSeatsByLeg.outbound.includes(s.number)),
+            inbound: prev.inbound.filter(s => !bookedSeatsByLeg.inbound.includes(s.number)),
+        }));
+    }, [bookedSeatsByLeg]);
     useEffect(() => {
         const max = participants.adults + participants.children;
         const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
         legs.forEach((leg) => {
-            const currentSeats = selectedSeatsByLeg[leg] || [];
+            // Remove ghế đã booked khỏi selectedSeatsByLeg
+            const currentSeats = selectedSeatsByLeg[leg].filter(s => !bookedSeatsByLeg[leg].includes(s.number));
+            setSelectedSeatsByLeg((prev) => ({
+                ...prev,
+                [leg]: currentSeats,
+            }));
+
             if (currentSeats.length > max) {
                 setSelectedSeatsByLeg((prev) => ({
                     ...prev,
@@ -1037,7 +1066,9 @@ export default function ChiTietVeMayBay() {
                     const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
                     const hasCH = chars.includes('CH');
                     const priceIsZero = Number(s.price || 0) === 0;
-                    return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id);
+                    // Thêm check: loại bỏ ghế đã booked
+                    const isBooked = bookedSeatsByLeg[leg].includes(s.number);
+                    return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id) && !isBooked;
                 });
                 if (freeSeats.length > 0) {
                     const need = Math.min(max - currentSeats.length, freeSeats.length);
@@ -1055,8 +1086,7 @@ export default function ChiTietVeMayBay() {
             }
         });
     }, [participants.adults, participants.children, parsedSeatmaps, isRoundtrip, bookedSeatsByLeg]);
-
-    // --- NEW: safe number parser + derive traveler-level pricing when available ---
+   
     const parseNumberSafe = (v: any) => {
         if (v == null) return 0;
         const n = Number(String(v).replace(/[^\d.-]/g, ''));
@@ -1269,6 +1299,7 @@ export default function ChiTietVeMayBay() {
         if (seatRows.length > 0) {
             const markedRows = markOccupiedSeats(seatRows, selectedLeg);
             setMarkedSeatRows(markedRows);
+            console.log('🔄 Updated markedSeatRows for leg:', selectedLeg, 'seats:', markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED').map(s => s.number)));
         }
     }, [bookedSeatsByLeg, selectedLeg, seatRows]);
 

@@ -662,8 +662,31 @@ export default function ThanhToan() {
             passengers.forEach((p, i) => {
                 if (!p.firstName || !p.firstName.trim()) next[`passenger.${i}.firstName`] = 'Bắt buộc';
                 if (!p.lastName || !p.lastName.trim()) next[`passenger.${i}.lastName`] = 'Bắt buộc';
-                if (!p.dateOfBirth) next[`passenger.${i}.dateOfBirth`] = 'Bắt buộc';
-                if (!p.idNumber || !p.idNumber.trim()) next[`passenger.${i}.idNumber`] = 'Bắt buộc';
+                if (!p.dateOfBirth) {
+                    next[`passenger.${i}.dateOfBirth`] = 'Bắt buộc';
+                } else {
+                    const age = calculateAge(p.dateOfBirth);
+                    if (p.type === 'infant' && age > 4) next[`passenger.${i}.dateOfBirth`] = 'Em bé phải dưới 4 tuổi';
+                    if (p.type === 'child' && (age <= 4 || age >= 12)) next[`passenger.${i}.dateOfBirth`] = 'Trẻ em từ 5 đến 11 tuổi';
+                    if (p.type === 'adult' && age < 12) next[`passenger.${i}.dateOfBirth`] = 'Người lớn từ 12 tuổi trở lên';
+                }
+                // Kiểm tra định dạng firstName và lastName: chỉ cho phép chữ cái, dấu cách, và một số ký tự đặc biệt
+                const nameRegex = /^[a-zA-ZÀ-ỹ\s'-]+$/;
+                if (p.firstName && !nameRegex.test(p.firstName.trim())) next[`passenger.${i}.firstName`] = 'Tên chỉ được chứa chữ cái và dấu cách';
+                if (p.lastName && !nameRegex.test(p.lastName.trim())) next[`passenger.${i}.lastName`] = 'Tên chỉ được chứa chữ cái và dấu cách';
+                // Kiểm tra idNumber: bắt buộc cho người lớn, tùy chọn cho trẻ em và em bé
+                if (p.type === 'adult' && (!p.idNumber || !p.idNumber.trim())) {
+                    next[`passenger.${i}.idNumber`] = 'Bắt buộc cho người lớn';
+                } else if (p.idNumber && p.idNumber.trim()) {
+                    // Nếu có idNumber, kiểm tra định dạng theo idType
+                    if (p.idType === 'cccd' && !/^\d{12}$/.test(p.idNumber.trim())) {
+                        next[`passenger.${i}.idNumber`] = 'CCCD phải là 12 chữ số';
+                    } else if (p.idType === 'cmnd' && !/^\d{9}$/.test(p.idNumber.trim())) {
+                        next[`passenger.${i}.idNumber`] = 'CMND phải là 9 chữ số';
+                    } else if (p.idType === 'passport' && !/^[A-Z0-9]{6,9}$/.test(p.idNumber.trim().toUpperCase())) {
+                        next[`passenger.${i}.idNumber`] = 'Hộ chiếu phải là 6-9 ký tự chữ và số';
+                    }
+                }
             });
         }
         if (step === 2) {
@@ -855,7 +878,17 @@ export default function ThanhToan() {
             router.push('/');
         }
     };
-
+    // Thêm hàm tính tuổi
+    const calculateAge = (dob: string) => {
+        const birth = new Date(dob);
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        return age;
+    };
     const handlePayment = async () => {
         setIsProcessingPayment(true);
         // validate all before proceed
@@ -1468,16 +1501,10 @@ export default function ThanhToan() {
                                         {/* Danh sách form hành khách */}
                                         {passengers.map((p, idx) => (
                                             <div key={idx} className="border rounded-lg p-4 mb-2 relative">
-                                                {/* <div className="absolute top-2 right-2">
-                                                    {passengers.length > 1 && (
-                                                        <Button variant="ghost" size="sm" onClick={() => handleRemovePassenger(idx)}>
-                                                            Xóa
-                                                        </Button>
-                                                    )}
-                                                </div> */}
+                                                {/* ...existing code... */}
                                                 <div className="mb-2">
                                                     <Badge variant={p.type === 'adult' ? 'secondary' : p.type === 'child' ? 'outline' : 'destructive'}>
-                                                        {p.type === 'adult' ? 'Người lớn' : p.type === 'child' ? 'Trẻ em' : 'Em bé'}
+                                                        {p.type === 'adult' ? 'Người lớn' : p.type === 'child' ? 'Trẻ em (5-11 tuổi)' : 'Em bé (≤4 tuổi)'}
                                                     </Badge>
                                                 </div>
                                                 {p.type === 'adult' ? (
@@ -1565,8 +1592,8 @@ export default function ThanhToan() {
                                                         </Select>
                                                     </div>
                                                     <div>
-                                                        <Label>Số giấy tờ *</Label>
-                                                        <Input value={p.idNumber} onChange={e => handlePassengerChange(idx, 'idNumber', e.target.value)} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
+                                                        <Label>Số giấy tờ {p.type === 'adult' ? '*' : '(tùy chọn)'}</Label>
+                                                        <Input value={p.idNumber} onChange={e => handlePassengerChange(idx, 'idNumber', e.target.value)} placeholder={p.type === 'adult' ? "Nhập số CCCD/CMND/Hộ chiếu" : "Nhập nếu có"} />
                                                         {errors[`passenger.${idx}.idNumber`] && (
                                                             <p className="text-red-500 text-xs mt-1">{errors[`passenger.${idx}.idNumber`]}</p>
                                                         )}

@@ -961,7 +961,7 @@ export default function TaiKhoan() {
                                                                     Xem chi tiết
                                                                 </Button>
                                                                 {booking.paymentStatus === 'paid' && booking.status !== 'completed' && (
-                                                                    booking.hasRefundRequest && !booking.changeCalendar ? (
+                                                                    booking.hasRefundRequest  ? (
                                                                         <Tooltip.Provider>
                                                                             <Tooltip.Root>
                                                                                 <Tooltip.Trigger asChild>

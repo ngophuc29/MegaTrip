@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Plus, Edit, Eye, Trash2, Calendar, DollarSign, Users, Star, Upload, RefreshCw, Globe, Settings, Image, Copy, ExternalLink, Save, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
@@ -141,61 +141,61 @@ const mockCategories = [
 
 // Mock data
 const mockTours: Tour[] = [
-    {
-        id: "tour_001",
-        name: "Du thuyền Vịnh Hạ Long 3N2Đ",
+    // {
+    //     id: "tour_001",
+    //     name: "Du thuyền Vịnh Hạ Long 3N2Đ",
 
-        slug: "du-thuyen-vinh-ha-long-3n2d",
-        description: "Trải nghiệm du thuyền sang trọng, khám phá các hang động và thưởng thức ẩm thực địa phương.",
-        departureFrom: "Hà Nội",
-        destination: "Vịnh Hạ Long",
-        startDate: "2025-10-01",
-        endDate: "2025-10-03",
-        duration: "3 ngày 2 đêm",
-        adultPrice: 6500000,
-        childPrice: 4500000,
-        infantPrice: 1500000,
-        maxGroupSize: 30,
-        seatsBooked: 20,
-        minBooking: 2,
-        status: "active",
-        highlight: true,
-        isVisible: true,
-        categoryId: "cat_001",
-        tags: ["du thuyền", "biển đảo", "sang trọng"],
-        images: [
-            "https://example.com/images/halong1.jpg",
-            "https://example.com/images/halong2.jpg",
-        ],
-        videoUrl: "https://youtube.com/watch?v=abc123",
-        itinerary: [
-            {
-                dayNumber: 1,
-                title: "Khởi hành và khám phá hang Sửng Sốt",
-                details: "Đón khách tại Hà Nội, di chuyển đến Vịnh Hạ Long, tham quan hang Sửng Sốt.",
-            },
-            {
-                dayNumber: 2,
-                title: "Chèo thuyền kayak và làng chài",
-                details: "Tham gia chèo thuyền kayak và khám phá làng chài nổi trên vịnh.",
-            },
-            {
-                dayNumber: 3,
-                title: "Tham quan đảo Titop và trở về",
-                details: "Thăm đảo Titop, tắm biển và trở về Hà Nội.",
-            },
-        ],
-        services: ["hướng dẫn viên", "resort 4 sao", "xe đưa đón"],
-        pickupPoints: ["Hà Nội", "Hải Phòng"],
-        cancellationPolicy: "Hủy trước 7 ngày: hoàn 100%. Hủy trước 3 ngày: hoàn 50%.",
-        ratingsAverage: 4.8,
-        ratingsQuantity: 120,
-        metaTitle: "Du thuyền Vịnh Hạ Long 3N2Đ",
-        metaDescription: "Trải nghiệm du thuyền 5 sao tại Vịnh Hạ Long với hành trình 3 ngày 2 đêm.",
-        metaKeywords: "du thuyền, vịnh hạ long, tour biển đảo",
-        createdAt: "2025-09-01T10:00:00Z",
-        updatedAt: "2025-09-10T15:30:00Z",
-    }
+    //     slug: "du-thuyen-vinh-ha-long-3n2d",
+    //     description: "Trải nghiệm du thuyền sang trọng, khám phá các hang động và thưởng thức ẩm thực địa phương.",
+    //     departureFrom: "Hà Nội",
+    //     destination: "Vịnh Hạ Long",
+    //     startDate: "2025-10-01",
+    //     endDate: "2025-10-03",
+    //     duration: "3 ngày 2 đêm",
+    //     adultPrice: 6500000,
+    //     childPrice: 4500000,
+    //     infantPrice: 1500000,
+    //     maxGroupSize: 30,
+    //     seatsBooked: 20,
+    //     minBooking: 2,
+    //     status: "active",
+    //     highlight: true,
+    //     isVisible: true,
+    //     categoryId: "cat_001",
+    //     tags: ["du thuyền", "biển đảo", "sang trọng"],
+    //     images: [
+    //         "https://example.com/images/halong1.jpg",
+    //         "https://example.com/images/halong2.jpg",
+    //     ],
+    //     videoUrl: "https://youtube.com/watch?v=abc123",
+    //     itinerary: [
+    //         {
+    //             dayNumber: 1,
+    //             title: "Khởi hành và khám phá hang Sửng Sốt",
+    //             details: "Đón khách tại Hà Nội, di chuyển đến Vịnh Hạ Long, tham quan hang Sửng Sốt.",
+    //         },
+    //         {
+    //             dayNumber: 2,
+    //             title: "Chèo thuyền kayak và làng chài",
+    //             details: "Tham gia chèo thuyền kayak và khám phá làng chài nổi trên vịnh.",
+    //         },
+    //         {
+    //             dayNumber: 3,
+    //             title: "Tham quan đảo Titop và trở về",
+    //             details: "Thăm đảo Titop, tắm biển và trở về Hà Nội.",
+    //         },
+    //     ],
+    //     services: ["hướng dẫn viên", "resort 4 sao", "xe đưa đón"],
+    //     pickupPoints: ["Hà Nội", "Hải Phòng"],
+    //     cancellationPolicy: "Hủy trước 7 ngày: hoàn 100%. Hủy trước 3 ngày: hoàn 50%.",
+    //     ratingsAverage: 4.8,
+    //     ratingsQuantity: 120,
+    //     metaTitle: "Du thuyền Vịnh Hạ Long 3N2Đ",
+    //     metaDescription: "Trải nghiệm du thuyền 5 sao tại Vịnh Hạ Long với hành trình 3 ngày 2 đêm.",
+    //     metaKeywords: "du thuyền, vịnh hạ long, tour biển đảo",
+    //     createdAt: "2025-09-01T10:00:00Z",
+    //     updatedAt: "2025-09-10T15:30:00Z",
+    // }
 
 ];
 const DEFAULT_CANCELLATION_POLICY = `
@@ -1925,6 +1925,17 @@ export default function Tours() {
         return createTourMutation.isPending || updateTourMutation.isPending;
     };
 
+    // Thêm query để fetch tour slots khi view mode
+    const { data: tourSlotsData, isLoading: slotsLoading } = useQuery({
+        queryKey: ['tourSlots', selectedTour?.id],
+        queryFn: async () => {
+            if (!selectedTour?.id) return null;
+            const res = await fetch(`${API_BASE}/api/tours/${selectedTour.id}/slots`);
+            if (!res.ok) throw new Error('Failed to fetch tour slots');
+            return res.json();
+        },
+        enabled: modalOpen && modalMode === "view" && !!selectedTour?.id,
+    });
     const renderTourForm = () => {
         if (modalMode === "view" && selectedTour) {
             const startArray: string[] = Array.isArray(selectedTour.startDates) && selectedTour.startDates.length
@@ -1983,12 +1994,12 @@ export default function Tours() {
                                     </div>
                                 )}
                             </div>
-                            <div>
+                            {/* <div>
                                 <Label className="text-sm font-medium text-gray-700">Số chỗ</Label>
                                 <p className="mt-1">
                                     {selectedTour.seatsBooked}/{selectedTour.maxGroupSize} đã đặt
                                 </p>
-                            </div>
+                            </div> */}
                         </div>
                     </div>
 
@@ -1997,44 +2008,59 @@ export default function Tours() {
                         <p className="mt-1 text-gray-900">{selectedTour.description}</p>
                     </div>
 
-                    <div>
-                        <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
-                        <div className="mt-1 space-y-2">
-                            {startArray.length ? (
-                                startArray.map((start, i) => {
-                                    const end = endArray[i];
-                                    const startDate = start ? new Date(start) : null;
-                                    const endDate = end ? new Date(end) : null;
-                                    const duration = (start && end) ? calculateDuration(start, end) : (selectedTour.duration || "");
-                                    return (
-                                        <div key={i} className="bg-gray-50 p-3 rounded">
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="text-sm text-gray-500">Chuyến #{i + 1}</div>
-                                                    <div className="font-medium">
-                                                        Bắt đầu : {startDate ? startDate.toLocaleDateString('vi-VN') : '---'}{" "}
-                                                        <span className="text-gray-600">•</span>{" "}
-                                                        <span className="font-mono">{startDate ? startDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '---'}</span>
+                    <div className="space-y-4"
+                        // style={{ height: '70vh', overflowY: 'auto' }}
+                    >
+                        <div>
+                            <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
+                            <div className="mt-1 space-y-2">
+                                {startArray.length ? (
+                                    startArray.map((start, i) => {
+                                        const end = endArray[i];
+                                        const startDate = start ? new Date(start) : null;
+                                        const endDate = end ? new Date(end) : null;
+                                        const duration = (start && end) ? calculateDuration(start, end) : (selectedTour.duration || "");
+
+                                        // Tìm slot cho ngày này
+                                        const dateIso = startDate ? startDate.toISOString().split('T')[0] : null;
+                                        const slotEntry = tourSlotsData?.slots?.find((d: any) => d.dateIso === dateIso);
+                                        const slotsAvailable = slotEntry ? slotEntry.capacity - (slotEntry.reserved || 0) : selectedTour.maxGroupSize - (selectedTour.seatsBooked || 0);
+                                        const slotsTotal = slotEntry ? slotEntry.capacity : selectedTour.maxGroupSize;
+
+                                        return (
+                                            <div key={i} className="bg-gray-50 p-3 rounded">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="text-sm text-gray-500">Chuyến #{i + 1}</div>
+                                                        <div className="font-medium">
+                                                            Bắt đầu : {startDate ? startDate.toLocaleDateString('vi-VN') : '---'}{" "}
+                                                            <span className="text-gray-600">•</span>{" "}
+                                                            <span className="font-mono">{startDate ? startDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '---'}</span>
+                                                        </div>
+                                                        <div className="text-sm text-gray-500 mt-1">
+                                                            Kết thúc : {endDate ? `${endDate.toLocaleDateString('vi-VN')} • ${endDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Kết thúc chưa được đặt'}
+                                                        </div>
                                                     </div>
-                                                    <div className="text-sm text-gray-500 mt-1">
-                                                        Kết thúc : {endDate ? `${endDate.toLocaleDateString('vi-VN')} • ${endDate.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}` : 'Kết thúc chưa được đặt'}
+                                                    <div className="text-right">
+                                                        <div className="text-sm text-gray-500">Thời gian</div>
+                                                        <div className="font-medium">{duration || '—'}</div>
                                                     </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-sm text-gray-500">Thời gian</div>
-                                                    <div className="font-medium">{duration || '—'}</div>
+                                                    <div className="text-right">
+                                                        <div className="text-sm text-gray-500">Số slot</div>
+                                                        <div className="font-medium">{slotsAvailable} / {slotsTotal}</div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    );
-                                })
-                            ) : (
-                                <p className="text-sm text-gray-600">Không có lịch trình</p>
-                            )}
+                                        );
+                                    })
+                                ) : (
+                                    <p className="text-sm text-gray-600">Không có lịch trình</p>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <div>
+                    {/* <div>
                         <Label className="text-sm font-medium text-gray-700">Lịch trình chi tiết</Label>
                         <div className="mt-2 space-y-3">
                             {selectedTour.itinerary.map((day, index) => (
@@ -2046,7 +2072,7 @@ export default function Tours() {
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </div> */}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>

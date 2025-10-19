@@ -262,7 +262,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([1000000, 100000000]);
+    const [priceRange, setPriceRange] = useState([200000, 100000000]); 
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
