@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     TrendingUp,
     TrendingDown,
@@ -16,7 +16,8 @@ import {
     MoreHorizontal,
     MapPin,
     Bus,
-    Star
+    Star,
+    Loader
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -46,146 +47,12 @@ import {
 } from "../../components/ui/table";
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-const kpiData = [
-    {
-        title: "Tổng doanh thu",
-        value: "12,450,000,000",
-        unit: "VNĐ",
-        change: "+18.2%",
-        trend: "up",
-        icon: DollarSign,
-        period: "so với tháng trước"
-    },
-    {
-        title: "Tổng đơn hàng",
-        value: "3,847",
-        unit: "đơn",
-        change: "+12.5%",
-        trend: "up",
-        icon: ShoppingBag,
-        period: "so với tháng trước"
-    },
-    {
-        title: "Khách hàng mới",
-        value: "1,284",
-        unit: "người",
-        change: "+8.1%",
-        trend: "up",
-        icon: Users,
-        period: "trong tháng này"
-    },
-    {
-        title: "Dịch vụ đang bán",
-        value: "456",
-        unit: "dịch vụ",
-        change: "-2.3%",
-        trend: "down",
-        icon: Plane,
-        period: "so với tháng trước"
-    }
-];
-
-const revenueData = [
-    { month: 'T1', total: 8500000000, flights: 4200000000, tours: 2800000000, buses: 1500000000 },
-    { month: 'T2', total: 9200000000, flights: 4600000000, tours: 3100000000, buses: 1500000000 },
-    { month: 'T3', total: 10100000000, flights: 5100000000, tours: 3200000000, buses: 1800000000 },
-    { month: 'T4', total: 11200000000, flights: 5600000000, tours: 3700000000, buses: 1900000000 },
-    { month: 'T5', total: 10800000000, flights: 5300000000, tours: 3600000000, buses: 1900000000 },
-    { month: 'T6', total: 12450000000, flights: 6200000000, tours: 4050000000, buses: 2200000000 },
-];
-
-const serviceDistribution = [
-    { name: 'Vé máy bay', value: 6200000000, color: '#1E88E5' },
-    { name: 'Tour du lịch', value: 4050000000, color: '#FFC107' },
-    { name: 'Vé xe khách', value: 2200000000, color: '#4CAF50' },
-];
-
-const topServices = [
-    {
-        id: "SV001",
-        name: "TP.HCM → Hà Nội",
-        type: "flight",
-        bookings: 456,
-        revenue: "6,200,000,000",
-        trend: "up",
-        growth: "+15%"
-    },
-    {
-        id: "SV002",
-        name: "Tour Hạ Long 3N2Đ",
-        type: "tour",
-        bookings: 234,
-        revenue: "4,050,000,000",
-        trend: "up",
-        growth: "+22%"
-    },
-    {
-        id: "SV003",
-        name: "TP.HCM → Đà Lạt",
-        type: "bus",
-        bookings: 342,
-        revenue: "2,200,000,000",
-        trend: "up",
-        growth: "+8%"
-    },
-    {
-        id: "SV004",
-        name: "Hà Nội → Đà Nẵng",
-        type: "flight",
-        bookings: 187,
-        revenue: "1,850,000,000",
-        trend: "down",
-        growth: "-5%"
-    },
-    {
-        id: "SV005",
-        name: "Tour Phú Quốc 4N3Đ",
-        type: "tour",
-        bookings: 156,
-        revenue: "1,560,000,000",
-        trend: "up",
-        growth: "+18%"
-    }
-];
-
-const recentActivities = [
-    {
-        id: "ACT001",
-        type: "order",
-        message: "Đơn hàng #DH12345 vừa được thanh toán",
-        customer: "Nguyễn Văn An",
-        amount: "2,850,000 VNĐ",
-        time: "2 phút trước",
-        urgent: false
-    },
-    {
-        id: "ACT002",
-        type: "support",
-        message: "Yêu cầu hỗ trợ từ khách hàng cần xử lý",
-        customer: "Trần Thị Bình",
-        amount: null,
-        time: "5 phút trước",
-        urgent: true
-    },
-    {
-        id: "ACT003",
-        type: "order",
-        message: "Đơn hàng #DH12346 đã được xác nhận",
-        customer: "Lê Minh Cường",
-        amount: "1,200,000 VNĐ",
-        time: "12 phút trước",
-        urgent: false
-    },
-    {
-        id: "ACT004",
-        type: "system",
-        message: "Backup dữ liệu đã hoàn thành",
-        customer: "Hệ thống",
-        amount: null,
-        time: "1 giờ trước",
-        urgent: false
-    }
-];
+// Xóa mock data, thay bằng state
+// const kpiData = [...]; // Removed
+// const revenueData = [...]; // Removed
+// const serviceDistribution = [...]; // Removed
+// const topServices = [...]; // Removed
+// const recentActivities = [...]; // Removed
 
 const getServiceIcon = (type: string) => {
     switch (type) {
@@ -226,8 +93,150 @@ const formatCurrency = (value: number) => {
 };
 
 export default function Dashboard() {
-    const [dateRange, setDateRange] = useState("30d");
+    const [dateRange, setDateRange] = useState("today");
     const [serviceFilter, setServiceFilter] = useState("all");
+
+    // States cho data từ API
+    const [kpiData, setKpiData] = useState([]);
+    const [revenueData, setRevenueData] = useState([]);
+    const [serviceDistribution, setServiceDistribution] = useState([]);
+    const [topServices, setTopServices] = useState([]);
+    const [recentActivities, setRecentActivities] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [totalOrders, setTotalOrders] = useState(0);
+
+
+    // Hàm tính start/end từ dateRange theo giờ VN
+    const getDateRange = (range: string) => {
+        const now = new Date();
+        const vnOffset = 7 * 60 * 60 * 1000; // Offset +7 giờ cho VN
+        let start: Date;
+        switch (range) {
+            case "7d":
+                start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case "30d":
+                start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case "90d":
+                start = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                break;
+            case "1y":
+                start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+                break;
+            case "today":
+                start = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // Từ 00:00 hôm nay
+                break;
+            default:
+                start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        }
+        // Chuyển start/end sang giờ VN trước khi gửi
+        start = new Date(start.getTime() + vnOffset);
+        const end = new Date(now.getTime() + vnOffset);
+        return { start: start.toISOString(), end: end.toISOString() };
+    };
+
+    // Fetch data từ API
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                const { start, end } = getDateRange(dateRange);
+
+                // Fetch dashboard stats
+                const dashboardRes = await fetch(`http://localhost:7700/api/stats/dashboard?start=${start}&end=${end}`);
+                const dashboardData = await dashboardRes.json();
+
+                // Tính KPI từ dashboardData
+                const totalRevenue = dashboardData.totalRevenue || 0;
+                const totalOrdersValue = dashboardData.totalOrders || 0;
+                setTotalOrders(totalOrdersValue);
+                const revenueChange = dashboardData.revenueComparison?.changePercent || 0;
+                const newKpiData = [
+                    {
+                        title: "Tổng doanh thu",
+                        value: formatCurrency(totalRevenue),
+                        unit: "VNĐ",
+                        change: `${revenueChange > 0 ? '+' : ''}${revenueChange}%`,
+                        trend: revenueChange > 0 ? "up" : "down",
+                        icon: DollarSign,
+                        period: "so với kỳ trước"
+                    },
+                    {
+                        title: "Tổng đơn hàng",
+                        value: totalOrdersValue.toString(),
+                        unit: "đơn",
+                        change: "+12.5%", // Placeholder, có thể tính từ data nếu có
+                        trend: "up",
+                        icon: ShoppingBag,
+                        period: "so với tháng trước"
+                    },
+                    {
+                        title: "Khách hàng mới",
+                        value: "1,284", // Placeholder
+                        unit: "người",
+                        change: "+8.1%",
+                        trend: "up",
+                        icon: Users,
+                        period: "trong tháng này"
+                    },
+                    {
+                        title: "Dịch vụ đang bán",
+                        value: (dashboardData.totalProducts?.tours || 0) + (dashboardData.totalProducts?.buses || 0),
+                        unit: "dịch vụ",
+                        change: "-2.3%",
+                        trend: "down",
+                        icon: Plane,
+                        period: "so với tháng trước"
+                    }
+                ];
+                setKpiData(newKpiData);
+
+                // Fetch revenue stats
+                const revenueRes = await fetch(`http://localhost:7700/api/stats/revenue?start=${start}&end=${end}`);
+                const revenueStats = await revenueRes.json();
+                setRevenueData(revenueStats.revenueOverTime || []);
+                setServiceDistribution(revenueStats.revenueByType?.map((item: any) => ({
+                    name: item._id === 'flight' ? 'Vé máy bay' : item._id === 'tour' ? 'Tour du lịch' : 'Vé xe khách',
+                    value: item.revenue,
+                    color: item._id === 'flight' ? '#1E88E5' : item._id === 'tour' ? '#FFC107' : '#4CAF50'
+                })) || []);
+
+                // Fetch product stats
+                const productRes = await fetch(`http://localhost:7700/api/stats/products?start=${start}&end=${end}`);
+                const productStats = await productRes.json();
+                setTopServices(productStats.topBookedProducts?.slice(0, 5).map((item: any) => ({
+                    id: item._id,
+                    name: item.name,
+                    type: item.type,
+                    bookings: item.bookings,
+                    revenue: formatCurrency(item.revenue),
+                    trend: "up", // Placeholder
+                    growth: "+15%" // Placeholder
+                })) || []);
+
+                // Fetch activities
+                const activitiesRes = await fetch(`http://localhost:7700/api/stats/activities?start=${start}&end=${end}`);
+                const activitiesData = await activitiesRes.json();
+                setRecentActivities(activitiesData.activities || []);
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchData();
+    }, [dateRange]);
+
+    if (loading) {
+        return (
+            <div className="p-6 flex items-center justify-center">
+                <Loader className="animate-spin w-6 h-6 mr-2" />
+                Đang tải dữ liệu...
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 space-y-6 bg-gray-50">
@@ -249,6 +258,7 @@ export default function Dashboard() {
                             <SelectItem value="30d">30 ngày qua</SelectItem>
                             <SelectItem value="90d">3 tháng qua</SelectItem>
                             <SelectItem value="1y">1 năm qua</SelectItem>
+                            <SelectItem value="today">Ngày hôm nay</SelectItem>  // Đổi thành "Ngày hôm nay"
                         </SelectContent>
                     </Select>
                     <Button variant="outline" size="sm">
@@ -275,13 +285,13 @@ export default function Dashboard() {
                                 {kpi.value}
                                 <span className="text-sm font-normal text-gray-500 ml-1">{kpi.unit}</span>
                             </div>
-                            <div className="flex items-center space-x-2 text-xs mt-2">
+                            {/* <div className="flex items-center space-x-2 text-xs mt-2">
                                 {getTrendIcon(kpi.trend)}
                                 <span className={kpi.trend === "up" ? "text-green-600" : "text-red-600"}>
                                     {kpi.change}
                                 </span>
                                 <span className="text-gray-500">{kpi.period}</span>
-                            </div>
+                            </div> */}
                         </CardContent>
                     </Card>
                 ))}
@@ -296,7 +306,7 @@ export default function Dashboard() {
                                 <CardTitle>Biểu đồ doanh thu</CardTitle>
                                 <CardDescription>Doanh thu theo từng loại dịch vụ qua các tháng</CardDescription>
                             </div>
-                            <Select value={serviceFilter} onValueChange={setServiceFilter}>
+                            {/* <Select value={serviceFilter} onValueChange={setServiceFilter}>
                                 <SelectTrigger className="w-36 bg-white">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -306,23 +316,23 @@ export default function Dashboard() {
                                     <SelectItem value="tours">Tour du lịch</SelectItem>
                                     <SelectItem value="buses">Vé xe</SelectItem>
                                 </SelectContent>
-                            </Select>
+                            </Select> */}
                         </div>
                     </CardHeader>
                     <CardContent>
                         <ResponsiveContainer width="100%" height={350}>
                             <BarChart data={revenueData}>
                                 <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
+                                <XAxis dataKey="period" />
                                 <YAxis tickFormatter={(value) => `${formatCurrency(value / 1000000000)}B`} />
                                 <Tooltip
                                     formatter={(value: number) => [`${formatCurrency(value)} VNĐ`, ""]}
                                     labelFormatter={(label) => `Tháng ${label}`}
                                 />
                                 <Legend />
-                                <Bar dataKey="flights" stackId="a" fill="#1E88E5" name="Vé máy bay" />
-                                <Bar dataKey="tours" stackId="a" fill="#FFC107" name="Tour du lịch" />
-                                <Bar dataKey="buses" stackId="a" fill="#4CAF50" name="Vé xe" />
+                                <Bar dataKey="flight" stackId="a" fill="#1E88E5" name="Vé máy bay" />
+                                <Bar dataKey="tour" stackId="a" fill="#FFC107" name="Tour du lịch" />
+                                <Bar dataKey="bus" stackId="a" fill="#4CAF50" name="Vé xe" />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -404,6 +414,12 @@ export default function Dashboard() {
                             {recentActivities.map((activity) => (
                                 <div key={activity.id} className={`flex items-start space-x-3 p-3 rounded-lg ${activity.urgent ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'
                                     }`}>
+                                    {/* Thêm icon cho loại dịch vụ nếu là order */}
+                                    {(activity.type === 'order' || activity.type === 'cancelled') && activity.serviceType && (
+                                        <div className="w-4 h-4 mt-1">
+                                            {getServiceIcon(activity.serviceType)}
+                                        </div>
+                                    )}
                                     <div className={`w-2 h-2 rounded-full mt-2 ${activity.urgent ? 'bg-orange-500' : 'bg-primary'
                                         }`} />
                                     <div className="flex-1 min-w-0">
@@ -446,7 +462,7 @@ export default function Dashboard() {
                 <CardContent>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="text-center p-4 bg-blue-50 rounded-lg">
-                            <div className="text-2xl font-bold text-blue-600">147</div>
+                            <div className="text-2xl font-bold text-blue-600">{totalOrders}</div>
                             <div className="text-sm text-blue-600">Đơn hàng mới</div>
                         </div>
                         <div className="text-center p-4 bg-green-50 rounded-lg">
