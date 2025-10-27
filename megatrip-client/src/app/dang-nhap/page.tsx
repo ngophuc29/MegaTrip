@@ -1,19 +1,33 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { LogIn } from 'lucide-react';
+import auth from '../../apis/auth';
 
 export default function DangNhap() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [checked, setChecked] = useState(false);
+  const router = useRouter();
 
-  // Giả lập đăng nhập
-  const handleLogin = (e: any) => {
+  // Check if already logged in and redirect without rendering
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      router.replace('/');
+    }
+    else {
+      setChecked(true);
+    }
+  }, [router]);
+  if (!checked) return null;
+  const handleLogin = async (e: any) => {
     e.preventDefault();
     setError('');
     setSuccess('');
@@ -21,10 +35,23 @@ export default function DangNhap() {
       setError('Vui lòng nhập đầy đủ thông tin');
       return;
     }
-    if (form.email === 'test@megatrip.vn' && form.password === '123456') {
-      setSuccess('Đăng nhập thành công!');
-    } else {
-      setError('Email hoặc mật khẩu không đúng');
+    try {
+      const res: any = await auth.login({ email: form.email, password: form.password });
+      const token = res?.accessToken ?? res?.token ?? res?.data?.accessToken;
+      if (token) {
+        localStorage.setItem('accessToken', token);
+        try {
+          const maxAge = 7 * 24 * 60 * 60;
+          const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+          document.cookie = `accessToken=${token}; path=/; max-age=${maxAge}${secure}`;
+        } catch (e) { }
+        if (res.user) localStorage.setItem('user', JSON.stringify(res.user));
+        router.push('/');
+      } else {
+        setError('Đăng nhập thành công nhưng không nhận được token');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Lỗi khi đăng nhập');
     }
   };
 
@@ -32,10 +59,10 @@ export default function DangNhap() {
     <div className="min-h-screen w-full flex items-center justify-center relative" style={{ background: 'url(/bg_signInUp.jpeg) center/cover no-repeat' }}>
       {/* Logo góc trên trái */}
       <div className="absolute top-0 left-0 z-20 p-6">
-        <span className="font-extrabold text-2xl lg:text-2xl" style={{ color: 'hsl(var(--primary))'  }}>MegaTrip</span>
+        <span className="font-extrabold text-2xl lg:text-2xl" style={{ color: 'hsl(var(--primary))' }}>MegaTrip</span>
       </div>
       {/* Overlay */}
-     
+
       <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row items-center justify-between h-full">
         {/* Slogan bên trái */}
         <div className="hidden lg:flex flex-1 items-center justify-center h-full">
@@ -83,7 +110,7 @@ export default function DangNhap() {
                 style={{ background: 'hsl(var(--primary-50))', color: 'hsl(var(--primary-700))', borderColor: 'hsl(var(--primary))' }}
                 onClick={() => alert('Google login demo')}
               >
-                
+
                 <span className="flex-1 "
                   style={{ marginLeft: '49px' }}
 

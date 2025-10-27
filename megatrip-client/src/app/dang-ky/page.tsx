@@ -1,12 +1,14 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { UserPlus, Mail, ShieldCheck } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
+import auth from '../../apis/auth';
 
 export default function DangKy() {
   const [step, setStep] = useState<'form' | 'otp' | 'done'>('form');
@@ -14,7 +16,19 @@ export default function DangKy() {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [checked, setChecked] = useState(false);
+  const router = useRouter();
 
+  // Check if already logged in and redirect without rendering
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      router.replace('/');
+    } else {
+      setChecked(true);
+    }
+  }, [router]);
+  if (!checked) return null;
   // Giả lập gửi mail OTP
   const handleRegister = async (e: any) => {
     e.preventDefault();
@@ -51,7 +65,7 @@ export default function DangKy() {
         <span className="font-extrabold text-2xl lg:text-2xl" style={{ color: 'hsl(var(--primary))' }}>MegaTrip</span>
       </div>
       {/* Overlay */}
-       
+
       <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row items-center justify-between h-full">
         {/* Slogan bên trái */}
         <div className="hidden lg:flex flex-1 items-center justify-center h-full">
@@ -74,7 +88,7 @@ export default function DangKy() {
                 <form className="space-y-5" onSubmit={handleRegister}>
                   <div>
                     <Label htmlFor="email" className="font-semibold">Email/Số điện thoại di động</Label>
-                    <Input id="email" type="email" placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
+                    <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
                   </div>
                   <div>
                     <Label htmlFor="password" className="font-semibold">Mật khẩu</Label>
@@ -124,7 +138,7 @@ export default function DangKy() {
                 onClick={() => alert('Google login demo')}
               >
                 <span className="flex-1  "
-                style={{ marginLeft: '49px' }}
+                  style={{ marginLeft: '49px' }}
                 >Google</span>
                 <span className="flex items-center justify-center rounded-full bg-white w-8 h-8 ml-2">
                   <svg width="22" height="22" viewBox="0 0 48 48" fill="none">

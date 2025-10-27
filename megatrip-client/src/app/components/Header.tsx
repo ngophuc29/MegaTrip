@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import {
@@ -41,6 +42,8 @@ export default function Header() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
@@ -50,6 +53,33 @@ export default function Header() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    // check token on client
+    try {
+      const token = localStorage.getItem('accessToken');
+      setIsLoggedIn(!!token);
+    } catch (e) {
+      setIsLoggedIn(false);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('user');
+    } catch (e) {
+      // ignore
+    }
+    try {
+      // clear cookie so middleware won't redirect
+      document.cookie = 'accessToken=; path=/; max-age=0';
+    } catch (e) {
+      // ignore
+    }
+    setIsLoggedIn(false);
+    router.push('/');
+  };
 
   return (
     <header className={`sticky top-0 z-50 w-full  bg-white transition-shadow ${scrolled ? 'shadow-2xl' : ''}`}>
@@ -68,7 +98,7 @@ export default function Header() {
             <NavigationMenuList className="flex space-x-6">
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -78,7 +108,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/ve-may-bay"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -89,7 +119,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/xe-du-lich"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -100,7 +130,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/tour"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -111,7 +141,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/khuyen-mai"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -122,7 +152,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/tin-tuc"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -133,7 +163,7 @@ export default function Header() {
               </NavigationMenuItem>
               <NavigationMenuItem>
                 <NavigationMenuLink asChild>
-                  <Link 
+                  <Link
                     href="/ho-tro"
                     className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
@@ -192,13 +222,28 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link href="/dang-nhap">Đăng nhập</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dang-ky">Đăng ký</Link>
-                </DropdownMenuItem>
+                {isLoggedIn ? (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/tai-khoan">Tài khoản của bạn</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleLogout}>Đăng xuất</DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dang-nhap">Đăng nhập</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dang-ky">Đăng ký</Link>
+                    </DropdownMenuItem>
+
+                  </>
+                )}
+
+
               </DropdownMenuContent>
+
             </DropdownMenu>
 
             {/* Mobile menu */}
@@ -214,14 +259,14 @@ export default function Header() {
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col space-y-4 mt-4">
-                  <Link 
+                  <Link
                     href="/"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   >
                     <span>Trang chủ</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/ve-may-bay"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
@@ -229,7 +274,7 @@ export default function Header() {
                     <Plane className="h-4 w-4" />
                     <span>Vé máy bay</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/xe-du-lich"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
@@ -237,7 +282,7 @@ export default function Header() {
                     <Bus className="h-4 w-4" />
                     <span>Xe du lịch</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/tour"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
@@ -245,7 +290,7 @@ export default function Header() {
                     <Map className="h-4 w-4" />
                     <span>Tour</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/khuyen-mai"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
@@ -253,7 +298,7 @@ export default function Header() {
                     <Percent className="h-4 w-4" />
                     <span>Khuyến mãi</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/tin-tuc"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
@@ -261,7 +306,7 @@ export default function Header() {
                     <Newspaper className="h-4 w-4" />
                     <span>Tin tức</span>
                   </Link>
-                  <Link 
+                  <Link
                     href="/ho-tro"
                     onClick={() => setIsSheetOpen(false)}
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
