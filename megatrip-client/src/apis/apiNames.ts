@@ -5,4 +5,8 @@ export const API_NAMES = {
         profile: '/api/auth/profile',
         me: '/api/auth/me',
     },
+    auth: {
+        verifyOtp: '/api/auth/verify-otp',
+        resendOtp: '/api/auth/resend-otp',
+    },
 };

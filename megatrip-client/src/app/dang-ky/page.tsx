@@ -29,7 +29,7 @@ export default function DangKy() {
     }
   }, [router]);
   if (!checked) return null;
-  // Giả lập gửi mail OTP
+  // Đăng ký tài khoản
   const handleRegister = async (e: any) => {
     e.preventDefault();
     setError('');
@@ -42,20 +42,43 @@ export default function DangKy() {
       setError('Mật khẩu xác nhận không khớp');
       return;
     }
-    setStep('otp');
-    setSuccess('Mã OTP đã được gửi tới email của bạn.');
+    try {
+      await auth.register({ email: form.email, password: form.password });
+      setStep('otp');
+      setSuccess('Mã OTP đã được gửi tới email của bạn.');
+    } catch (err: any) {
+      setError(err?.message || 'Đăng ký thất bại. Vui lòng thử lại.');
+    }
   };
 
-  // Giả lập xác thực OTP
-  const handleVerifyOtp = (e: any) => {
+  // Gửi lại mã OTP
+  const handleResendOtp = async () => {
+    setError('');
+    setSuccess('');
+    try {
+      await auth.resendOtp({ email: form.email });
+      setSuccess('Mã OTP mới đã được gửi tới email của bạn.');
+    } catch (err: any) {
+      setError(err?.message || 'Không thể gửi lại mã OTP. Vui lòng thử lại.');
+    }
+  };
+
+  // Xác thực OTP
+  const handleVerifyOtp = async (e: any) => {
     e.preventDefault();
     setError('');
-    if (otp !== '123456') {
-      setError('Mã OTP không đúng. Vui lòng kiểm tra lại.');
+    setSuccess('');
+    if (!otp) {
+      setError('Vui lòng nhập mã OTP');
       return;
     }
-    setSuccess('Đăng ký thành công!');
-    setStep('done');
+    try {
+      const res = await auth.verifyOtp({ email: form.email, code: otp });
+      setSuccess('Đăng ký thành công!');
+      setStep('done');
+    } catch (err: any) {
+      setError(err?.message || 'Mã OTP không đúng. Vui lòng kiểm tra lại.');
+    }
   };
 
   return (
@@ -116,6 +139,11 @@ export default function DangKy() {
                   {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                   {success && <div className="text-green-600 text-sm text-center">{success}</div>}
                   <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Xác nhận OTP</Button>
+                  <div className="text-center mt-4">
+                    <Button type="button" variant="link" onClick={handleResendOtp} className="text-primary font-medium hover:underline">
+                      Gửi lại mã OTP
+                    </Button>
+                  </div>
                 </form>
               )}
               {step === 'done' && (

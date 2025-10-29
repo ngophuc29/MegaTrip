@@ -12,18 +12,18 @@ export function Card({ className = "", ...props }) {
 }
 
 export function CardContent({ className = "", ...props }) {
-  return <div className={`p-4 ${className}`} {...props} />;
+  return <div className={`p-4 text-black ${className}`} {...props} />;
 }
 
 export function CardHeader({ className = "", ...props }) {
   return (
     <div
-      className={`border-b border-[hsl(var(--muted))] p-4 ${className}`}
+      className={`border-b text-black border-[hsl(var(--muted))] p-4 ${className}`}
       {...props}
     />
   );
 }
 
 export function CardTitle({ className = "", ...props }) {
-  return <h3 className={`text-lg font-bold ${className}`} {...props} />;
+  return <h3 className={`text-lg text-black font-bold ${className}`} {...props} />;
 }
