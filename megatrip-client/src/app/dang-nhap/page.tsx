@@ -46,7 +46,21 @@ export default function DangNhap() {
           document.cookie = `accessToken=${token}; path=/; max-age=${maxAge}${secure}`;
         } catch (e) { }
         if (res.user) localStorage.setItem('user', JSON.stringify(res.user));
-        router.push('/');
+
+        // Check if user needs to complete profile
+        try {
+          const userProfile: any = await auth.me();
+          const needsProfileUpdate = !userProfile.name || !userProfile.address || !userProfile.phone;
+
+          if (needsProfileUpdate) {
+            router.push('/cap-nhat-thong-tin');
+          } else {
+            router.push('/');
+          }
+        } catch (profileErr) {
+          // If can't get profile, assume needs update
+          router.push('/cap-nhat-thong-tin');
+        }
       } else {
         setError('Đăng nhập thành công nhưng không nhận được token');
       }
