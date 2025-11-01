@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@radix-ui
 import { DialogFooter, DialogHeader } from '../components/ui/dialog';
 import Modal, { ModalContent, ModalDescription, ModalFooter, ModalHeader, ModalTitle } from '../components/ui/Modal';
 import OrderReviewDialog from '../components/OrderReviewDialog';
+import { me, updateProfile } from '@/apis/auth';
 import Protected from '../components/Protected';
 import { toast } from 'sonner';
 
@@ -507,15 +508,9 @@ export default function TaiKhoan() {
             return;
         }
 
-        const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
         const fetchProfile = async () => {
             try {
-                const res = await fetch(`${base}/api/auth/me`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (!res.ok) throw new Error(`status:${res.status}`);
-                const json = await res.json();
-                const payload = json.data ?? json;
+                const payload = await me();
                 // map fields from API into the existing userData.profile
                 userData.profile.name = payload.name ?? userData.profile.name;
                 userData.profile.email = payload.email ?? userData.profile.email;
@@ -529,9 +524,8 @@ export default function TaiKhoan() {
                 // trigger re-render
                 setVersion(v => v + 1);
             } catch (err) {
-                // keep minimal changes: just log error
                 // eslint-disable-next-line no-console
-                console.error('Failed to load profile:', err);
+                console.error('Failed to load profile (me):', err);
             }
         };
 
@@ -612,8 +606,31 @@ export default function TaiKhoan() {
 
     const handleSaveProfile = () => {
         // Handle profile update
-        console.log('Saving profile:', editForm);
-        setIsEditing(false);
+        (async () => {
+            try {
+                // basic validation
+                const payload = {
+                    name: editForm.name,
+                    address: editForm.address,
+                    phone: editForm.phone,
+                    dob: editForm.dateOfBirth,
+                };
+                // call API
+                await updateProfile(payload as any);
+                // update local userData and re-render
+                userData.profile.name = editForm.name;
+                userData.profile.email = editForm.email;
+                userData.profile.phone = editForm.phone;
+                userData.profile.address = editForm.address;
+                userData.profile.dateOfBirth = editForm.dateOfBirth;
+                setVersion(v => v + 1);
+                toast('Cập nhật thông tin thành công');
+                setIsEditing(false);
+            } catch (err: any) {
+                console.error('Update profile failed', err);
+                toast.error ? toast.error('Cập nhật thất bại') : toast('Cập nhật thất bại');
+            }
+        })();
     };
     // Thêm state cho modal
     const [detailModalOpen, setDetailModalOpen] = useState(false);
