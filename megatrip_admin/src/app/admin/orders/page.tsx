@@ -405,7 +405,7 @@ export default function Orders() {
         paymentStatus: "all",
         orderStatus: "all",
         paymentMethod: "all",
-        type: "all" 
+        type: "all"
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
@@ -431,6 +431,9 @@ export default function Orders() {
         current: 1,
         pageSize: 10,
     });
+    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkLoadingMessage, setBulkLoadingMessage] = useState("");
+
 
     // Fetch orders with API
     // const { data: ordersData, isLoading, error, refetch } = useQuery({
@@ -458,45 +461,36 @@ export default function Orders() {
     //     },
     // });
     const { data: ordersData, isLoading, error, refetch } = useQuery({
-        queryKey: ['orders', searchQuery, filters], // Bỏ pagination khỏi queryKey vì fetch all
+        queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters], // Bao gồm pagination để refetch khi đổi page
         queryFn: async () => {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams({
+                page: pagination.current.toString(),
+                pageSize: pagination.pageSize.toString(),
+            });
             if (searchQuery) params.append('q', searchQuery);
-            params.append('limit', '0'); // Thêm param để fetch tất cả orders
+            if (filters.paymentStatus !== 'all') params.append('paymentStatus', filters.paymentStatus);
+            if (filters.orderStatus !== 'all') params.append('orderStatus', filters.orderStatus);
+            if (filters.paymentMethod !== 'all') params.append('paymentMethod', filters.paymentMethod);
 
             const res = await fetch(`${API_BASE}/api/orders?${params.toString()}`);
             if (!res.ok) throw new Error('Failed to fetch orders');
             const json = await res.json();
+
             // Map _id to id
-            let allData = json.data.map((order: any) => ({
+            let data = json.data.map((order: any) => ({
                 ...order,
                 id: order._id,
             }));
 
-            // Filter client-side theo type
+            // Filter client-side cho type (nếu backend chưa hỗ trợ)
             if (filters.type !== 'all') {
-                allData = allData.filter((order: any) =>
+                data = data.filter((order: any) =>
                     order.items && order.items.some((item: any) => item.type === filters.type)
                 );
             }
 
-            // Filter theo paymentStatus, orderStatus, paymentMethod
-            if (filters.paymentStatus !== 'all') {
-                allData = allData.filter((order: any) => order.paymentStatus === filters.paymentStatus);
-            }
-            if (filters.orderStatus !== 'all') {
-                allData = allData.filter((order: any) => order.orderStatus === filters.orderStatus);
-            }
-            if (filters.paymentMethod !== 'all') {
-                allData = allData.filter((order: any) => order.paymentMethod === filters.paymentMethod);
-            }
-
-            // Paginate client-side
-            const startIndex = (pagination.current - 1) * pagination.pageSize;
-            const endIndex = startIndex + pagination.pageSize;
-            const paginatedData = allData.slice(startIndex, endIndex);
-
-            return { data: paginatedData, pagination: { ...json.pagination, total: allData.length } };
+            // Backend trả pagination info (total, current, pageSize)
+            return { data, pagination: json.pagination || { total: data.length, current: pagination.current, pageSize: pagination.pageSize } };
         },
     });
     // Update order status mutation (mock implementation)
@@ -880,9 +874,78 @@ export default function Orders() {
         setRefundModalOpen(true);
     };
 
-    const handleCancelOrder = (order: Order) => {
-        setSelectedOrder(order);
-        setCancelModalOpen(true);
+    // Cập nhật handleCancelOrder: Tự động hoàn tiền nếu paid
+    const handleCancelOrder = async (order: Order) => {
+        // Dùng _id nếu có, fallback orderNumber
+        const orderId = order.id || order.orderNumber;
+        try {
+            const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    note: `Đơn hàng đã bị hủy bởi admin`,
+                }),
+            });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to cancel order');
+            }
+            const data = await res.json();
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            toast({
+                title: "Hủy đơn hàng thành công",
+                description: `Đơn hàng ${order.orderNumber} đã được hủy và xử lý hoàn tiền nếu có.`,
+            });
+        } catch (error: any) {
+            toast({
+                title: "Lỗi khi hủy đơn hàng",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // Hàm bulk cancel order (gọi route cho từng order)
+    const handleBulkCancelOrder = async (keys: string[]) => {
+        let successCount = 0;
+        let errorCount = 0;
+        for (const key of keys) {
+            // key là index trong orders array, lấy order từ đó
+            const index = parseInt(key);
+            const order = orders[index];
+            if (!order) {
+                errorCount++;
+                continue;
+            }
+            const orderId = order.id || order.orderNumber;
+            try {
+                const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                    }),
+                });
+                if (res.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            } catch (error) {
+                errorCount++;
+                console.error(`Failed to cancel order ${orderId}:`, error);
+            }
+        }
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        toast({
+            title: "Hoàn thành hủy đơn hàng loạt",
+            description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+            variant: errorCount > 0 ? "destructive" : "default",
+        });
     };
 
     const handleExportInvoice = (order: Order) => {
@@ -898,7 +961,7 @@ export default function Orders() {
             description: `Hóa đơn ${order.orderNumber} đang được in`,
         });
     };
-     
+
     const getCompletableOrders = () => {
         return orders
             .map((order, index) => ({ order, index }))
@@ -931,6 +994,18 @@ export default function Orders() {
             setIsSelectingCompletable(true);
         }
     };
+
+    // Hàm tính hoàn tiền (dựa trên metadata, ví dụ cho flight)
+    const calculateRefundAmount = (order: Order) => {
+        if (order.paymentStatus !== "paid") return 0;
+        // Với flight: Trừ phạt (penalty) từ metadata.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees
+        const penalties = order.metadata?.bookingDataSnapshot?.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees || [];
+        const penaltyAmount = penalties.reduce((sum, fee) => sum + parseFloat(fee.amount || 0), 0);
+        // Hoàn tiền = Tổng - Phạt (hoặc 0 nếu phạt > tổng)
+        return Math.max(0, order.total - penaltyAmount);
+    };
+
+
     const bulkActions = [
         // {
         //     label: "Xác nhận",
@@ -946,62 +1021,123 @@ export default function Orders() {
         // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
         {
             label: "Hoàn thành",
-            action: (keys: string[]) => {
-                console.log("Bulk hoàn thành: keys =", keys); // Thêm log
-                keys.forEach(id => {
-                    const index = parseInt(id); // Chuyển id (string index) thành number
-                    const order = orders[index]; // Truy cập trực tiếp bằng index
-                    console.log("Order found:", order); // Thêm log
-                    if (!order) return;
+            action: async (keys: string[]) => {
+                setBulkLoading(true);
+                setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+                try {
+                    console.log("Bulk hoàn thành: keys =", keys);
+                    for (const key of keys) {
+                        const index = parseInt(key);
+                        const order = orders[index];
+                        console.log("Order found:", order);
+                        if (!order) continue;
 
-                    // Tính ngày sử dụng từ metadata
-                    const snap = order.metadata?.bookingDataSnapshot;
-                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                    const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                        // Tính ngày sử dụng từ metadata
+                        const snap = order.metadata?.bookingDataSnapshot;
+                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                        const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
 
-                    console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate); // Thêm log
+                        console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
 
-                    // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
+                        // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
 
-                    // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
-                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                    const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+                        // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                        const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                        const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
 
-                    console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
-                    console.log("Is past service date:", isPastServiceDate);
+                        console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                        console.log("Is past service date:", isPastServiceDate);
 
-                    // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
-                    if (!isPastServiceDate) {
-                        console.log("Ngày chưa đến, không cập nhật"); // Thêm log
-                        toast({
-                            title: "Không thể hoàn thành",
-                            description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
-                            variant: "destructive",
+                        // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                        if (!isPastServiceDate) {
+                            console.log("Ngày chưa đến, không cập nhật");
+                            toast({
+                                title: "Không thể hoàn thành",
+                                description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                variant: "destructive",
+                            });
+                            continue; // Bỏ qua đơn này, không cập nhật
+                        }
+
+                        console.log("Cập nhật đơn hàng:", id);
+                        // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+                        await updateOrderMutation.mutateAsync({
+                            id: order.id,
+                            status: "completed",
+                            note: "Đơn hàng đã hoàn thành"
                         });
-                        return; // Bỏ qua đơn này, không cập nhật
                     }
-
-                    console.log("Cập nhật đơn hàng:", id); // Thêm log
-                    // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
-                    updateOrderMutation.mutate({
-                        id: order.id, // Dùng order.id thật
-                        status: "completed",
-                        note: "Đơn hàng đã hoàn thành"
+                    toast({
+                        title: "Hoàn thành thành công",
+                        description: "Đã hoàn thành các đơn hàng được chọn.",
                     });
-                });
+                } catch (error) {
+                    toast({
+                        title: "Lỗi khi hoàn thành",
+                        description: "Có lỗi xảy ra khi hoàn thành đơn hàng.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setBulkLoading(false);
+                }
             },
             icon: <Package className="w-4 h-4 mr-2" />,
         },
         {
             label: "Hủy đơn",
-            action: (keys: string[]) => {
-                keys.forEach(id => {
-                    updateOrderMutation.mutate({ id, status: "cancelled" });
-                });
+            action: async (keys: string[]) => {
+                setBulkLoading(true);
+                setBulkLoadingMessage("Đang hủy đơn hàng...");
+                try {
+                    let successCount = 0;
+                    let errorCount = 0;
+                    for (const key of keys) {
+                        const index = parseInt(key);
+                        const order = orders[index];
+                        if (!order) {
+                            errorCount++;
+                            continue;
+                        }
+                        const orderId = order.id || order.orderNumber;
+                        try {
+                            const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                                }),
+                            });
+                            if (res.ok) {
+                                successCount++;
+                            } else {
+                                errorCount++;
+                            }
+                        } catch (error) {
+                            errorCount++;
+                            console.error(`Failed to cancel order ${orderId}:`, error);
+                        }
+                    }
+                    queryClient.invalidateQueries({ queryKey: ['orders'] });
+                    toast({
+                        title: "Hoàn thành hủy đơn hàng loạt",
+                        description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+                        variant: errorCount > 0 ? "destructive" : "default",
+                    });
+                } catch (error) {
+                    toast({
+                        title: "Lỗi khi hủy đơn hàng",
+                        description: "Có lỗi xảy ra khi hủy đơn hàng.",
+                        variant: "destructive",
+                    });
+                } finally {
+                    setBulkLoading(false);
+                }
             },
             icon: <XCircle className="w-4 h-4 mr-2" />,
             variant: "destructive" as const,
@@ -1042,18 +1178,19 @@ export default function Orders() {
                 return isValidStatus && isServiceDateValid;
             },
         },
-        {
-            label: "Hoàn tiền",
-            action: handleRefund,
-            icon: <DollarSign className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => order.paymentStatus === "paid" && order.orderStatus !== "cancelled",
-        },
+        // {
+        //     label: "Hoàn tiền",
+        //     action: handleRefund,
+        //     icon: <DollarSign className="mr-2 h-4 w-4" />,
+        //     condition: (order: Order) => order.paymentStatus === "paid" && order.orderStatus !== "cancelled",
+        // },
         {
             label: "Hủy đơn",
             action: handleCancelOrder,
             icon: <XCircle className="mr-2 h-4 w-4" />,
             variant: "destructive" as const,
             condition: (order: Order) => order.orderStatus !== "completed" && order.orderStatus !== "cancelled",
+            tooltip: "Hủy toàn bộ đơn hàng, chuyển trạng thái vé và hoàn tiền tự động nếu đã thanh toán.",
         },
         {
             label: "Xuất hóa đơn",
@@ -1129,12 +1266,12 @@ export default function Orders() {
                             Xác nhận
                         </Button>
                     )}
-                    {selectedOrder.paymentStatus === "paid" && selectedOrder.orderStatus !== "cancelled" && (
+                    {/* {selectedOrder.paymentStatus === "paid" && selectedOrder.orderStatus !== "cancelled" && (
                         <Button size="sm" variant="outline" onClick={() => handleRefund(selectedOrder)}>
                             <DollarSign className="w-4 h-4 mr-2" />
                             Hoàn tiền
                         </Button>
-                    )}
+                    )} */}
                     <Button size="sm" variant="outline" onClick={() => handleExportInvoice(selectedOrder)}>
                         <FileText className="w-4 h-4 mr-2" />
                         Xuất PDF
@@ -1314,7 +1451,7 @@ export default function Orders() {
                     </div>
                 )}
 
-               
+
 
                 {/* Change Calendar Information */}
                 {selectedOrder.changeCalendar && selectedOrder.inforChangeCalendar && (
@@ -1782,6 +1919,22 @@ export default function Orders() {
                 }}
                 confirmText="Hủy đơn hàng"
             />
+            {/* // Thêm modal loading ở cuối component, trước </div> cuối */}
+            {bulkLoading && (
+                <ModalForm
+                    open={bulkLoading}
+                    onOpenChange={() => { }} // Không cho đóng
+                    title="Đang xử lý"
+                    description={bulkLoadingMessage}
+                    mode="view"
+                    size="small"
+                >
+                    <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+                        <span className="ml-2">Vui lòng đợi...</span>
+                    </div>
+                </ModalForm>
+            )}
         </div>
     );
 }

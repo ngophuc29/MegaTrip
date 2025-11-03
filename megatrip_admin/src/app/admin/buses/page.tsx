@@ -222,6 +222,8 @@ const validateForm = (data: BusFormData, fieldsToValidate?: string[]): Record<st
 
     const shouldValidate = (field: string) => !fieldsToValidate || fieldsToValidate.includes(field);
 
+
+
     // busCode: required, uppercase alnum/_- 3-12 chars
     if (shouldValidate('busCode')) {
         if (!data.busCode || !data.busCode.trim()) {
@@ -585,6 +587,8 @@ export default function Buses() {
     });
     const [originalBus, setOriginalBus] = useState<BusRoute | null>(null);
     const [originalDepartureDates, setOriginalDepartureDates] = useState<string[]>([]);
+    const [hasBookings, setHasBookings] = useState<boolean>(false);
+    const [loadingHasBookings, setLoadingHasBookings] = useState(false);
     // Fetch buses from server API
     const { data: busesData, isLoading, error, refetch } = useQuery({
         queryKey: ['buses', pagination.current, pagination.pageSize, searchQuery, filters],
@@ -720,96 +724,96 @@ export default function Buses() {
     // Update bus mutation -> PUT /api/buses/:id
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-        const payload: any = { ...data }; // Bắt đầu với tất cả data
+            const payload: any = { ...data }; // Bắt đầu với tất cả data
 
-        // So sánh và chỉ gửi các trường đã thay đổi
-        if (originalBus) {
-            const changedFields: string[] = [];
-            Object.keys(data).forEach(key => {
-                const originalValue = (originalBus as any)[key];
-                const newValue = (data as any)[key];
-                // So sánh sâu (bao gồm arrays/objects)
-                if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
-                    changedFields.push(key);
-                }
+            // So sánh và chỉ gửi các trường đã thay đổi
+            if (originalBus) {
+                const changedFields: string[] = [];
+                Object.keys(data).forEach(key => {
+                    const originalValue = (originalBus as any)[key];
+                    const newValue = (data as any)[key];
+                    // So sánh sâu (bao gồm arrays/objects)
+                    if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                        changedFields.push(key);
+                    }
+                });
+                console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
+                // Chỉ giữ lại các trường đã thay đổi
+                const partialPayload: any = {};
+                changedFields.forEach(key => partialPayload[key] = payload[key]);
+                // Ghi đè payload với partialPayload
+                Object.keys(payload).forEach(key => delete payload[key]); // Xóa tất cả
+                Object.assign(payload, partialPayload); // Chỉ thêm changed fields
+            }
+
+            // Xử lý payload như cũ (operator, route, dates, etc.) - nhưng chỉ cho các trường đã thay đổi
+            if ((data as any).operatorId && payload.operatorId) {  // Chỉ xử lý nếu trường này có trong payload
+                const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
+                if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
+            }
+            if ((data as any).routeFrom && payload.routeFrom) {
+                const parsedFromUp = parseRouteValue((data as any).routeFrom);
+                payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
+            }
+            if ((data as any).routeTo && payload.routeTo) {
+                const parsedToUp = parseRouteValue((data as any).routeTo);
+                payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
+            }
+
+            // Normalize departureDates/arrivalDates to ISO/Z - chỉ nếu chúng có trong payload
+            if ((data as any).departureDates && Array.isArray((data as any).departureDates) && payload.departureDates) {
+                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
+            }
+            if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates) && payload.arrivalDates) {
+                payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
+            }
+            if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length) && payload.departureAt) {
+                payload.departureDates = [localToIso((data as any).departureAt)];
+            }
+            if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length) && payload.arrivalAt) {
+                payload.arrivalDates = [localToIso((data as any).arrivalAt)];
+            }
+
+            delete payload.departureAt;
+            delete payload.arrivalAt;
+
+            if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
+                payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
+            }
+            const allSubtypes = getAllSubtypes(loaixeData);
+            let subtypeUpd;
+            if (selectedSubtypeId) {
+                subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
+            } else {
+                const firstTypeName = payload.busType && payload.busType[0];
+                subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
+            }
+            if (subtypeUpd && payload.busType) {
+                payload.busType = [subtypeUpd.name];
+                if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
+            }
+            if (amenitiesSelected && amenitiesSelected.length && payload.amenities) {
+                payload.amenities = amenitiesSelected.join(', ');
+            }
+            payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+            if (typeof payload.adultPrice !== 'undefined' && payload.adultPrice !== null) payload.adultPrice = Number(payload.adultPrice);
+            if (typeof payload.childPrice !== 'undefined' && payload.childPrice !== null) payload.childPrice = Number(payload.childPrice);
+            delete payload.price;
+
+            console.log('[Buses] updateBus payload (only changed fields):', JSON.stringify(payload, null, 2));
+
+            const res = await fetch(`${API_BASE}/api/buses/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             });
-            console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
-            // Chỉ giữ lại các trường đã thay đổi
-            const partialPayload: any = {};
-            changedFields.forEach(key => partialPayload[key] = payload[key]);
-            // Ghi đè payload với partialPayload
-            Object.keys(payload).forEach(key => delete payload[key]); // Xóa tất cả
-            Object.assign(payload, partialPayload); // Chỉ thêm changed fields
-        }
-
-        // Xử lý payload như cũ (operator, route, dates, etc.) - nhưng chỉ cho các trường đã thay đổi
-        if ((data as any).operatorId && payload.operatorId) {  // Chỉ xử lý nếu trường này có trong payload
-            const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
-            if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
-        }
-        if ((data as any).routeFrom && payload.routeFrom) {
-            const parsedFromUp = parseRouteValue((data as any).routeFrom);
-            payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
-        }
-        if ((data as any).routeTo && payload.routeTo) {
-            const parsedToUp = parseRouteValue((data as any).routeTo);
-            payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
-        }
-
-        // Normalize departureDates/arrivalDates to ISO/Z - chỉ nếu chúng có trong payload
-        if ((data as any).departureDates && Array.isArray((data as any).departureDates) && payload.departureDates) {
-            payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
-        }
-        if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates) && payload.arrivalDates) {
-            payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
-        }
-        if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length) && payload.departureAt) {
-            payload.departureDates = [localToIso((data as any).departureAt)];
-        }
-        if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length) && payload.arrivalAt) {
-            payload.arrivalDates = [localToIso((data as any).arrivalAt)];
-        }
-
-        delete payload.departureAt;
-        delete payload.arrivalAt;
-
-        if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
-            payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
-        }
-        const allSubtypes = getAllSubtypes(loaixeData);
-        let subtypeUpd;
-        if (selectedSubtypeId) {
-            subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
-        } else {
-            const firstTypeName = payload.busType && payload.busType[0];
-            subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
-        }
-        if (subtypeUpd && payload.busType) {
-            payload.busType = [subtypeUpd.name];
-            if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
-        }
-        if (amenitiesSelected && amenitiesSelected.length && payload.amenities) {
-            payload.amenities = amenitiesSelected.join(', ');
-        }
-        payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
-
-        if (typeof payload.adultPrice !== 'undefined' && payload.adultPrice !== null) payload.adultPrice = Number(payload.adultPrice);
-        if (typeof payload.childPrice !== 'undefined' && payload.childPrice !== null) payload.childPrice = Number(payload.childPrice);
-        delete payload.price;
-
-        console.log('[Buses] updateBus payload (only changed fields):', JSON.stringify(payload, null, 2));
-
-        const res = await fetch(`${API_BASE}/api/buses/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            throw new Error(j.error || 'Failed to update');
-        }
-        return res.json();
-    },
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to update');
+            }
+            return res.json();
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
@@ -892,6 +896,14 @@ export default function Buses() {
         // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields
         const shouldValidate = (field: string) => !changedFields || changedFields.includes(field);
 
+
+        // Thêm check: Nếu edit, có bookings, và departureDates thay đổi -> block
+        if (modalMode === "edit" && hasBookings && originalDepartureDates.length > 0) {
+            const currentDeps = Array.isArray(data.departureDates) ? data.departureDates : (data.departureAt ? [data.departureAt] : []);
+            if (JSON.stringify(originalDepartureDates) !== JSON.stringify(currentDeps)) {
+                errors.departureAt = "Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ. ";
+            }
+        }
         // busCode: required, uppercase alnum/_- 3-12 chars
         if (shouldValidate('busCode')) {
             if (!data.busCode || !data.busCode.trim()) {
@@ -1259,18 +1271,41 @@ export default function Buses() {
             key: "status",
             title: "Trạng thái",
             sortable: true,
-            render: (value) => (
-                <Badge className={
-                    value === "scheduled" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                        value === "cancelled" ? "bg-red-100 text-red-800 hover:bg-red-100" :
-                            value === "delayed" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
-                                "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                }>
-                    {value === "scheduled" ? "Đã lên lịch" :
-                        value === "cancelled" ? "Đã hủy" :
-                            value === "delayed" ? "Hoãn" : "Hoàn thành"}
-                </Badge>
-            ),
+            render: (value, record: BusRoute) => {
+                const now = new Date();
+                const depDates = Array.isArray((record as any).departureDates) && (record as any).departureDates.length
+                    ? (record as any).departureDates.map(d => new Date(d))
+                    : (record.departureAt ? [new Date(record.departureAt)] : []);
+                const allPast = depDates.every(d => d < now);
+
+                return (
+                    <div className="flex items-center space-x-2">
+                        <Badge className={
+                            value === "scheduled" ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                                value === "cancelled" ? "bg-red-100 text-red-800 hover:bg-red-100" :
+                                    value === "delayed" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
+                                        "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                        }>
+                            {value === "scheduled" ? "Đã lên lịch" :
+                                value === "cancelled" ? "Đã hủy" :
+                                    value === "delayed" ? "Hoãn" : "Hoàn thành"}
+                        </Badge>
+                        {allPast && value === "scheduled" && (
+                            <>
+                                <Badge className="bg-red-600 text-white font-bold animate-pulse shadow-lg">Chuyến xe đã qua</Badge>  {/* Thêm animate-pulse và shadow để nổi bật */}
+                                <Button
+                                    size="sm"
+                                    onClick={() => bulkActionMutation.mutate({ action: 'update_status_by_dates', ids: [record.id] })}
+                                    disabled={bulkActionMutation.isPending}
+                                    className="bg-red-500 hover:bg-red-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"  // Màu đỏ nổi bật, thêm shadow và transition
+                                >
+                                    {bulkActionMutation.isPending ? "Đang cập nhật..." : "Cập nhật"}
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                );
+            },
         },
     ];
 
@@ -1321,6 +1356,35 @@ export default function Buses() {
                 ? bus.amenities.map(s => String(s).trim()).filter(Boolean)
                 : (bus.amenities || "").split(',').map(s => s.trim()).filter(Boolean)
         );
+
+        setLoadingHasBookings(true); // Thêm: bắt đầu loading
+        // Fetch slots để check bookings
+        fetch(`${API_BASE}/api/buses/bus-slots/${bus.id}`)
+            .then(res => res.json())
+            .then(data => {
+                console.log('Fetched bus-slots data:', data); // Giữ log
+                const slots = data?.dateBookings || [];
+                const hasAnyBookings = slots.some((slot: any) => {
+                    const userBookings = (slot.logSeatBooked || []).filter(log => {
+                        const isUser = log.reservationId; // Chỉ cần reservationId (bỏ customerId)
+                        const isActive = log.status === 'confirm' || log.status === 'confirmed';
+                        const notCancelled = !log.cancelledAt || log.cancelledAt == null || log.cancelledAt === undefined;
+                        console.log('Log entry:', log, 'isUser:', isUser, 'isActive:', isActive, 'notCancelled:', notCancelled); // Giữ debug
+                        return isUser && isActive && notCancelled;
+                    });
+                    console.log('slot dateIso:', slot.dateIso, 'userBookings length:', userBookings.length); // Giữ log
+                    return userBookings.length > 0;
+                });
+                console.log('hasAnyBookings:', hasAnyBookings); // Giữ log
+                setHasBookings(hasAnyBookings);
+            })
+            .catch(err => {
+                console.error('Error fetching slots:', err); // Đã có
+                setHasBookings(false);
+            })
+            .finally(() => {
+                setLoadingHasBookings(false); // Thêm: kết thúc loading
+            });
     };
 
     const handleDelete = (bus: BusRoute) => {
@@ -1827,13 +1891,20 @@ export default function Buses() {
 
                 {/* Replace single departureAt input with multi-date UI */}
                 <div className="grid grid-cols-3 gap-4">
-                    
+
                     <div className="col-span-2">
                         <Label>Lịch khởi hành *</Label>
 
+                        {/* Thêm thông báo nếu disabled */}
+                        {hasBookings && modalMode === "edit" && (
+                            <div className="text-sm text-red-500 mt-1">
+                                Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ.
+                            </div>
+                        )}
+
                         {/* Recurrence controls */}
                         <div className="flex items-center space-x-2 mb-2">
-                            <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} >
+                            <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} disabled={hasBookings && modalMode === "edit"}>
                                 <SelectTrigger className="flex-1">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -1846,7 +1917,7 @@ export default function Buses() {
                             </Select>
 
                             {recurrenceMode === "weekday_of_month" && (
-                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}>
+                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))} disabled={hasBookings && modalMode === "edit"}>
                                     <SelectTrigger className="w-40">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -1863,13 +1934,15 @@ export default function Buses() {
                             )}
 
                             <div className="flex items-center space-x-2">
-                                <Button onClick={applyRecurrence}>Áp dụng</Button>
+                                <Button onClick={applyRecurrence} disabled={hasBookings && modalMode === "edit"}>
+                                    Áp dụng
+                                </Button>
 
-                                {/* Clear button only visible after apply produced departures with arrivals */}
                                 {recurrenceApplied && (
                                     <Button
                                         onClick={handleResetSchedule}
                                         className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-sm"
+                                        disabled={hasBookings && modalMode === "edit"}
                                     >
                                         <svg
                                             xmlns="http://www.w3.org/2000/svg"
@@ -1902,42 +1975,12 @@ export default function Buses() {
                                                 type="datetime-local"
                                                 value={d || ""}
                                                 onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
-                                                    if (idx >= deps.length) deps.push(val); else deps[idx] = val;
-                                                    // update departureDates
-                                                    handleFormChange('departureDates' as any, deps);
-                                                    // keep canonical departureAt in sync with first date
-                                                    if (idx === 0) handleFormChange('departureAt', val);
-
-                                                    // ensure arrivalDates has a corresponding entry
-                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                                    if (!arrs[idx]) {
-                                                        // try to compute default arrival using delta from first pair if available
-                                                        const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
-                                                        const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
-                                                        let defaultArr = "";
-                                                        if (firstDep && firstArr) {
-                                                            const baseDep = parseLocalInput(firstDep);
-                                                            const baseArr = parseLocalInput(firstArr);
-                                                            if (baseDep && baseArr) {
-                                                                const delta = baseArr.getTime() - baseDep.getTime();
-                                                                const thisDep = parseLocalInput(val) || parseLocalInput(firstDep);
-                                                                if (thisDep) defaultArr = toLocalInput(new Date(thisDep.getTime() + delta));
-                                                            }
-                                                        }
-                                                        if (!defaultArr) {
-                                                            // fallback: +6 hours
-                                                            const thisDep = parseLocalInput(val);
-                                                            defaultArr = thisDep ? toLocalInput(new Date(thisDep.getTime() + 6 * 3600000)) : "";
-                                                        }
-                                                        arrs[idx] = defaultArr;
-                                                        handleFormChange('arrivalDates' as any, arrs);
-                                                        if (idx === 0) handleFormChange('arrivalAt', arrs[0] || "");
-                                                    }
+                                                    // ... existing onChange logic ...
                                                 }}
                                                 min={getTomorrowLocal()}
                                                 className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
+                                                // disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                                disabled={hasBookings || loadingHasBookings} 
                                             />
                                         </div>
 
@@ -1947,72 +1990,30 @@ export default function Buses() {
                                                 type="datetime-local"
                                                 value={arrVal || ""}
                                                 onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                                    if (idx >= arrs.length) arrs.push(val); else arrs[idx] = val;
-                                                    handleFormChange('arrivalDates' as any, arrs);
-                                                    if (idx === 0) handleFormChange('arrivalAt', val);
-
-                                                    // recompute duration for canonical pair (first)
-                                                    const firstDep = (formData.departureDates && formData.departureDates.length) ? formData.departureDates[0] : formData.departureAt;
-                                                    const firstArr = (arrs && arrs.length) ? arrs[0] : formData.arrivalAt;
-                                                    if (firstDep && firstArr) {
-                                                        const duration = calculateDuration(firstDep, firstArr);
-                                                        if (duration) handleFormChange('duration', duration);
-                                                    }
+                                                    // ... existing onChange logic ...
                                                 }}
                                                 min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : getTomorrowLocal()}
                                                 className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
+                                                disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
                                             />
                                         </div>
 
                                         <div className="flex items-end" style={{ marginTop: 'auto' }}>
                                             <Button variant="outline" onClick={() => {
-                                                const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
-                                                const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                                // if using fallback single departureAt, convert first then remove
-                                                if (!deps.length && formData.departureAt) deps.push(formData.departureAt);
-                                                deps.splice(idx, 1);
-                                                arrs.splice(idx, 1);
-                                                handleFormChange('departureDates' as any, deps);
-                                                handleFormChange('arrivalDates' as any, arrs);
-                                                // ensure canonical fields sync
-                                                handleFormChange('departureAt', (deps[0] || ""));
-                                                handleFormChange('arrivalAt', (arrs[0] || ""));
-                                            }}>Xóa</Button>
+                                                // ... existing onClick logic ...
+                                            }} disabled={hasBookings && modalMode === "edit"}>
+                                                Xóa
+                                            </Button>
                                         </div>
                                     </div>
                                 );
                             })}
                             <div>
                                 <Button variant="ghost" onClick={() => {
-                                    // add an empty row — user will fill datetime themselves
-                                    const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
-                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
-                                    const newDep = ""; // do not prefill
-                                    deps.push(newDep);
-                                    // only compute default arrival when we can (and newDep is not empty).
-                                    // For empty newDep we keep arrival empty so user can input it.
-                                    let newArr = "";
-                                    const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
-                                    const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
-                                    if (newDep && firstDep && firstArr) {
-                                        const baseDep = parseLocalInput(firstDep);
-                                        const baseArr = parseLocalInput(firstArr);
-                                        if (baseDep && baseArr) {
-                                            const delta = baseArr.getTime() - baseDep.getTime();
-                                            const thisDep = parseLocalInput(newDep);
-                                            if (thisDep) newArr = toLocalInput(new Date(thisDep.getTime() + delta));
-                                        }
-                                    }
-                                    // if still empty, leave newArr = "" (no auto-fill)
-                                    arrs.push(newArr);
-                                    handleFormChange('departureDates' as any, deps);
-                                    handleFormChange('arrivalDates' as any, arrs);
-                                    // set canonical only when first entries are non-empty
-                                    if (deps.length === 1 && deps[0]) handleFormChange('departureAt', deps[0]);
-                                    if (arrs.length === 1 && arrs[0]) handleFormChange('arrivalAt', arrs[0]);
-                                }}>Thêm ngày khởi hành</Button>
+                                    // ... existing onClick logic ...
+                                }} disabled={hasBookings && modalMode === "edit"}>
+                                    Thêm ngày khởi hành
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -2213,13 +2214,12 @@ export default function Buses() {
                                     <Checkbox
                                         id={opt.value}
                                         checked={checked}
+                                        // Trong onCheckedChange của Checkbox amenities
                                         onCheckedChange={(c) => {
+                                            const newAmenities = c ? [...amenitiesSelected, opt.value] : amenitiesSelected.filter(a => a !== opt.value);
+                                            setAmenitiesSelected(newAmenities);
+                                            handleFormChange('amenities', newAmenities.join(', ')); // Sync formData.amenities
                                             setIsFormDirty(true);
-                                            if (c) {
-                                                setAmenitiesSelected(prev => [...prev, opt.value]);
-                                            } else {
-                                                setAmenitiesSelected(prev => prev.filter(a => a !== opt.value));
-                                            }
                                             // clear errors if any
                                             if (formErrors['amenities']) {
                                                 setFormErrors(prev => ({ ...prev, amenities: "" }));

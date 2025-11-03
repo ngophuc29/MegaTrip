@@ -25,6 +25,7 @@ import {
   Timer,
 } from 'lucide-react';
 import TourResults from './tour/TourResults';
+import Chatbot from './components/Chatbot';
 
 const banners = [
   {
@@ -401,7 +402,6 @@ export default function Index() {
     };
   }).filter(Boolean);
 
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const raw = localStorage.getItem('recentTours');
@@ -562,7 +562,6 @@ export default function Index() {
           </div>
         </div>
       </section>
-
 
 
       {/* Featured Tours */}
@@ -745,6 +744,8 @@ export default function Index() {
           </div>
         </div>
       </section>
+
+      <Chatbot />
     </>
 
   );
