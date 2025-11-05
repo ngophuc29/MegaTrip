@@ -835,16 +835,23 @@ export default function XeDuLich() {
                                             <CardContent className="p-4">
                                                 <div className="flex justify-between items-start">
                                                     <div>
-                                                        <div className="text-lg font-bold">{p.code ?? `PROMO-${p._id?.slice?.(0, 6)}`}</div>
-                                                        <div className="text-sm opacity-90">{p.title}</div>
-                                                        <div className="text-xs opacity-75 mt-1">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                        <div className="text-lg font-bold text-white"> <span>Code : </span> {p.code ?? `PROMO-${p._id?.slice?.(0, 6)}`}</div>
+                                                        <div className="text-sm opacity-90 text-white"><span>Tên : </span>{p.title}</div>
+                                                        {p.code && <div className="text-xs opacity-75 text-white">Áp dụng từ {formatPrice(p.minSpend || 0)} VND</div>}
+                                                        <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
                                                     </div>
-                                                    <Button size="sm" variant="secondary" className="text-[hsl(var(--primary))]" onClick={() => {
-                                                        const code = p.code || '';
-                                                        if (code) handleCopy(code);
-                                                    }}>
-                                                        {copied[p.code] ? 'Đang lấy mã!' : 'Copy mã'}
-                                                    </Button>
+                                                    {p.code ? (
+                                                        <Button size="sm" variant="secondary" className="text-red-600" onClick={() => {
+                                                            const code = p.code || '';
+                                                            if (code) handleCopy(code);
+                                                        }}>
+                                                            {copied[p.code] ? 'Đã copy!' : 'Copy mã'}
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="text-xs opacity-75 mt-1 text-white">
+                                                            Tự động áp dụng khi thanh toán từ {formatPrice(p.minSpend || 0)} VND
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>

@@ -258,7 +258,7 @@ export default function Dashboard() {
                             <SelectItem value="30d">30 ngày qua</SelectItem>
                             <SelectItem value="90d">3 tháng qua</SelectItem>
                             <SelectItem value="1y">1 năm qua</SelectItem>
-                            <SelectItem value="today">Ngày hôm nay</SelectItem>  // Đổi thành "Ngày hôm nay"
+                            <SelectItem value="today">Ngày hôm nay</SelectItem>
                         </SelectContent>
                     </Select>
                     <Button variant="outline" size="sm">
@@ -389,13 +389,13 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-medium text-gray-900">{service.bookings} lượt đặt</div>
+                                        {/* <div className="font-medium text-gray-900">{service.bookings} lượt đặt</div>
                                         <div className="text-sm text-gray-500">{service.revenue} VNĐ</div>
                                         <div className={`text-xs flex items-center ${service.trend === "up" ? "text-green-600" : "text-red-600"
                                             }`}>
                                             {getTrendIcon(service.trend)}
                                             <span className="ml-1">{service.growth}</span>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </div>
                             ))}
@@ -443,12 +443,12 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-4">
+                        {/* <div className="mt-4">
                             <Button variant="outline" className="w-full">
                                 <Eye className="w-4 h-4 mr-2" />
                                 Xem tất cả hoạt động
                             </Button>
-                        </div>
+                        </div> */}
                     </CardContent>
                 </Card>
             </div>

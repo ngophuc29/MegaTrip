@@ -142,7 +142,7 @@ export default function DoiLichPage() {
 
     // payment modal state
     const [payOpen, setPayOpen] = useState<boolean>(false);
-    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('momo');
+    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('zalopay');
     const [payAckConfirmed, setPayAckConfirmed] = useState<boolean>(false);
 
     const [options, setOptions] = useState<Option[]>([]);
@@ -1303,12 +1303,12 @@ export default function DoiLichPage() {
                             <RadioGroup value={payMethod} onValueChange={(v) => setPayMethod(v as any)}>
                                 <div className="flex gap-4 items-center">
                                     <label className="flex items-center gap-2">
-                                        <RadioGroupItem value="momo" />
-                                        <span>MoMo</span>
-                                    </label>
-                                    <label className="flex items-center gap-2">
                                         <RadioGroupItem value="zalopay" />
                                         <span>ZaloPay</span>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <RadioGroupItem value="momo" />
+                                        <span>MoMo</span>
                                     </label>
                                 </div>
                             </RadioGroup>

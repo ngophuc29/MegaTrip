@@ -281,7 +281,7 @@ export default function TinTuc() {
                         </Card>
 
                         {/* Popular Tags */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle className="text-lg">Thẻ phổ biến</CardTitle>
                             </CardHeader>
@@ -294,7 +294,7 @@ export default function TinTuc() {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Quick Stats */}
                         <Card>

@@ -32,7 +32,7 @@ export default function ThanhToanThanhCong() {
     const [tickets, setTickets] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
-
+    const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
     const ticketRefs = useRef([]);
 
     const loadFont = async (pdf: jsPDF, fontUrl: string, fontName: string) => {
@@ -66,127 +66,199 @@ export default function ThanhToanThanhCong() {
     };
 
     const generatePDF = async () => {
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        let yPosition = 20;
-
-        const fontLoaded = await loadFont(pdf, '/fonts/arialuni.ttf', 'ArialUnicodeMS');
-
-        pdf.setFontSize(18);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
-        pdf.text('MegaTrip - Hóa Đơn & Vé Điện Tử', 20, yPosition);
-        yPosition += 10;
-        pdf.setFontSize(12);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
-        pdf.text('Địa chỉ: 123 Đường ABC, Quận XYZ, TP.HCM', 20, yPosition);
-        yPosition += 5;
-        pdf.text('Hotline: 1900 1234 | Email: support@MegaTrip.com', 20, yPosition);
-        yPosition += 5;
-        pdf.text('Website: www.MegaTrip.com', 20, yPosition);
-        yPosition += 15;
-
-        pdf.setFontSize(14);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
-        pdf.text('Thông Tin Đơn Hàng', 20, yPosition);
-        yPosition += 10;
-        pdf.setFontSize(10);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
-        pdf.text(`Mã đơn hàng: ${order.orderNumber}`, 20, yPosition);
-        yPosition += 5;
-        pdf.text(`Ngày đặt: ${new Date(order.createdAt).toLocaleDateString('vi-VN')}`, 20, yPosition);
-        yPosition += 5;
-        pdf.text(`Khách hàng: ${order.customerName}`, 20, yPosition);
-        yPosition += 5;
-        pdf.text(`Email: ${order.customerEmail}`, 20, yPosition);
-        yPosition += 5;
-        pdf.text(`Số điện thoại: ${order.customerPhone}`, 20, yPosition);
-        yPosition += 10;
-
-        const tableFont = fontLoaded ? 'ArialUnicodeMS' : 'times';
-        pdf.setFont(tableFont);
-        const tableColumns = ['STT', 'Tên sản phẩm', 'Số lượng', 'Đơn giá', 'Thành tiền'];
-        const tableRows = order.items.map((item, index) => [
-            index + 1,
-            item.name || item.itemId,
-            item.quantity,
-            formatPrice(item.unitPrice),
-            formatPrice(item.subtotal),
-        ]);
-
+        setIsGeneratingPDF(true);
         try {
-            autoTable(pdf, {
-                head: [tableColumns],
-                body: tableRows,
-                startY: yPosition,
-                theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 2, font: tableFont },
-                headStyles: { fillColor: [41, 128, 185], textColor: 255, font: tableFont },
-                alternateRowStyles: { fillColor: [245, 245, 245] },
-            });
-            yPosition = pdf.lastAutoTable.finalY + 10;
-        } catch (e) {
-            console.error('Error creating table:', e);
-            pdf.setFontSize(10);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            let yPosition = 20;
+
+            const fontLoaded = await loadFont(pdf, '/fonts/arialuni.ttf', 'ArialUnicodeMS');
+
+            pdf.setFontSize(18);
+            pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
+            pdf.text('MegaTrip - Hóa Đơn & Vé Điện Tử', 20, yPosition);
+            yPosition += 10;
+            pdf.setFontSize(12);
             pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
-            pdf.text('Chi tiết items:', 20, yPosition);
-            yPosition += 10;
-            order.items.forEach((item, index) => {
-                pdf.text(`${index + 1}. ${item.name || item.itemId} - SL: ${item.quantity} - Giá: ${formatPrice(item.unitPrice)} - Tổng: ${formatPrice(item.subtotal)}`, 20, yPosition);
+            pdf.text('Địa chỉ: 123 Đường ABC, Quận XYZ, TP.HCM', 20, yPosition);
+            yPosition += 5;
+            pdf.text('Hotline: 1900 1234 | Email: support@MegaTrip.com', 20, yPosition);
+            yPosition += 5;
+            pdf.text('Website: www.MegaTrip.com', 20, yPosition);
+            yPosition += 15;
+
+            pdf.setFontSize(14);
+            pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
+
+            if (order.changeCalendar) {
+                // Handle đổi lịch
+                pdf.text('Thông Tin Đổi Lịch', 20, yPosition);
+                yPosition += 10;
+                pdf.setFontSize(10);
+                pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
+                pdf.text(`Mã đơn hàng gốc: ${order.orderNumber}`, 20, yPosition);
                 yPosition += 5;
-            });
+                pdf.text(`Ngày đặt gốc: ${new Date(order.createdAt).toLocaleDateString('vi-VN')}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Ngày đổi: ${order.inforChangeCalendar?.data?.changeDate || 'N/A'}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Ghi chú: ${order.inforChangeCalendar?.data?.note || 'N/A'}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Phí đổi lịch: ${formatPrice(order.inforChangeCalendar?.penalty || 0)}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Tổng thanh toán cho đổi: ${formatPrice(order.inforChangeCalendar?.totalpayforChange || 0)}`, 20, yPosition);
+                yPosition += 5;
+                // pdf.text(`Giá mới: ${formatPrice(order.inforChangeCalendar?.newPrice || order.total)}`, 20, yPosition);
+                yPosition += 10;
+            } else {
+                // Handle thanh toán bình thường
+                pdf.text('Thông Tin Đơn Hàng', 20, yPosition);
+                yPosition += 10;
+                pdf.setFontSize(10);
+                pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
+                pdf.text(`Mã đơn hàng: ${order.orderNumber}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Ngày đặt: ${new Date(order.createdAt).toLocaleDateString('vi-VN')}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Khách hàng: ${order.customerName}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Email: ${order.customerEmail}`, 20, yPosition);
+                yPosition += 5;
+                pdf.text(`Số điện thoại: ${order.customerPhone}`, 20, yPosition);
+                yPosition += 10;
+            }
+
+            const tableFont = fontLoaded ? 'ArialUnicodeMS' : 'times';
+            pdf.setFont(tableFont);
+            const tableColumns = ['STT', 'Tên sản phẩm', 'Số lượng', 'Đơn giá', 'Thành tiền'];
+            let tableRows;
+            if (order.changeCalendar) {
+                // Chỉ hiện phí đổi lịch
+                tableRows = [
+                    [1, 'Phí đổi lịch', 1, formatPrice(order.inforChangeCalendar?.totalpayforChange || 0), formatPrice(order.inforChangeCalendar?.totalpayforChange || 0)]
+                ];
+            } else {
+                // Hiện items bình thường
+                tableRows = order.items.map((item, index) => [
+                    index + 1,
+                    item.name || item.itemId,
+                    item.quantity,
+                    formatPrice(item.unitPrice),
+                    formatPrice(item.subtotal),
+                ]);
+            }
+
+            try {
+                autoTable(pdf, {
+                    head: [tableColumns],
+                    body: tableRows,
+                    startY: yPosition,
+                    theme: 'grid',
+                    styles: { fontSize: 8, cellPadding: 2, font: tableFont },
+                    headStyles: { fillColor: [41, 128, 185], textColor: 255, font: tableFont },
+                    alternateRowStyles: { fillColor: [245, 245, 245] },
+                });
+                yPosition = pdf.lastAutoTable.finalY + 10;
+            } catch (e) {
+                console.error('Error creating table:', e);
+                pdf.setFontSize(10);
+                pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
+                pdf.text('Chi tiết items:', 20, yPosition);
+                yPosition += 10;
+                order.items.forEach((item, index) => {
+                    pdf.text(`${index + 1}. ${item.name || item.itemId} - SL: ${item.quantity} - Giá: ${formatPrice(item.unitPrice)} - Tổng: ${formatPrice(item.subtotal)}`, 20, yPosition);
+                    yPosition += 5;
+                });
+                yPosition += 10;
+            }
+
+            pdf.setFontSize(12);
+            pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
+            const totalToShow = order.changeCalendar ? (order.inforChangeCalendar?.totalpayforChange || 0) : order.total;
+            pdf.text(`Tổng tiền: ${formatPrice(totalToShow)}`, 140, yPosition);
+            yPosition += 5;
+
+            pdf.line(20, yPosition, 190, yPosition);
             yPosition += 10;
-        }
 
-        pdf.setFontSize(12);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
-        pdf.text(`Tổng tiền: ${formatPrice(order.total)}`, 140, yPosition);
-        yPosition += 5;
+            pdf.setFontSize(14);
+            pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
+            pdf.text('Vé Điện Tử', 20, yPosition);
+            yPosition += 10;
 
-        pdf.line(20, yPosition, 190, yPosition);
-        yPosition += 10;
+            for (let i = 0; i < tickets.length; i++) {
+                const ticketElement = ticketRefs.current[i];
+                console.log(`Attempting to capture ref ${i}:`, ticketElement);
+                if (ticketElement) {
+                    try {
+                        const canvas = await html2canvas(ticketElement, {
+                            scale: 4,
+                            useCORS: true,
+                            allowTaint: false,
+                            backgroundColor: '#ffffff',
+                            logging: true,
+                            width: ticketElement.scrollWidth + 10,
+                            height: ticketElement.scrollHeight + 10,
+                            timeout: 10000,
+                            ignoreElements: (element) => element.tagName === 'SCRIPT' || element.tagName === 'STYLE',
+                            onclone: (clonedDoc) => {
+                                const clonedElement = clonedDoc.querySelector(`.ve-dien-tu-${i}`);
+                                if (clonedElement) {
+                                    clonedElement.style.visibility = 'visible';
+                                    clonedElement.style.display = 'block';
+                                    clonedElement.style.padding = '0px';
+                                    clonedElement.style.border = '1px solid #000'; // Add border để force hiện
+                                }
+                            },
 
-        pdf.setFontSize(14);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
-        pdf.text('Vé Điện Tử', 20, yPosition);
-        yPosition += 10;
+                        });
+                        const imgData = canvas.toDataURL('image/png');
+                        const imgWidth = 170;
+                        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                        if (yPosition + imgHeight > 280) {
+                            pdf.addPage();
+                            yPosition = 20;
+                        }
+                        pdf.addImage(imgData, 'PNG', 20, yPosition, imgWidth, imgHeight);
+                        yPosition += imgHeight + 10;
+                        console.log(`Successfully captured vé ${i + 1}`);
+                    } catch (e) {
+                        console.error('Error capturing VeDienTu:', e);
+                        // Fallback text, update để dùng ticket data
+                        pdf.setFontSize(12);
+                        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
+                        pdf.text(`Vé Điện Tử - ${tickets[i].ticketNumber || tickets[i]._id}`, 20, yPosition);
+                        yPosition += 8;
+                        pdf.setFontSize(10);
+                        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
 
-        for (let i = 0; i < tickets.length; i++) {
-            const ticketElement = ticketRefs.current[i];
-            console.log(`Attempting to capture ref ${i}:`, ticketElement);
-            if (ticketElement) {
-                try {
-                    const canvas = await html2canvas(ticketElement, {
-                        scale: 4,
-                        useCORS: true,
-                        allowTaint: false,
-                        backgroundColor: '#ffffff',
-                        logging: true,
-                        width: ticketElement.scrollWidth + 10,
-                        height: ticketElement.scrollHeight + 10,
-                        timeout: 10000,
-                        ignoreElements: (element) => element.tagName === 'SCRIPT' || element.tagName === 'STYLE',
-                        onclone: (clonedDoc) => {
-                            const clonedElement = clonedDoc.querySelector(`.ve-dien-tu-${i}`);
-                            if (clonedElement) {
-                                clonedElement.style.visibility = 'visible';
-                                clonedElement.style.display = 'block';
-                                clonedElement.style.padding = '0px';
-                                clonedElement.style.border = '1px solid #000'; // Add border để force hiện
+                        let passenger = {};
+                        if (typeof tickets[i].passenger === 'string') {
+                            try {
+                                passenger = JSON.parse(tickets[i].passenger);
+                            } catch (e) {
+                                console.error('Error parsing passenger string:', e);
+                                passenger = {};
                             }
-                        },
+                        } else if (typeof tickets[i].passenger === 'object') {
+                            passenger = tickets[i].passenger || {};
+                        }
 
-                    });
-                    const imgData = canvas.toDataURL('image/png');
-                    const imgWidth = 170;
-                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-                    if (yPosition + imgHeight > 280) {
-                        pdf.addPage();
-                        yPosition = 20;
+                        pdf.text(`Hành khách: ${passenger.firstName || passenger.name || ''} ${passenger.lastName || ''}`, 20, yPosition);
+                        yPosition += 5;
+                        pdf.text(`Ngày khởi hành: ${tickets[i].travelDate || 'N/A'}`, 20, yPosition); // Dùng travelDate mới
+                        yPosition += 5;
+                        pdf.text(`Giờ khởi hành: ${tickets[i].travelStart ? new Date(tickets[i].travelStart).toLocaleString('vi-VN') : 'N/A'}`, 20, yPosition); // Dùng travelStart mới
+                        yPosition += 5;
+                        pdf.text(`Số ghế: ${tickets[i].seats?.join(', ') || 'N/A'}`, 20, yPosition);
+                        yPosition += 5;
+                        pdf.text(`Trạng thái: ${tickets[i].status}`, 20, yPosition);
+                        yPosition += 5;
+                        pdf.text(`Mã đặt chỗ: ${order.orderNumber}`, 20, yPosition);
+                        yPosition += 10;
                     }
-                    pdf.addImage(imgData, 'PNG', 20, yPosition, imgWidth, imgHeight);
-                    yPosition += imgHeight + 10;
-                    console.log(`Successfully captured vé ${i + 1}`);
-                } catch (e) {
-                    console.error('Error capturing VeDienTu:', e);
+                } else {
+                    console.warn(`Ref .ve-dien-tu-${i} not found`);
+                    // Fallback text, update để dùng ticket data
                     pdf.setFontSize(12);
                     pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
                     pdf.text(`Vé Điện Tử - ${tickets[i].ticketNumber || tickets[i]._id}`, 20, yPosition);
@@ -206,66 +278,32 @@ export default function ThanhToanThanhCong() {
                         passenger = tickets[i].passenger || {};
                     }
 
-                    pdf.text(`Hành khách: ${passenger.firstName || ''} ${passenger.lastName || ''}`, 20, yPosition);
+                    pdf.text(`Hành khách: ${passenger.firstName || passenger.name || ''} ${passenger.lastName || ''}`, 20, yPosition);
                     yPosition += 5;
-                    if (tickets[i].departure) pdf.text(`Điểm khởi hành: ${tickets[i].departure}`, 20, yPosition);
+                    pdf.text(`Ngày khởi hành: ${tickets[i].travelDate || 'N/A'}`, 20, yPosition); // Dùng travelDate mới
                     yPosition += 5;
-                    if (tickets[i].arrival) pdf.text(`Điểm đến: ${tickets[i].arrival}`, 20, yPosition);
+                    pdf.text(`Giờ khởi hành: ${tickets[i].travelStart ? new Date(tickets[i].travelStart).toLocaleString('vi-VN') : 'N/A'}`, 20, yPosition); // Dùng travelStart mới
                     yPosition += 5;
-                    if (tickets[i].departureTime) pdf.text(`Giờ khởi hành: ${new Date(tickets[i].departureTime).toLocaleString('vi-VN')}`, 20, yPosition);
-                    yPosition += 5;
-                    if (tickets[i].seatNumber) pdf.text(`Số ghế: ${tickets[i].seatNumber}`, 20, yPosition);
+                    pdf.text(`Số ghế: ${tickets[i].seats?.join(', ') || 'N/A'}`, 20, yPosition);
                     yPosition += 5;
                     pdf.text(`Trạng thái: ${tickets[i].status}`, 20, yPosition);
                     yPosition += 5;
                     pdf.text(`Mã đặt chỗ: ${order.orderNumber}`, 20, yPosition);
                     yPosition += 10;
                 }
-            } else {
-                console.warn(`Ref .ve-dien-tu-${i} not found`);
-                pdf.setFontSize(12);
-                pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'bold');
-                pdf.text(`Vé Điện Tử - ${tickets[i].ticketNumber || tickets[i]._id}`, 20, yPosition);
-                yPosition += 8;
-                pdf.setFontSize(10);
-                pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
-
-                let passenger = {};
-                if (typeof tickets[i].passenger === 'string') {
-                    try {
-                        passenger = JSON.parse(tickets[i].passenger);
-                    } catch (e) {
-                        console.error('Error parsing passenger string:', e);
-                        passenger = {};
-                    }
-                } else if (typeof tickets[i].passenger === 'object') {
-                    passenger = tickets[i].passenger || {};
-                }
-
-                pdf.text(`Hành khách: ${passenger.firstName || ''} ${passenger.lastName || ''}`, 20, yPosition);
-                yPosition += 5;
-                if (tickets[i].departure) pdf.text(`Điểm khởi hành: ${tickets[i].departure}`, 20, yPosition);
-                yPosition += 5;
-                if (tickets[i].arrival) pdf.text(`Điểm đến: ${tickets[i].arrival}`, 20, yPosition);
-                yPosition += 5;
-                if (tickets[i].departureTime) pdf.text(`Giờ khởi hành: ${new Date(tickets[i].departureTime).toLocaleString('vi-VN')}`, 20, yPosition);
-                yPosition += 5;
-                if (tickets[i].seatNumber) pdf.text(`Số ghế: ${tickets[i].seatNumber}`, 20, yPosition);
-                yPosition += 5;
-                pdf.text(`Trạng thái: ${tickets[i].status}`, 20, yPosition);
-                yPosition += 5;
-                pdf.text(`Mã đặt chỗ: ${order.orderNumber}`, 20, yPosition);
-                yPosition += 10;
             }
+
+            const pageHeight = pdf.internal.pageSize.height;
+            pdf.setFontSize(8);
+            pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
+            pdf.text('Cảm ơn bạn đã sử dụng dịch vụ của MegaTrip!', 20, pageHeight - 20);
+            pdf.text('Vui lòng mang theo vé điện tử khi sử dụng dịch vụ.', 20, pageHeight - 15);
+
+            pdf.save(`hoa-don-ve-dien-tu-${order.orderNumber}.pdf`);
         }
-
-        const pageHeight = pdf.internal.pageSize.height;
-        pdf.setFontSize(8);
-        pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
-        pdf.text('Cảm ơn bạn đã sử dụng dịch vụ của MegaTrip!', 20, pageHeight - 20);
-        pdf.text('Vui lòng mang theo vé điện tử khi sử dụng dịch vụ.', 20, pageHeight - 15);
-
-        pdf.save(`hoa-don-ve-dien-tu-${order.orderNumber}.pdf`);
+        finally {
+            setIsGeneratingPDF(false);
+        }
     };
 
     const formatPrice = (price: number) => {
@@ -274,6 +312,27 @@ export default function ThanhToanThanhCong() {
             currency: 'VND',
         }).format(price);
     };
+
+    // Thêm useEffect riêng để auto download nếu extraData === 'download'
+    useEffect(() => {
+        if (!isLoading && order && tickets.length > 0) {
+            let shouldDownload = false;
+            if (extraData) {
+                try {
+                    const parsed = JSON.parse(decodeURIComponent(extraData));
+                    if (parsed.download) shouldDownload = true;
+                } catch (e) {
+                    // Nếu không parse được, check string cũ
+                    if (extraData === 'download') shouldDownload = true;
+                }
+            }
+            if (shouldDownload) {
+                setTimeout(() => {
+                    generatePDF();
+                }, 1000);
+            }
+        }
+    }, [isLoading, order, tickets, extraData]);
 
     useEffect(() => {
         if (!orderId) {
@@ -411,9 +470,18 @@ export default function ThanhToanThanhCong() {
                                         <div className="text-green-600">{order.customerEmail}</div>
                                     </div>
                                 </div>
-                                <Button className="w-full" variant="outline" onClick={generatePDF}>
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Tải vé điện tử (PDF)
+                                <Button className="w-full" variant="outline" onClick={generatePDF} disabled={isGeneratingPDF}>
+                                    {isGeneratingPDF ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                            Đang tải vé...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Tải vé điện tử (PDF)
+                                        </>
+                                    )}
                                 </Button>
                             </CardContent>
                         </Card>

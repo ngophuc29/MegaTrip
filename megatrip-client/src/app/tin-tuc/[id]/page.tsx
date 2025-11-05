@@ -356,7 +356,7 @@ export default function ChiTietTinTuc() {
                 </article>
 
                 {/* Sidebar can reuse existing widgets or trending list */}
-                <aside className="lg:w-80 space-y-6">
+                <aside className="lg:w-80 space-y-6 ml-auto">
                     <NewsSidebar />
                 </aside>
             </div>

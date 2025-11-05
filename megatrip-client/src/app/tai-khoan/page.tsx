@@ -1405,7 +1405,7 @@ export default function TaiKhoan() {
                                                                         <div className="text-xs text-muted-foreground">Chuyến: {getLegFromUniq(ticket.uniq)}</div>
                                                                     </>
                                                                 )}
-                                                                <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : ''}</div>
+                                                                <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Tùy chọn'}</div>
                                                             </div>
                                                             <div className="text-sm">
                                                                 <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
@@ -1445,7 +1445,7 @@ export default function TaiKhoan() {
                                                                         <div className="text-xs text-muted-foreground">Chuyến: {getLegFromUniq(ticket.uniq)}</div>
                                                                     </>
                                                                 )}
-                                                                <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Chưa có'}</div>
+                                                                <div className="text-xs text-muted-foreground">Ghế: {ticket.seats && ticket.seats.length > 0 ? ticket.seats.join(', ') : 'Tùy chọn'}</div>
                                                             </div>
                                                             <div className="text-sm">
                                                                 <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>

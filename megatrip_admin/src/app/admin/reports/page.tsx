@@ -50,6 +50,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
 import { DateRange } from "react-day-picker";
 
 export default function Reports() {
@@ -190,8 +191,9 @@ export default function Reports() {
     fetchData();
   }, [reportType, dateParams, granularityParam]);
 
+  // Sửa hàm formatCurrency
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("vi-VN").format(value / 1000000) + " triệu ₫";
+    return new Intl.NumberFormat("vi-VN").format(value) + " ₫";
   };
 
   const handleExport = (format: "csv" | "excel" | "pdf") => {
@@ -426,6 +428,14 @@ export default function Reports() {
             </ResponsiveContainer>
 
             <div className="overflow-x-auto">
+              {/* Thêm note cho tab products */}
+              {reportType === "products" && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được duyệt và hoàn thành thành công (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+                  </p>
+                </div>
+              )}
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
@@ -476,9 +486,10 @@ export default function Reports() {
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
               <YAxis tickFormatter={(value) => formatCurrency(value)} />
+              // Sửa Tooltip không nhân nữa
               <Tooltip
                 formatter={(value: number) => [
-                  formatCurrency(value * 1000000),
+                  formatCurrency(value),
                   "",
                 ]}
                 labelFormatter={(label) => `${granularity === 'day' ? 'Ngày' : 'Tháng'} ${label}`}
@@ -1066,6 +1077,14 @@ export default function Reports() {
           <CardDescription>Chi tiết dữ liệu theo từng mục</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Thêm note cho tab products */}
+          {reportType === "products" && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được thanh toán (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+              </p>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>

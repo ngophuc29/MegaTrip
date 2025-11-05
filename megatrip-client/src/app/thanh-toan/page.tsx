@@ -49,23 +49,32 @@ import {
   SeparatorVertical, // added icon for collapse
   Loader2,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
 // Khai báo mảng phương thức thanh toán
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
 const paymentMethods = [
+  // {
+  //   id: "credit_card",
+  //   name: "Thẻ tín dụng/ghi nợ",
+  //   description: "Visa, Mastercard, JCB",
+  //   icon: CreditCard,
+  //   fee: 0,
+  //   instant: true,
+  // },
+  // {
+  //   id: "atm",
+  //   name: "ATM nội địa",
+  //   description: "Internet Banking",
+  //   icon: Building,
+  //   fee: 0,
+  //   instant: true,
+  // },
   {
-    id: "credit_card",
-    name: "Thẻ tín dụng/ghi nợ",
-    description: "Visa, Mastercard, JCB",
-    icon: CreditCard,
-    fee: 0,
-    instant: true,
-  },
-  {
-    id: "atm",
-    name: "ATM nội địa",
-    description: "Internet Banking",
-    icon: Building,
+    id: "zalopay",
+    name: "ZaloPay",
+    description: "Ví điện tử ZaloPay",
+    icon: Smartphone,
     fee: 0,
     instant: true,
   },
@@ -85,22 +94,15 @@ const paymentMethods = [
     fee: 0,
     instant: true,
   },
-  {
-    id: "zalopay",
-    name: "ZaloPay",
-    description: "Ví điện tử ZaloPay",
-    icon: Smartphone,
-    fee: 0,
-    instant: true,
-  },
-  {
-    id: "bank_transfer",
-    name: "Chuyển khoản ngân hàng",
-    description: "Xác nhận trong 15 phút",
-    icon: Building,
-    fee: 0,
-    instant: false,
-  },
+
+  // {
+  //   id: "bank_transfer",
+  //   name: "Chuyển khoản ngân hàng",
+  //   description: "Xác nhận trong 15 phút",
+  //   icon: Building,
+  //   fee: 0,
+  //   instant: false,
+  // },
 ];
 
 // Lấy bookingData: ưu tiên bookingKey từ query (sessionStorage), sau đó fallback sang params/localStorage hoặc demo
@@ -378,6 +380,9 @@ export default function ThanhToan() {
   const [bookingKey, setBookingKey] = useState<string | null>(
     initialBookingKey ?? null
   );
+
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
+
   // don't compute bookingData from storage during render — load on client after mount to avoid SSR/CSR mismatch
   const [bookingData, setBookingData] = useState<any>(null);
   // bookingType default; will be adjusted after bookingData is loaded
@@ -617,7 +622,7 @@ export default function ThanhToan() {
   }, [searchParams]);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedPayment, setSelectedPayment] = useState("credit_card");
+  const [selectedPayment, setSelectedPayment] = useState("zalopay");
   const [needInvoice, setNeedInvoice] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
 
@@ -2658,29 +2663,19 @@ export default function ThanhToan() {
                           }
                         />
                         <div className="flex-1">
-                          <Label
-                            htmlFor="agreeTerms"
-                            className="text-sm cursor-pointer"
-                          >
-                            Tôi đồng ý với{" "}
-                            <Link
-                              prefetch={false}
-                              href="/dieu-khoan"
-                              className="text-primary hover:underline"
+                          <Label htmlFor="agreeTerms" className="text-sm">
+                            Tôi đã đọc và đồng ý với{" "}
+                            <button
+                              type="button"
+                              className="text-primary underline hover:text-primary/80 transition-colors p-0 m-0 inline"
+                              onClick={() => setTermsModalOpen(true)}
                             >
-                              Điều khoản sử dụng
-                            </Link>{" "}
-                            và{" "}
-                            <Link
-                              prefetch={false}
-                              href="/chinh-sach-bao-mat"
-                              className="text-primary hover:underline"
-                            >
-                              Chính sách bảo mật
-                            </Link>{" "}
-                            của MegaTrip
+                              Điều khoản sử dụng và Chính sách bảo mật
+                            </button>
                           </Label>
                         </div>
+
+
                       </div>
 
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -2703,11 +2698,15 @@ export default function ThanhToan() {
                                 • Mọi thay đổi sau khi đặt vé có thể phát sinh
                                 phí
                               </li>
+                              
+                                <strong>Lưu ý: Vui lòng thanh toán bằng tài khoản cá nhân bạn sử dụng cố định, để thuận tiện cho việc hoàn tiền, hủy tour và thanh toán bổ sung khi đổi lịch.</strong>
                             </ul>
                           </div>
                         </div>
                       </div>
                     </div>
+
+
                   </CardContent>
                 </Card>
               </div>
@@ -4239,6 +4238,171 @@ export default function ThanhToan() {
           </div>
         </div>
       </div>
+
+      <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto z-[70] bg-white dark:bg-slate-900 rounded-md shadow-lg">
+          <DialogHeader>
+            <DialogTitle>Điều khoản sử dụng và Chính sách bảo mật</DialogTitle>
+            <DialogDescription>
+              Vui lòng đọc kỹ các điều khoản và chính sách trước khi đồng ý.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 text-sm">
+            {/* Điều khoản chung */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">1. Điều khoản chung</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Bằng việc sử dụng dịch vụ của MegaTrip, bạn đồng ý tuân thủ các điều khoản này.</li>
+                <li>MegaTrip có quyền thay đổi điều khoản bất cứ lúc nào mà không cần thông báo trước.</li>
+                <li>Người dùng phải từ 18 tuổi trở lên hoặc có sự đồng ý của phụ huynh.</li>
+              </ul>
+            </div>
+
+            {/* Chính sách hủy đơn (từ huy-don, cập nhật theo noterules.txt) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">2. Chính sách hủy đơn</h3>
+              <div className="space-y-4">
+                <div>
+                  <strong>Máy bay:</strong> Phạt theo hãng (VN Airlines: ≥7 ngày 5%, 3-7 ngày 20%, &lt;3 ngày 50%). Thuế không hoàn. Không hủy trong 3 ngày trước giờ bay.
+                </div>
+                <div>
+                  <strong>Xe bus:</strong>
+                  <table className="w-full text-sm border-collapse border border-gray-300 mt-2">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-2 py-1 text-left">Điều kiện</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Phạt</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Hoàn tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">≥ 72 giờ trước giờ khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">10%</td>
+                        <td className="border border-gray-300 px-2 py-1">90%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">24 – 72 giờ trước</td>
+                        <td className="border border-gray-300 px-2 py-1">25%</td>
+                        <td className="border border-gray-300 px-2 py-1">75%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">12 – &lt;24 giờ trước</td>
+                        <td className="border border-gray-300 px-2 py-1">50%</td>
+                        <td className="border border-gray-300 px-2 py-1">50%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">&lt;12 giờ hoặc sau khi xe chạy</td>
+                        <td className="border border-gray-300 px-2 py-1">100%</td>
+                        <td className="border border-gray-300 px-2 py-1">Không hoàn tiền</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <strong>Tour:</strong>
+                  <table className="w-full text-sm border-collapse border border-gray-300 mt-2">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-2 py-1 text-left">Điều kiện</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Phạt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">Trước 15 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">20% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">7-14 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">50% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">3-6 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">75% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">Trong 3 ngày trước khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">100% tổng tiền tour (không hoàn)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Chính sách đổi lịch (từ doi-lich, cập nhật theo noterules.txt) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">3. Chính sách đổi lịch</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Máy bay: Chỉ đổi nếu còn chỗ trống, phạt theo hãng + phí đổi 100.000 VND/khách. Không đổi trong 3 ngày trước giờ bay.</li>
+                <li>
+                  <strong>Xe bus:</strong>
+                  <ul className="list-disc ml-5 mt-1">
+                    <li>Đổi ≥ 72 giờ trước giờ khởi hành: phí 50.000đ / khách</li>
+                    <li>Đổi 24 – 72 giờ trước: phí 50.000đ / khách + 25% giá vé</li>
+                    <li>Đổi &lt; 24 giờ: không cho đổi</li>
+                  </ul>
+                </li>
+                <li>
+                  <strong>Tour:</strong>
+                  <ul className="list-disc ml-5 mt-1">
+                    <li>Trên 5 ngày: 30% giá trị tour</li>
+                    <li>Từ 5 ngày trước: 50% giá trị tour</li>
+                    <li>3 ngày trước: 100% giá trị tour</li>
+                  </ul>
+                </li>
+                <li>Đổi lịch chỉ được thực hiện 1 lần cho mỗi đơn hàng, không hoàn tiền sau khi đổi.</li>
+              </ul>
+            </div>
+
+            {/* Chính sách bảo mật (từ tai-khoan) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">4. Chính sách bảo mật</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Thông tin cá nhân được bảo mật theo luật Việt Nam.</li>
+                <li>Chúng tôi không chia sẻ dữ liệu với bên thứ ba trừ khi có yêu cầu pháp lý.</li>
+                <li>Vui lòng thanh toán bằng tài khoản cá nhân cố định để thuận tiện hoàn tiền, hủy tour và thanh toán bổ sung khi đổi lịch.</li>
+              </ul>
+            </div>
+
+            {/* Quyền và nghĩa vụ */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">5. Quyền và nghĩa vụ của người dùng</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Cung cấp thông tin chính xác khi đặt chỗ.</li>
+                <li>Thanh toán đúng hạn, không gian lận.</li>
+                <li>Tuân thủ quy định của hãng vận chuyển và luật pháp.</li>
+                <li>MegaTrip có quyền hủy đơn nếu phát hiện vi phạm.</li>
+              </ul>
+            </div>
+
+            {/* Trách nhiệm của MegaTrip */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">6. Trách nhiệm của MegaTrip</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Cung cấp dịch vụ đúng như mô tả.</li>
+                <li>Hỗ trợ khách hàng 24/7 qua hotline.</li>
+                <li>Hoàn tiền theo chính sách nếu lỗi từ phía chúng tôi.</li>
+                <li>Không chịu trách nhiệm cho sự chậm trễ do hãng vận chuyển hoặc thiên tai.</li>
+              </ul>
+            </div>
+
+            {/* Điều khoản thanh toán */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">7. Điều khoản thanh toán</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Thanh toán qua VNPay, MoMo, ZaloPay được bảo mật.</li>
+                <li>Hoàn tiền trong 7-14 ngày qua tài khoản gốc.</li>
+                <li>Không hoàn tiền cho đơn đã sử dụng.</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setTermsModalOpen(false)}>Đóng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

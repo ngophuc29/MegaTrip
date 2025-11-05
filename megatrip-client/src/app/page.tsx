@@ -630,9 +630,11 @@ export default function Index() {
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-[hsl(var(--primary))]">{flight.price}</div>
-                        <Button size="sm" variant="outline" className="mt-1">
-                          Đặt ngay
-                        </Button>
+                        <Link href="/ve-may-bay">
+                          <Button size="sm" variant="outline" className="mt-1">
+                            Đặt ngay
+                          </Button>
+                        </Link>
                       </div>
                     </div>
                   </Card>
@@ -655,9 +657,11 @@ export default function Index() {
                       </div>
                       <div className="text-right">
                         <div className="font-bold text-[hsl(var(--primary))]">{bus.price}</div>
-                        <Button size="sm" variant="outline" className="mt-1">
-                          Đặt chỗ
-                        </Button>
+                        <Link href="/xe-du-lich">
+                          <Button size="sm" variant="outline" className="mt-1">
+                            Đặt chỗ
+                          </Button>
+                        </Link>
                       </div>
                     </div>
                   </Card>
