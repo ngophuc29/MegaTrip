@@ -134,15 +134,42 @@ export default function ChiTietVeMayBay() {
     const [parsedAmenitiesByLeg, setParsedAmenitiesByLeg] = useState<Record<string, any>>({});
     const [markedSeatRows, setMarkedSeatRows] = useState<Array<{ row: string; seats: any[] }>>([]);
     // --- NEW: small helper to extract a usable flight-offer object from pricing payloads ---
+    // --- NEW: helper to extract a usable flight-offer object from pricing payloads (improved) ---
     const extractOfferFromPricing = (pricing: any) => {
         if (!pricing) return null;
-        // Common shapes: pricing.data.flightOffers?.[0], pricing.data[0], or pricing.data itself
         try {
-            const offer =
-                pricing?.data?.flightOffers?.[0] ??
-                (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing);
+            let offer = null;
+            console.log('pricing in extractOfferFromPricing:', pricing);
+            console.log('pricing.type:', pricing?.type);
+            console.log('pricing.data:', pricing?.data);
+
+            // Check if pricing is already an offer
+            if (pricing?.type === 'flight-offer') {
+                offer = pricing;
+            }
+            // Standard Amadeus response
+            else if (pricing?.data?.flightOffers?.[0]) {
+                offer = pricing.data.flightOffers[0];
+            }
+            // Fallback: pricing.data as array
+            else if (Array.isArray(pricing?.data) && pricing.data.length > 0) {
+                offer = pricing.data[0];
+            }
+            // Fallback: pricing.data as object
+            else if (pricing?.data && typeof pricing.data === 'object' && !Array.isArray(pricing.data)) {
+                offer = pricing.data;
+            }
+            // Fallback: pricing itself
+            else if (pricing && typeof pricing === 'object' && !pricing.data) {
+                offer = pricing;
+            }
+
+            console.log('offer:', offer);
+            console.log('offer.itineraries:', offer?.itineraries);
+            console.log('offer.price:', offer?.price);
             return offer ?? null;
-        } catch {
+        } catch (e) {
+            console.warn('extractOfferFromPricing error:', e);
             return null;
         }
     };
@@ -529,7 +556,7 @@ export default function ChiTietVeMayBay() {
 
                 // Duyệt tickets và so khớp với outbound/inbound
                 tickets.forEach((ticket: any) => {
-                    console.log('🔍 Checking ticket:', ticket.ticketNumber, 'status:', ticket.status, 'seats:', ticket.seats);
+                    // console.log('🔍 Checking ticket:', ticket.ticketNumber, 'status:', ticket.status, 'seats:', ticket.seats);
                     const resInfo = ticket.reservationInfo || {};
                     const outboundFlight = resInfo.flights?.outbound;
                     const inboundFlight = resInfo.flights?.inbound;

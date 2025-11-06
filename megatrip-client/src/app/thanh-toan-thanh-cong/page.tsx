@@ -407,14 +407,41 @@ export default function ThanhToanThanhCong() {
         );
     }
 
+    // const bookingType = order.items?.[0]?.type || 'tour';
+    // const bookingData = {
+    //     type: bookingType,
+    //     details: order.metadata?.bookingDataSnapshot?.details || {},
+    //     pricing: order.metadata?.bookingDataSnapshot?.pricing || {},
+    // };
+    // const passengers = order.metadata?.bookingDataSnapshot?.details?.passengers || [];
+
     const bookingType = order.items?.[0]?.type || 'tour';
-    const bookingData = {
+    let bookingData = {
         type: bookingType,
         details: order.metadata?.bookingDataSnapshot?.details || {},
         pricing: order.metadata?.bookingDataSnapshot?.pricing || {},
     };
     const passengers = order.metadata?.bookingDataSnapshot?.details?.passengers || [];
 
+    // Nếu là đổi lịch flight, update bookingData.details.flights từ selectedOption trong inforChangeCalendar
+    if (order.changeCalendar && bookingType === 'flight') {
+        const selectedOption = order.inforChangeCalendar?.data?.meta?.selectedOption;
+        if (selectedOption) {
+            bookingData.details.flights = {
+                outbound: {
+                    flightNumber: selectedOption.flightNumber,
+                    route: `${selectedOption.departure.airport} → ${selectedOption.arrival.airport}`,
+                    date: selectedOption.departure.date,
+                    time: selectedOption.time,
+                    airline: selectedOption.airline,
+                    // Thêm các field khác nếu cần, như duration, aircraft, etc.
+                    duration: selectedOption.duration,
+                    aircraft: selectedOption.aircraft,
+                },
+                inbound: null, // Giả sử one-way, hoặc thêm nếu có
+            };
+        }
+    }
     return (
         <div className="container py-8">
             <div className="max-w-6xl mx-auto">

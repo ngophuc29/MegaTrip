@@ -419,6 +419,8 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
 }
 
 
+// ...existing code...
+
 function mapOrderToBooking(order: any) {
     const snap = order.metadata?.bookingDataSnapshot;
     const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
@@ -434,10 +436,10 @@ function mapOrderToBooking(order: any) {
     // compute serviceDate and days until service
     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
     const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-    let serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
+    let serviceDate = serviceDateRaw;
 
-    // Nếu là flight, lấy ngày từ flights
-    if (item?.type === 'flight') {
+    // Nếu là flight và chưa đổi lịch, lấy ngày từ flights
+    if (item?.type === 'flight' && !order.changeCalendar) {
         const flights = snap?.flights;
         if (flights?.outbound && flights?.inbound) {
             serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
@@ -448,14 +450,22 @@ function mapOrderToBooking(order: any) {
         }
     }
 
-    const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : (order.createdAt ? new Date(order.createdAt) : null);
+    // Sau khi set serviceDate
+    const serviceDateObj = serviceDate ? new Date(serviceDate.split(' - ')[0]) : (order.createdAt ? new Date(order.createdAt) : null);
     const daysUntilService = serviceDateObj ? Math.ceil((Date.UTC(serviceDateObj.getFullYear(), serviceDateObj.getMonth(), serviceDateObj.getDate()) - Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate())) / (1000 * 60 * 60 * 24)) : null;
 
     const paymentStatus = order.paymentStatus || 'pending';
     // cancel only when paymentStatus === 'paid'
     const canCancel = paymentStatus === 'paid';
     // allow change only when daysUntilService is defined and > 3, and not already changed
-    const canChange = (typeof daysUntilService === 'number' ? (daysUntilService > 3) : false) && !order.changeCalendar;
+    // const canChange = (typeof daysUntilService === 'number' ? (daysUntilService > 3) : false) && !order.changeCalendar;
+    const canChange = (() => {
+        const flights = snap?.flights;
+        if (item?.type === 'flight' && flights?.outbound && flights?.inbound) {
+            return false; // Không cho đổi lịch flight khứ hồi
+        }
+        return (typeof daysUntilService === 'number' ? (daysUntilService > 3) : false) && !order.changeCalendar;
+    })();
     const canReview = (order.orderStatus === 'confirmed' || order.orderStatus === 'completed');
 
     return {
@@ -481,6 +491,8 @@ function mapOrderToBooking(order: any) {
         hasRefundRequest: order.hasRefundRequest || false,
     };
 }
+
+// ...existing code...
 
 export default function TaiKhoan() {
     const [activeTab, setActiveTab] = useState<string>('overview');
@@ -690,6 +702,13 @@ export default function TaiKhoan() {
         if (uniq?.includes('outbound')) return 'Chuyến đi (Outbound)';
         if (uniq?.includes('inbound')) return 'Chuyến về (Inbound)';
         return 'Chuyến bay';
+    }
+    // Thêm function để lấy giờ xuất phát cho flight đã đổi lịch
+    function getDepartureTimeForChangedFlight(ticket: any, orderDetails: any) {
+        if (ticket.type === 'flight' && orderDetails?.order?.changeCalendar && orderDetails?.order?.inforChangeCalendar?.data?.meta?.selectedOption?.departure?.time) {
+            return orderDetails.order.inforChangeCalendar.data.meta.selectedOption.departure.time;
+        }
+        return ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "";
     }
     return (
         <Protected>
@@ -1011,7 +1030,7 @@ export default function TaiKhoan() {
                                                                         <div>Ngày đặt: {booking.bookingDate}</div>
                                                                         {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
                                                                         <div>
-                                                                            <strong>Ngày sử dụng:</strong> {booking.serviceDate}
+                                                                            <strong>Ngày sử dụngx1:</strong> {booking.serviceDate}
                                                                         </div>
                                                                         {/* <div>Số khách: {booking.passengers}</div> */}
                                                                         {/* {booking.refunded && (
@@ -1311,9 +1330,14 @@ export default function TaiKhoan() {
                                             {orderDetails.order.changeCalendar && <Badge className="bg-blue-100 text-blue-700">Đã đổi lịch</Badge>}
                                         </div>
                                         {/* Note đổi lịch */}
+                                        {/* Note đổi lịch */}
                                         {orderDetails.order.changeCalendar && (
                                             <div className="text-sm text-muted-foreground italic">
-                                                Bạn đã đổi lịch từ ngày {orderDetails.order.metadata?.bookingDataSnapshot?.details?.date} sang ngày {orderDetails.order.dateChangeCalendar}
+                                                Bạn đã đổi lịch từ ngày {
+                                                    orderDetails.order.items?.[0]?.type === 'flight'
+                                                        ? orderDetails.order.metadata?.bookingDataSnapshot?.flights?.outbound?.date
+                                                        : orderDetails.order.metadata?.bookingDataSnapshot?.details?.date
+                                                } sang ngày {orderDetails.order.dateChangeCalendar}
                                             </div>
                                         )}
                                     </div>
@@ -1325,19 +1349,42 @@ export default function TaiKhoan() {
                                 <div className="text-center">Đang tải...</div>
                             ) : orderDetails ? (
                                 <>
-                                    {/* Thông tin cơ bản */}
+                                     
                                     {/* Thông tin cơ bản */}
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div><strong>Mã đơn:</strong> {orderDetails.order.orderNumber}</div>
                                         <div><strong>Tổng tiền:</strong> {formatPrice(orderDetails.order.total)}</div>
                                         <div><strong>Ngày đặt:</strong> {new Date(orderDetails.order.createdAt).toLocaleDateString('vi-VN')}</div>
-                                        <div><strong>Ngày sử dụng:</strong> {(() => {
+                                        {/* <div><strong>Ngày sử dụng12:</strong> {(() => {
                                             const snap = orderDetails.order.metadata?.bookingDataSnapshot;
                                             const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
                                             const serviceDateRaw = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
                                             const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : null;
                                             return serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '--';
-                                        })()}</div>
+                                        })()}</div> */}
+                                            <div><strong>Ngày sử dụng:</strong> {(() => {
+                                                const snap = orderDetails.order.metadata?.bookingDataSnapshot;
+                                                const item = orderDetails.order.items?.[0];
+                                                let serviceDate = '';
+                                                if (item?.type === 'flight' && !orderDetails.order.changeCalendar) {
+                                                    const flights = snap?.flights;
+                                                    if (flights?.outbound && flights?.inbound) {
+                                                        serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+                                                    } else if (flights?.outbound) {
+                                                        serviceDate = flights.outbound.date;
+                                                    } else if (flights?.inbound) {
+                                                        serviceDate = flights.inbound.date;
+                                                    }
+                                                } else {
+                                                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                                    serviceDate = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
+                                                    if (serviceDate) {
+                                                        const serviceDateObj = new Date(serviceDate);
+                                                        serviceDate = serviceDateObj.toISOString().slice(0, 10);
+                                                    }
+                                                }
+                                                return serviceDate || '--';
+                                            })()}</div>
                                         <div><strong>Trạng thái:</strong> {getStatusText(orderDetails.order.orderStatus)}</div>
                                         {/* Pickup / Dropoff details (tour or bus) */}
                                         {(() => {
@@ -1437,7 +1484,8 @@ export default function TaiKhoan() {
                                                                 </div>
                                                                 {/* <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div> */}
                                                                 <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {getTravelDateForFlight(ticket)}</div>
-                                                                <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ""}</span></div>
+                                                                {/* <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ""}</span></div> */}
+                                                                <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{getDepartureTimeForChangedFlight(ticket, orderDetails)}</span></div>
 
                                                                 {/* Thêm chuyến và ghế nếu là flight */}
                                                                 {ticket.type === 'flight' && (

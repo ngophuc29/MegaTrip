@@ -162,29 +162,31 @@ const VeDienTu = React.forwardRef<HTMLDivElement, VeDienTuProps>(({ bookingType,
                                     {(() => {
                                         const leg = getTicketLeg(ticket);
                                         const seats = getTicketSeats(ticket, bookingData);
+                                        // Dùng bookingData.details.flights nếu có (cho change), else ticket.reservationInfo.flights
+                                        const outboundFlight = bookingData.details.flights?.outbound || ticket?.reservationInfo?.flights?.outbound;
                                         return (
                                             <>
-                                                {(leg === 'outbound' || leg === null) && ticket?.reservationInfo?.flights?.outbound && (
+                                                {(leg === 'outbound' || leg === null) && outboundFlight && (
                                                     <div className="border-b pb-2">
                                                         <div className="font-medium text-blue-700">Chuyến đi (Outbound)</div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{ticket.reservationInfo.flights.outbound.flightNumber}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{ticket.reservationInfo.flights.outbound.route}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{ticket.reservationInfo.flights.outbound.date}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{ticket.reservationInfo.flights.outbound.time}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{ticket.reservationInfo.flights.outbound.airline}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{outboundFlight.flightNumber}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{outboundFlight.route}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{outboundFlight.date}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{outboundFlight.time}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{outboundFlight.airline}</span></div>
                                                         {seats && (
                                                             <div className="flex justify-between"><span className="text-gray-500">Ghế:</span><span className="font-medium">{seats}</span></div>
                                                         )}
                                                     </div>
                                                 )}
-                                                {(leg === 'inbound' || leg === null) && ticket?.reservationInfo?.flights?.inbound && (
+                                                {(leg === 'inbound' || leg === null) && (bookingData.details.flights?.inbound || ticket?.reservationInfo?.flights?.inbound) && (
                                                     <div className={leg === 'outbound' ? 'pt-2' : ''}>
                                                         <div className="font-medium text-blue-700">Chuyến về (Inbound)</div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{ticket.reservationInfo.flights.inbound.flightNumber}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{ticket.reservationInfo.flights.inbound.route}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{ticket.reservationInfo.flights.inbound.date}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{ticket.reservationInfo.flights.inbound.time}</span></div>
-                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{ticket.reservationInfo.flights.inbound.airline}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{bookingData.details.flights?.inbound?.flightNumber || ticket.reservationInfo.flights.inbound.flightNumber}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.flights?.inbound?.route || ticket.reservationInfo.flights.inbound.route}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Ngày:</span><span>{bookingData.details.flights?.inbound?.date || ticket.reservationInfo.flights.inbound.date}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Giờ:</span><span>{bookingData.details.flights?.inbound?.time || ticket.reservationInfo.flights.inbound.time}</span></div>
+                                                        <div className="flex justify-between"><span className="text-gray-500">Hãng:</span><span>{bookingData.details.flights?.inbound?.airline || ticket.reservationInfo.flights.inbound.airline}</span></div>
                                                         {seats && (
                                                             <div className="flex justify-between"><span className="text-gray-500">Ghế:</span><span className="font-medium">{seats}</span></div>
                                                         )}
@@ -193,7 +195,7 @@ const VeDienTu = React.forwardRef<HTMLDivElement, VeDienTuProps>(({ bookingType,
                                             </>
                                         );
                                     })()}
-                                    {!ticket?.reservationInfo?.flights?.outbound && !ticket?.reservationInfo?.flights?.inbound && (
+                                    {!bookingData.details.flights?.outbound && !ticket?.reservationInfo?.flights?.outbound && (
                                         <div className="text-gray-500">Không có thông tin chuyến bay.</div>
                                     )}
                                 </div>

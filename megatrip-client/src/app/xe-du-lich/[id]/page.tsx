@@ -1282,7 +1282,8 @@ export default function ChiTietXeDuLich() {
                                             // const dateParamForCheckout = (departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString().split('T')[0] : (bus.date ?? ''));
                                             // const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
                                             const dateParamForCheckout = toLocalYMD(departureDatesArr[selectedIndex]) || (bus.date ?? '');
-                                            const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
+                                            // Fix: Use local YYYY-MM-DD for departureDateIso to match UI date
+                                            const departureDateIso = dateParamForCheckout;  // YYYY-MM-DD local
                                             // passengerInfo JSON (encode)
                                             // prepare passenger payloads (let URLSearchParams handle encoding)
                                             const leadPassengerInfo = {
@@ -1306,7 +1307,7 @@ export default function ChiTietXeDuLich() {
                                                 company: String(bus.company ?? ''),
                                                 route: bus.route,
                                                 date: dateParamForCheckout,
-                                                departureDateIso: departureDateIso,
+                                                departureDateIso: departureDateIso,  // Now YYYY-MM-DD
                                                 selectedIndex: String(selectedIndex),
                                                 time: `${displayDepartureTime} - ${displayArrivalTime}`,
                                                 seats: selectedSeats.join(','),
@@ -1330,7 +1331,8 @@ export default function ChiTietXeDuLich() {
                                                 currency: 'VND'
                                             });
                                             router.push(`/thanh-toan?${params.toString()}`);
-                                        }}>
+                                        }}
+                                    >
                                         Tiếp tục thanh toán
                                     </Button>
                                     <Button variant="outline" className="w-full">

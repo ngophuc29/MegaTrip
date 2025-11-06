@@ -301,9 +301,11 @@ export default function ChiTietTour() {
         const availableDates = startDates.map((sd: any, idx: number) => {
             const rawStart = sd.$date ?? sd;
             const rawEnd = endDates?.[idx] ? (endDates[idx].$date ?? endDates[idx]) : null;
-            const startIso = rawStart ? (new Date(rawStart).toISOString()) : null;
-            const endIso = rawEnd ? (new Date(rawEnd).toISOString()) : null;
-            const date = startIso ? startIso.split('T')[0] : toIsoDate(sd);
+            // Fix: Use local YYYY-MM-DD instead of UTC ISO
+            const startDateObj = rawStart ? new Date(rawStart) : null;
+            const startIso = startDateObj ? toLocalYMD(startDateObj) : null;  // Local YYYY-MM-DD
+            const endIso = rawEnd ? toLocalYMD(new Date(rawEnd)) : null;  // Local YYYY-MM-DD
+            const date = startIso || toIsoDate(sd);  // Use local date
             // Use Vietnam timezone (UTC+7) for date comparison
             const now = new Date();
             const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
@@ -314,8 +316,8 @@ export default function ChiTietTour() {
             const isPast = startDateOnly ? (startDateOnly <= vnToday) : false;
             return {
                 date,
-                startIso,
-                endIso,
+                startIso,  // Now local YYYY-MM-DD
+                endIso,    // Now local YYYY-MM-DD
                 isPast,
                 available: (sd.available ?? sd.seats ?? 20),
                 price: db.adultPrice ?? db.priceFrom ?? tourDetails.priceFrom,
@@ -1639,22 +1641,23 @@ export default function ChiTietTour() {
                                         params.set('pickupDropoff', startLocation?.pickupDropoff || "");
                                         // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
                                         const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
-                                        params.set('startDateTime', startIso);
+                                        // Fix: startIso is now local YYYY-MM-DD, so use it directly
+                                        params.set('startDateTime', startIso);  // Local YYYY-MM-DD
                                         // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
                                         let endIso = (selectedDateInfo as any)?.endIso ?? '';
                                         if (!endIso) {
                                             try {
-                                                const m = (tourDetails.duration || '').match(/(\d+)\s*ngày/);
-                                                const days = m ? Number(m[1]) : 1;
-                                                if (selectedDateInfo?.date) {
-                                                    const sd = new Date(selectedDateInfo.date);
-                                                    sd.setDate(sd.getDate() + Math.max(0, days - 1));
-                                                    sd.setHours(23, 59, 0, 0);
-                                                    endIso = sd.toISOString();
-                                                }
-                                            } catch (e) { endIso = ''; }
+                                                const startDate = new Date(startIso);
+                                                // Assume tour duration is in days, add to start date
+                                                const durationDays = parseInt(tourDetails.duration) || 1;
+                                                const endDate = new Date(startDate);
+                                                endDate.setDate(startDate.getDate() + durationDays - 1); // End on last day
+                                                endIso = toLocalYMD(endDate);  // Local YYYY-MM-DD
+                                            } catch (e) {
+                                                endIso = startIso; // Fallback
+                                            }
                                         }
-                                        params.set('endDateTime', endIso);
+                                        params.set('endDateTime', endIso);  // Local YYYY-MM-DD
                                         router.push(`/thanh-toan?${params.toString()}`);
                                     }}>
                                         Đặt tour ngay

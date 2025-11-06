@@ -2319,7 +2319,7 @@ export default function Tours() {
                             {/* Thêm thông báo nếu disabled */}
                             {hasBookings && modalMode === "edit" && (
                                 <div className="text-sm text-red-500 mt-1">
-                                    Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ. 
+                                    Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ.
                                 </div>
                             )}
 
@@ -2405,7 +2405,27 @@ export default function Tours() {
                                                     type="datetime-local"
                                                     value={d || ""}
                                                     onChange={(e) => {
-                                                        // ... existing onChange logic ...
+                                                        const msPerDay = 24 * 60 * 60 * 1000;
+                                                        const val = e.target.value;
+                                                        const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
+                                                        if (idx >= starts.length) starts.push(val); else starts[idx] = val;
+                                                        handleFormChange('startDates' as any, starts);
+                                                        if (idx === 0) handleFormChange('startDate', val);
+
+                                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+
+                                                        // compute numericDuration consistently
+                                                        const firstStartCand = (formData.startDates && formData.startDates[0]) || formData.startDate;
+                                                        const firstEndCand = (formData.endDates && formData.endDates[0]) || formData.endDate;
+                                                        const numericDuration = parseDurationToDays(formData.duration, firstStartCand, firstEndCand) || 1;
+
+                                                        const thisStart = parseLocalInput(val);
+                                                        if (thisStart) {
+                                                            const defaultEndLocal = toLocalInput(new Date(thisStart.getTime() + numericDuration * msPerDay));
+                                                            ends[idx] = defaultEndLocal;
+                                                            handleFormChange('endDates' as any, ends);
+                                                            if (idx === 0) handleFormChange('endDate', ends[0] || "");
+                                                        }
                                                     }}
                                                     min={getTomorrowLocal()}
                                                     className={`w-full ${formErrors[`startDates_${idx}`] ? "border-red-500" : ""}`}
@@ -2419,7 +2439,18 @@ export default function Tours() {
                                                     type="datetime-local"
                                                     value={endVal || ""}
                                                     onChange={(e) => {
-                                                        // ... existing onChange logic ...
+                                                        const val = e.target.value;
+                                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                                        if (idx >= ends.length) ends.push(val); else ends[idx] = val;
+                                                        handleFormChange('endDates' as any, ends);
+                                                        if (idx === 0) handleFormChange('endDate', val);
+
+                                                        const firstStart = (formData.startDates && formData.startDates.length) ? formData.startDates[0] : formData.startDate;
+                                                        const firstEnd = (ends && ends.length) ? ends[0] : formData.endDate;
+                                                        if (firstStart && firstEnd) {
+                                                            const duration = calculateDuration(firstStart, firstEnd);
+                                                            if (duration) handleFormChange('duration', duration);
+                                                        }
                                                     }}
                                                     min={(formData.startDates && formData.startDates.length && formData.startDates[idx]) ? formData.startDates[idx] : getTomorrowLocal()}
                                                     className={formErrors[`endDates_${idx}`] ? "border-red-500" : ""}
@@ -2442,15 +2473,32 @@ export default function Tours() {
                                     );
                                 })}
                                 <div>
-                                    <Button
-                                        variant="ghost"
-                                        onClick={() => {
-                                            // ... existing onClick logic ...
-                                        }}
+                                    <Button variant="ghost" onClick={() => {
+                                        const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
+                                        const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
+                                        const newStart = "";
+                                        starts.push(newStart);
+                                        let newEnd = "";
+                                        const firstStart = (formData.startDates && formData.startDates[0]) || formData.startDate;
+                                        const firstEnd = (formData.endDates && formData.endDates[0]) || formData.endDate;
+                                        if (newStart && firstStart && firstEnd) {
+                                            const baseStart = parseLocalInput(firstStart);
+                                            const baseEnd = parseLocalInput(firstEnd);
+                                            if (baseStart && baseEnd) {
+                                                const delta = baseEnd.getTime() - baseStart.getTime();
+                                                const thisStart = parseLocalInput(newStart);
+                                                if (thisStart) newEnd = toLocalInput(new Date(thisStart.getTime() + delta));
+                                            }
+                                        }
+                                        ends.push(newEnd);
+                                        handleFormChange('startDates' as any, starts);
+                                        handleFormChange('endDates' as any, ends);
+                                        if (starts.length === 1 && starts[0]) handleFormChange('startDate', starts[0]);
+                                        if (ends.length === 1 && ends[0]) handleFormChange('endDate', ends[0]);
+
+                                    }}
                                         disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
-                                    >
-                                        Thêm ngày khởi hành
-                                    </Button>
+                                    >Thêm ngày khởi hành</Button>
                                 </div>
                             </div>
                         </div>
@@ -2911,7 +2959,7 @@ export default function Tours() {
                     <p className="text-gray-600 mt-1">Quản lý các tour du lịch và lịch trình</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
@@ -2919,7 +2967,7 @@ export default function Tours() {
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Thêm tour mới

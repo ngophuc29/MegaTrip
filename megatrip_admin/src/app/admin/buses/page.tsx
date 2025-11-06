@@ -1975,12 +1975,44 @@ export default function Buses() {
                                                 type="datetime-local"
                                                 value={d || ""}
                                                 onChange={(e) => {
-                                                    // ... existing onChange logic ...
+                                                    const val = e.target.value;
+                                                    const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
+                                                    if (idx >= deps.length) deps.push(val); else deps[idx] = val;
+                                                    // update departureDates
+                                                    handleFormChange('departureDates' as any, deps);
+                                                    // keep canonical departureAt in sync with first date
+                                                    if (idx === 0) handleFormChange('departureAt', val);
+
+                                                    // ensure arrivalDates has a corresponding entry
+                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                    if (!arrs[idx]) {
+                                                        // try to compute default arrival using delta from first pair if available
+                                                        const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
+                                                        const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
+                                                        let defaultArr = "";
+                                                        if (firstDep && firstArr) {
+                                                            const baseDep = parseLocalInput(firstDep);
+                                                            const baseArr = parseLocalInput(firstArr);
+                                                            if (baseDep && baseArr) {
+                                                                const delta = baseArr.getTime() - baseDep.getTime();
+                                                                const thisDep = parseLocalInput(val) || parseLocalInput(firstDep);
+                                                                if (thisDep) defaultArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                                            }
+                                                        }
+                                                        if (!defaultArr) {
+                                                            // fallback: +6 hours
+                                                            const thisDep = parseLocalInput(val);
+                                                            defaultArr = thisDep ? toLocalInput(new Date(thisDep.getTime() + 6 * 3600000)) : "";
+                                                        }
+                                                        arrs[idx] = defaultArr;
+                                                        handleFormChange('arrivalDates' as any, arrs);
+                                                        if (idx === 0) handleFormChange('arrivalAt', arrs[0] || "");
+                                                    }
                                                 }}
                                                 min={getTomorrowLocal()}
                                                 className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
                                                 // disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
-                                                disabled={hasBookings || loadingHasBookings} 
+                                                disabled={hasBookings || loadingHasBookings}
                                             />
                                         </div>
 
@@ -1990,7 +2022,19 @@ export default function Buses() {
                                                 type="datetime-local"
                                                 value={arrVal || ""}
                                                 onChange={(e) => {
-                                                    // ... existing onChange logic ...
+                                                    const val = e.target.value;
+                                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                    if (idx >= arrs.length) arrs.push(val); else arrs[idx] = val;
+                                                    handleFormChange('arrivalDates' as any, arrs);
+                                                    if (idx === 0) handleFormChange('arrivalAt', val);
+
+                                                    // recompute duration for canonical pair (first)
+                                                    const firstDep = (formData.departureDates && formData.departureDates.length) ? formData.departureDates[0] : formData.departureAt;
+                                                    const firstArr = (arrs && arrs.length) ? arrs[0] : formData.arrivalAt;
+                                                    if (firstDep && firstArr) {
+                                                        const duration = calculateDuration(firstDep, firstArr);
+                                                        if (duration) handleFormChange('duration', duration);
+                                                    }
                                                 }}
                                                 min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : getTomorrowLocal()}
                                                 className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
@@ -2000,8 +2044,20 @@ export default function Buses() {
 
                                         <div className="flex items-end" style={{ marginTop: 'auto' }}>
                                             <Button variant="outline" onClick={() => {
-                                                // ... existing onClick logic ...
-                                            }} disabled={hasBookings && modalMode === "edit"}>
+                                                const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
+                                                const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                                // if using fallback single departureAt, convert first then remove
+                                                if (!deps.length && formData.departureAt) deps.push(formData.departureAt);
+                                                deps.splice(idx, 1);
+                                                arrs.splice(idx, 1);
+                                                handleFormChange('departureDates' as any, deps);
+                                                handleFormChange('arrivalDates' as any, arrs);
+                                                // ensure canonical fields sync
+                                                handleFormChange('departureAt', (deps[0] || ""));
+                                                handleFormChange('arrivalAt', (arrs[0] || ""));
+                                            }}
+                                                disabled={hasBookings && modalMode === "edit"}
+                                            >
                                                 Xóa
                                             </Button>
                                         </div>
@@ -2010,8 +2066,34 @@ export default function Buses() {
                             })}
                             <div>
                                 <Button variant="ghost" onClick={() => {
-                                    // ... existing onClick logic ...
-                                }} disabled={hasBookings && modalMode === "edit"}>
+                                    // add an empty row — user will fill datetime themselves
+                                    const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
+                                    const arrs = Array.isArray(formData.arrivalDates) ? formData.arrivalDates.slice() : [];
+                                    const newDep = ""; // do not prefill
+                                    deps.push(newDep);
+                                    // only compute default arrival when we can (and newDep is not empty).
+                                    // For empty newDep we keep arrival empty so user can input it.
+                                    let newArr = "";
+                                    const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
+                                    const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
+                                    if (newDep && firstDep && firstArr) {
+                                        const baseDep = parseLocalInput(firstDep);
+                                        const baseArr = parseLocalInput(firstArr);
+                                        if (baseDep && baseArr) {
+                                            const delta = baseArr.getTime() - baseDep.getTime();
+                                            const thisDep = parseLocalInput(newDep);
+                                            if (thisDep) newArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                        }
+                                    }
+                                    // if still empty, leave newArr = "" (no auto-fill)
+                                    arrs.push(newArr);
+                                    handleFormChange('departureDates' as any, deps);
+                                    handleFormChange('arrivalDates' as any, arrs);
+                                    // set canonical only when first entries are non-empty
+                                    if (deps.length === 1 && deps[0]) handleFormChange('departureAt', deps[0]);
+                                    if (arrs.length === 1 && arrs[0]) handleFormChange('arrivalAt', arrs[0]);
+                                }}
+                                    disabled={hasBookings && modalMode === "edit"}>
                                     Thêm ngày khởi hành
                                 </Button>
                             </div>
