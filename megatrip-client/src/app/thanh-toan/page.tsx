@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { me } from '@/apis/auth';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Layout from "../components/Layout";
@@ -829,7 +830,37 @@ export default function ThanhToan() {
     email: "",
     phone: "",
     fullName: "",
+    // customerId của user nếu đã đăng nhập (sẽ gửi kèm trong order)
+    customerId: null as string | null,
   });
+
+  // If user is logged in, prefill contact info from their profile
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("accessToken");
+    if (!token) return;
+
+    (async () => {
+      try {
+        const payload = await me();
+        if (!payload) return;
+        // payload may be typed as AxiosResponse by TS; cast to any to safely access fields
+        const user = payload as any;
+        const resolvedUserId =
+          user?._id ?? user?.id ?? user?.userId ?? user?._id?.$oid ?? null;
+        setContactInfo((prev) => ({
+          ...prev,
+          fullName: (user && (user.name ?? user.fullName)) ?? prev.fullName,
+          email: (user && (user.email ?? user.username)) ?? prev.email,
+          phone: (user && (user.phone ?? user.mobile)) ?? prev.phone,
+          customerId: prev.customerId ?? resolvedUserId ?? null,
+        }));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to prefill contact from profile', err);
+      }
+    })();
+  }, []);
   // shuttle pickup for bus flow (điểm đón trung chuyển nếu ko lấy từ bến)
   const [shuttlePickup, setShuttlePickup] = useState<string>("");
 
@@ -1477,6 +1508,7 @@ export default function ThanhToan() {
         customerName: contactInfo.fullName || "Khách hàng",
         customerEmail: contactInfo.email || "",
         customerPhone: contactInfo.phone || "",
+        customerId: contactInfo.customerId || null,
         customerAddress: "",
         items,
         subtotal: Math.round(
@@ -1727,6 +1759,7 @@ export default function ThanhToan() {
           fullName: prev.fullName || pi.name || "",
           email: pi.email || prev.email,
           phone: pi.phone || prev.phone,
+          customerId: prev.customerId || pi.customerId || null,
         }));
         if (
           Array.isArray(details.passengers) &&
@@ -1765,6 +1798,7 @@ export default function ThanhToan() {
               }`.trim(),
           email: contactFromBooking.email ?? prev.email,
           phone: contactFromBooking.phone ?? prev.phone,
+          customerId: prev.customerId || (contactFromBooking as any).customerId || null,
         }));
         // bookingData.contactFromBooking may contain shuttle pickup (legacy)
         if ((contactFromBooking as any).shuttlePickup)
