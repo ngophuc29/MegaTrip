@@ -14,6 +14,7 @@ import { Input } from '../../../components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
 import { AlertTriangle, ArrowLeft, CreditCard, DollarSign, FileText, Info, Plane, ChevronRight, Bus, MapPin } from 'lucide-react';
 import { toast } from '../../../components/ui/use-toast';
+import { me } from '@/apis/auth';
 
 interface Booking {
     id: string;
@@ -116,6 +117,7 @@ export default function HuyDonPage() {
     const id = useRouteId();
     const [order, setOrder] = useState<any | null>(null);
     const [loadingOrder, setLoadingOrder] = useState(false);
+    const [customerId, setCustomerId] = useState<string | null>(null);
     // derive booking view-model from fetched order (fallback to sample if not found)
     // derive booking view-model from fetched order (fallback to sample if not found)
     const booking = useMemo<Booking | null>(() => {
@@ -163,6 +165,19 @@ export default function HuyDonPage() {
         } as Booking;
     }, [order, id]);
 
+    // Thêm useEffect để load customerId từ API me()
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                const payload = await me();
+                const resolvedUserId = payload?._id ?? payload?.id ?? payload?.userId ?? payload?._id?.$oid ?? null;
+                setCustomerId(resolvedUserId);
+            } catch (err) {
+                console.error('Failed to load profile (me):', err);
+            }
+        };
+        fetchProfile();
+    }, []);
     // fetch order details by id (supports orderNumber lookup at backend)
     useEffect(() => {
         let mounted = true;
@@ -329,7 +344,7 @@ export default function HuyDonPage() {
 
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
         const payload = {
-            customerId: order?.customerId || '64e65e8d3d5e2b0c8a3e9f12',
+            customerId: customerId || order?.customerId || '64e65e8d3d5e2b0c8a3e9f12', // Ưu tiên customerId từ me()
             customerName: order?.customerName || order?.customerName || order?.customer?.name || '',
             customerEmail: order?.customerEmail || order?.customerEmail || order?.customer?.email || '',
             customerPhone: order?.customerPhone || order?.customerPhone || order?.customer?.phone || '',

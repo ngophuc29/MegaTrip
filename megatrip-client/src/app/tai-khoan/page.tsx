@@ -418,9 +418,6 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
     );
 }
 
-
-// ...existing code...
-
 function mapOrderToBooking(order: any) {
     const snap = order.metadata?.bookingDataSnapshot;
     const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
@@ -492,10 +489,12 @@ function mapOrderToBooking(order: any) {
     };
 }
 
-// ...existing code...
+
 
 export default function TaiKhoan() {
     const [activeTab, setActiveTab] = useState<string>('overview');
+    // Thêm state cho customerId
+    const [customerId, setCustomerId] = useState<string | null>(null);
     useEffect(() => {
         // Try to read a possible navigation state (if any) without relying on react-router
         try {
@@ -523,7 +522,7 @@ export default function TaiKhoan() {
         const fetchProfile = async () => {
             try {
                 const payload = await me();
-                // map fields from API into the existing userData.profile
+                // map fields...
                 userData.profile.name = payload.name ?? userData.profile.name;
                 userData.profile.email = payload.email ?? userData.profile.email;
                 userData.profile.phone = payload.phone ?? userData.profile.phone;
@@ -533,10 +532,13 @@ export default function TaiKhoan() {
                 if (payload.avatar) userData.profile.avatar = payload.avatar;
                 if (payload.memberSince) userData.profile.memberSince = payload.memberSince;
                 if (payload.role) userData.profile.verified = payload.role === 'user' ? true : userData.profile.verified;
+                // Thêm: Lấy customerId
+                const resolvedUserId = payload?._id ?? payload?.id ?? payload?.userId ?? payload?._id?.$oid ?? null;
+                console.log('Resolved customerId from me():', resolvedUserId); // Log để kiểm tra
+                setCustomerId(resolvedUserId);
                 // trigger re-render
                 setVersion(v => v + 1);
             } catch (err) {
-                // eslint-disable-next-line no-console
                 console.error('Failed to load profile (me):', err);
             }
         };
@@ -562,7 +564,8 @@ export default function TaiKhoan() {
             setLoadingBookings(true);
             setBookingsError(null);
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/customer/${encodeURIComponent(FAKE_CUSTOMER_ID)}?page=1&pageSize=50`);
+                console.log('Using customerId for loadBookings:', customerId || FAKE_CUSTOMER_ID); // Log để kiểm tra
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/customer/${encodeURIComponent(customerId || FAKE_CUSTOMER_ID)}?page=1&pageSize=50`);
                 if (!res.ok) throw new Error(`${res.status}`);
                 const json = await res.json();
                 const data = Array.isArray(json.data) ? json.data : (json.data?.data || []);
@@ -577,7 +580,7 @@ export default function TaiKhoan() {
         }
         loadBookings();
         return () => { mounted = false; };
-    }, []);
+    }, [customerId]); 
 
     const displayBookings = Array.isArray(bookings) ? bookings : [];
     const formatPrice = (price: number) => {
@@ -979,7 +982,7 @@ export default function TaiKhoan() {
                                     <div className="flex items-center justify-between">
                                         <h1 className="text-2xl font-bold">Đơn hàng của tôi</h1>
 
-                                        <div className="flex gap-2">
+                                        {/* <div className="flex gap-2">
                                             <Select defaultValue="all">
                                                 <SelectTrigger className="w-40">
                                                     <SelectValue />
@@ -991,7 +994,7 @@ export default function TaiKhoan() {
                                                     <SelectItem value="cancelled">Đã hủy</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                        </div>
+                                        </div> */}
                                     </div>
 
                                     {/* Note ở đây */}
@@ -1174,7 +1177,7 @@ export default function TaiKhoan() {
 
                             {/* Requests Tab */}
                             {activeTab === 'requests' && (
-                                <RequestsTab formatPrice={formatPrice} customerId={FAKE_CUSTOMER_ID} />
+                                <RequestsTab formatPrice={formatPrice} customerId={customerId || FAKE_CUSTOMER_ID} />
                             )}
 
                             {/* Travelers Tab */}
@@ -1527,6 +1530,7 @@ export default function TaiKhoan() {
                     open={reviewOpen}
                     onOpenChange={(o) => { setReviewOpen(o); if (!o) setReviewBooking(null); }}
                     booking={reviewBooking}
+                    customerId={customerId}
                     onSubmit={({ rating, comment }) => {
                         if (!reviewBooking) return;
                         setBookings(prev => prev.map(b => (b as any).id === (reviewBooking as any).id ? { ...(b as any), canReview: false, rating, review: comment } : b));

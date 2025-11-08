@@ -17,10 +17,11 @@ interface OrderReviewDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     booking: BookingLite | null;
+    customerId: string | null;
     onSubmit: (data: { rating: number; comment: string }) => void;
 }
 
-export default function OrderReviewDialog({ open, onOpenChange, booking, onSubmit }: OrderReviewDialogProps) {
+export default function OrderReviewDialog({ open, onOpenChange, booking, customerId, onSubmit }: OrderReviewDialogProps) {
     const [rating, setRating] = useState<number>(5);
     const [hover, setHover] = useState<number | null>(null);
     const [comment, setComment] = useState('');
@@ -44,9 +45,9 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, onSubmi
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    orderId: booking.orderObjectId, // ✅ Dùng _id thực của order (ObjectId)
-                    productId: booking.productId, // ✅ Dùng productId từ item
-                    customerId: '64e65e8d3d5e2b0c8a3e9f12',
+                    orderId: booking.orderObjectId,
+                    productId: booking.productId,
+                    customerId: customerId || '64e65e8d3d5e2b0c8a3e9f12', // Fallback nếu null
                     rating,
                     comment
                 })
