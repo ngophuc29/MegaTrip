@@ -500,7 +500,16 @@ export default function TravelokaBanner() {
                         type="date"
                         className="block h-12 bg-white shadow-md text-black w-full"
                         value={fromDate ? fromDate.toISOString().split('T')[0] : ''}
-                        onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
+                        // onChange={e => { if (e.target.value) setFromDate(new Date(e.target.value)); }}
+                        onChange={e => {
+                          const newDate = new Date(e.target.value);
+                          setFromDate(newDate);
+                          if (tripType === 'roundtrip') {
+                            const returnDate = new Date(newDate);
+                            returnDate.setDate(returnDate.getDate() + 3); // Ngày về = ngày đi + 3 ngày
+                            setToDate(returnDate);
+                          }
+                        }}
                         min={new Date().toISOString().split('T')[0]}
                       />
                     </div>

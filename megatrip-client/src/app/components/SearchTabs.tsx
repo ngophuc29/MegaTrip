@@ -531,7 +531,16 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                     type="date"
                     className="block h-12 bg-white shadow-md text-black w-full"
                     value={flightDeparture ? flightDeparture.toISOString().split('T')[0] : ''}
-                    onChange={e => setFlightDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                    // onChange={e => setFlightDeparture(e.target.value ? new Date(e.target.value) : undefined)}
+                    onChange={e => {
+                      const newDate = e.target.value ? new Date(e.target.value) : undefined;
+                      setFlightDeparture(newDate);
+                      if (flightType === 'roundtrip' && newDate) {
+                        const returnDate = new Date(newDate);
+                        returnDate.setDate(returnDate.getDate() + 3); // Ngày về = ngày đi + 3 ngày
+                        setFlightReturn(returnDate);
+                      }
+                    }}
                     min={new Date().toISOString().split('T')[0]}
                   />
                 </div>
