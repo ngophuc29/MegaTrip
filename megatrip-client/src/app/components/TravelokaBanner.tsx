@@ -278,7 +278,7 @@ export default function TravelokaBanner() {
         nonStop: 'true',
         currencyCode: 'VND',
         includedAirlineCodes: 'VN',
-        max: String(3)
+        max: String(10)
       };
       const outbound = { ...base, departureDate };
       const inbound = (tripType === 'roundtrip' && returnDate) ? { ...base, originLocationCode: destCode, destinationLocationCode: originCode, departureDate: returnDate } : null;

@@ -598,6 +598,34 @@ export default function ThanhToan() {
     };
   })();
 
+  const derivedOutbound = (() => {
+    const pricing = bookingData?.pricingOutbound || bookingData?.pricing || {};  // Ưu tiên pricingOutbound
+    const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+    return {
+      adultsUnit: Number(pricing.adultsUnit || 0),
+      childrenUnit: Number(pricing.childrenUnit || 0),
+      infantsUnit: Number(pricing.infantsUnit || 0),
+      adultsTotal: Number(pricing.adultsTotal) || (Number(pricing.adultsUnit || 0) * Number(counts.adults || 0)),
+      childrenTotal: Number(pricing.childrenTotal) || (Number(pricing.childrenUnit || 0) * Number(counts.children || 0)),
+      infantsTotal: Number(pricing.infantsTotal) || (Number(pricing.infantsUnit || 0) * Number(counts.infants || 0)),
+      offerTotal: Number(pricing.offerTotal || 0),
+    };
+  })();
+
+  const derivedInbound = (() => {
+    const pricing = bookingData?.pricingInbound || bookingData?.pricing?.inboundPricing || {};  // Ưu tiên pricingInbound
+    const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+    return {
+      adultsUnit: Number(pricing.adultsUnit || 0),
+      childrenUnit: Number(pricing.childrenUnit || 0),
+      infantsUnit: Number(pricing.infantsUnit || 0),
+      adultsTotal: Number(pricing.adultsTotal) || (Number(pricing.adultsUnit || 0) * Number(counts.adults || 0)),
+      childrenTotal: Number(pricing.childrenTotal) || (Number(pricing.childrenUnit || 0) * Number(counts.children || 0)),
+      infantsTotal: Number(pricing.infantsTotal) || (Number(pricing.infantsUnit || 0) * Number(counts.infants || 0)),
+      offerTotal: Number(pricing.offerTotal || 0),
+    };
+  })();
+  const isRoundtrip = !!(bookingData?.flights?.inbound);
   // keep bookingType in sync if bookingData changes (e.g. loaded from sessionStorage)
   useEffect(() => {
     setBookingType(
@@ -3307,6 +3335,8 @@ export default function ThanhToan() {
                         </>
                       );
                     }
+
+                    
                     const flights = bookingData?.flights ?? {};
                     const outbound = flights.outbound ?? null;
                     const inbound = flights.inbound ?? null;
@@ -3334,46 +3364,26 @@ export default function ThanhToan() {
                           0
                         );
 
-                    const renderLeg = (
-                      label: string,
-                      flight: any,
-                      legKey: "outbound" | "inbound"
-                    ) => {
-                      const seg =
-                        flight?.itineraries?.[0]?.segments?.[0] ?? null;
-                      // prefer structured segment info; fallback to flight.route string
-                      const depCode =
-                        seg?.departure?.iataCode ??
-                        (typeof flight?.route === "string"
-                          ? (flight.route.split("→")[0] || "").trim()
-                          : "");
-                      const arrCode =
-                        seg?.arrival?.iataCode ??
-                        (typeof flight?.route === "string"
-                          ? (flight.route.split("→")[1] || "").trim()
-                          : "");
-                      const depLabel = getAirportLabel(
-                        depCode || undefined,
-                        seg?.departure?.city ?? undefined
-                      );
-                      const arrLabel = getAirportLabel(
-                        arrCode || undefined,
-                        seg?.arrival?.city ?? undefined
-                      );
+                    const renderLeg = (label: string, flight: any, legKey: "outbound" | "inbound") => {
+                      const seg = flight?.itineraries?.[0]?.segments?.[0] ?? null;
+                      const depCode = seg?.departure?.iataCode ?? "";
+                      const arrCode = seg?.arrival?.iataCode ?? "";
+                      const depLabel = getAirportLabel(depCode, seg?.departure?.city ?? "");
+                      const arrLabel = getAirportLabel(arrCode, seg?.arrival?.city ?? "");
 
                       const addOnTotal = sumAddonsForLeg(legKey);
                       const seatsTotal = sumSeatsForLeg(legKey);
-                      const counts = bookingData?.passengers?.counts || {
-                        adults: 0,
-                        children: 0,
-                        infants: 0,
-                      };
-                      const base = p.perPax
-                        ? Number(p.perPax.adultUnit ?? 0) * counts.adults +
-                        Number(p.perPax.childUnit ?? 0) * counts.children +
-                        Number(p.perPax.infantUnit ?? 0) * counts.infants
-                        : Number(p.passengerBaseTotal ?? 0);
-                      const taxes = taxesPerLeg;
+                      const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+
+                      // Sử dụng derived cho leg cụ thể
+                      const legDerived = legKey === "outbound" ? derivedOutbound : derivedInbound;
+                      const base = legDerived.adultsTotal + legDerived.childrenTotal + legDerived.infantsTotal;
+
+                      // Thuế: Dùng taxesEstimate từ bookingData.pricing (870,000 tổng, chia đều cho 2 chuyến nếu roundtrip)
+                      const totalTaxes = Number(bookingData?.pricing?.taxesEstimate ?? 0);
+                      const taxesPerLeg = isRoundtrip ? totalTaxes / 2 : totalTaxes;
+                      const taxes = Math.round(taxesPerLeg);
+
                       const total = base + taxes + addOnTotal + seatsTotal;
 
                       return (
@@ -3417,74 +3427,36 @@ export default function ThanhToan() {
                           </div>
 
                           <div className="space-y-2 mt-2">
-                            {/* Giá vé with ChevronDown */}
-                            <div
-                              className="flex items-center justify-between text-sm cursor-pointer"
-                              onClick={() =>
-                                setShowFareDetails((prev) => ({
-                                  ...prev,
-                                  [legKey]: !prev[legKey],
-                                }))
-                              }
-                            >
+                             
+                            {/* Giá vé với breakdown đúng */}
+                            <div className="flex items-center justify-between text-sm cursor-pointer" onClick={() => setShowFareDetails((prev) => ({ ...prev, [legKey]: !prev[legKey] }))}>
                               <div className="flex items-center gap-2">
                                 <span>Giá vé</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {counts.adults +
-                                    counts.children +
-                                    counts.infants}{" "}
-                                  người
-                                </span>
+                                <span className="text-xs text-muted-foreground">{counts.adults + counts.children + counts.infants} người</span>
                               </div>
                               <div className="flex items-center gap-4">
                                 <span>{formatPrice(base)}</span>
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? "rotate-180" : ""
-                                    }`}
-                                />
+                                <ChevronDown className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? "rotate-180" : ""}`} />
                               </div>
                             </div>
                             {showFareDetails[legKey] && (
                               <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
-                                {p.perPax ? (
-                                  <div className="space-y-2">
-                                    {counts.adults > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Người lớn ({counts.adults})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.adultUnit ?? 0) *
-                                            counts.adults
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {counts.children > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Trẻ em ({counts.children})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.childUnit ?? 0) *
-                                            counts.children
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {counts.infants > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Em bé ({counts.infants})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.infantUnit ?? 0) *
-                                            counts.infants
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
+                                {counts.adults > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Người lớn ({counts.adults})</div>
+                                    <div>{formatPrice(legDerived.adultsTotal)}</div>
                                   </div>
-                                ) : (
-                                  <div className="text-muted-foreground">
-                                    Không có dữ liệu chi tiết hành khách
+                                )}
+                                {counts.children > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Trẻ em ({counts.children})</div>
+                                    <div>{formatPrice(legDerived.childrenTotal)}</div>
+                                  </div>
+                                )}
+                                {counts.infants > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Em bé ({counts.infants})</div>
+                                    <div>{formatPrice(legDerived.infantsTotal)}</div>
                                   </div>
                                 )}
                               </div>
@@ -3616,9 +3588,7 @@ export default function ThanhToan() {
                             )}
                             <div className="flex justify-between font-semibold text-base mt-2">
                               <span>Tổng {label.toLowerCase()}</span>
-                              <span className="text-[hsl(var(--primary))]">
-                                {formatPrice(total)}
-                              </span>
+                              <span className="text-[hsl(var(--primary))]">{formatPrice(total)}</span>
                             </div>
                           </div>
                         </div>

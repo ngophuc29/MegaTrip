@@ -33,6 +33,7 @@ export default function ThanhToanThanhCong() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+    const [isDownloadMode, setIsDownloadMode] = useState(false);
     const ticketRefs = useRef([]);
 
     const loadFont = async (pdf: jsPDF, fontUrl: string, fontName: string) => {
@@ -320,10 +321,18 @@ export default function ThanhToanThanhCong() {
             if (extraData) {
                 try {
                     const parsed = JSON.parse(decodeURIComponent(extraData));
-                    if (parsed.download) shouldDownload = true;
+                    if (parsed.download) {
+                        shouldDownload = true;
+                        setIsDownloadMode(true);
+                    }
+                        
+                        
                 } catch (e) {
                     // Nếu không parse được, check string cũ
-                    if (extraData === 'download') shouldDownload = true;
+                    if (extraData === 'download') {
+                        shouldDownload = true;
+                        setIsDownloadMode(true);
+                    }
                 }
             }
             if (shouldDownload) {
@@ -447,13 +456,18 @@ export default function ThanhToanThanhCong() {
             <div className="max-w-6xl mx-auto">
                 <div className="text-center mb-8">
                     <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-                        <CheckCircle className="h-8 w-8 text-green-600" />
+                        {isDownloadMode ? (
+                            <Download className="h-8 w-8 text-green-600" />
+                        ) : (
+                            <CheckCircle className="h-8 w-8 text-green-600" />
+                        )}
                     </div>
                     <h1 className="text-3xl font-bold text-green-600 mb-2">
-                        {orderId.startsWith('ORD_FORCHANGE_') ? 'Giao dịch đổi lịch thành công!' : 'Giao dịch thành công!'}
+                        {isDownloadMode ? 'Tải Vé Điện Tử' : (orderId.startsWith('ORD_FORCHANGE_') ? 'Giao dịch đổi lịch thành công!' : 'Giao dịch thành công!')}
                     </h1>
+                   
                     <p className="text-lg text-muted-foreground">
-                        Cảm ơn bạn đã tin tưởng MegaTrip. Vé điện tử đã được gửi đến email của bạn.
+                        Cảm ơn bạn đã tin tưởng MegaTrip. 
                     </p>
                 </div>
 

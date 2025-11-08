@@ -1125,6 +1125,7 @@ const Support: React.FC = () => {
         }
     });
     const handleAddResponse = async () => {
+        console.log("handleAddResponse started");
         if (!selectedTicket || !responseContent.trim()) return;
         setIsProcessingResponse(true);
         const ticketId = selectedTicket.id;
@@ -1255,10 +1256,13 @@ const Support: React.FC = () => {
             }
 
 
+            console.log("About to close modal");
+            // Đóng modal và reset state sau khi thành công
             setViewModalOpen(false);
             setSelectedTicket(null);
             setResponseContent("");
             setIsInternal(false);
+            console.log("Modal closed and state reset");
         } catch (err: any) {
             console.error("handleAddResponse error", err);
             toast({ title: "Lỗi khi xử lý", description: String(err?.message || err), variant: "destructive" });
@@ -1831,7 +1835,7 @@ const Support: React.FC = () => {
                                                                     <Label htmlFor="isInternal">Ghi chú nội bộ (không gửi cho khách hàng)</Label>
                                                                 </div>
                                                                 <div className="flex gap-2">
-                                                                    {!isCancel && (
+                                                                    {!isCancel && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
                                                                         <Button
                                                                             onClick={handleAddResponse}
                                                                             disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
@@ -1840,13 +1844,13 @@ const Support: React.FC = () => {
                                                                             {addResponseMutation.isPending ? "Đang gửi..." : "Gửi phản hồi (gửi mail)"}
                                                                         </Button>
                                                                     )}
-                                                                    {isCancel && (
+                                                                    {isCancel && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
                                                                         <Button
                                                                             onClick={handleAddResponse}
                                                                             disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
                                                                             variant="destructive"
                                                                         >
-                                                                            {isProcessingResponse ? "Đang xử lý hoàn tiền..." : "Xử lý hoàn tiền (gửi mail hủy)"}
+                                                                            {isProcessingResponse ? "Đang xử lý hoàn tiền..." : "Xử lý hoàn tiền (gửi mail)"}
                                                                         </Button>
                                                                     )}
                                                                 </div>

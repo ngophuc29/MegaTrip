@@ -27,6 +27,8 @@ const Chatbot = () => {
         scrollToBottom()
     }, [messages])
 
+    
+
     const handleSend = async () => {
         if (!input.trim()) return
         const userMessage = { role: 'user' as const, text: input }
@@ -77,7 +79,6 @@ const Chatbot = () => {
                     dataPrompt = filtered.map((b: any) =>
                         `**${b.operator.name}**\n` +
                         `📍 ${b.routeFrom.city} → ${b.routeTo.city} | 💰 ${b.adultPrice.toLocaleString()}đ\n` +
-                        // `Khởi hành từ ngày 🕐 ${new Date(b.departureAt).toLocaleString('vi')}\n` +
                         `🔗 [Đặt ngay](http://localhost:3000/xe-du-lich/${b._id})`
                     ).join('\n\n')
                 } else {
@@ -86,11 +87,121 @@ const Chatbot = () => {
             }
 
             else if (lowerInput.includes('máy bay') || lowerInput.includes('flight')) {
-                dataPrompt = 'Bạn hãy chọn **điểm đi** và **điểm đến** trên app MegaTrip để xem vé máy bay nhé!'
+                dataPrompt = 'Bạn hãy chọn **điểm đi** và **điểm đến** để xem vé máy bay nhé! [Tìm vé máy bay](http://localhost:3000/ve-may-bay)';
             }
 
+            else if (lowerInput.includes('hủy') || lowerInput.includes('hủy đơn') || lowerInput.includes('chính sách hủy')) {
+                dataPrompt = `
+**Chính sách hủy đơn MegaTrip**
+
+**Tour:**
+- Trước 15 ngày: Phí 20% giá trị tour
+- 7-14 ngày trước: Phí 50% giá trị tour
+- 3-6 ngày trước: Phí 75% giá trị tour
+- Trong 3 ngày trước: Phí 100% giá trị tour
+
+**Xe khách:**
+- ≥ 72 giờ trước giờ khởi hành: Phí 10% (50.000đ/khách)
+- 24-72 giờ trước: Phí 25% + 50.000đ/khách
+- 12-24 giờ trước: Phí 50%
+- < 12 giờ: Không hoàn
+
+**Vé máy bay:**
+- Theo chính sách của hãng (Vietnam Airlines, VietJet, v.v.)
+- Thường: ≥ 7 ngày: Phí 5-10%, 3-7 ngày: 20-30%, < 3 ngày: 50-100%
+- Thuế không hoàn: 50.000-60.000đ/khách
+
+Liên hệ hỗ trợ để hủy đơn cụ thể.
+            `;
+            }
+
+            else if (lowerInput.includes('đổi') || lowerInput.includes('đổi lịch') || lowerInput.includes('chính sách đổi')) {
+                dataPrompt = `
+**Chính sách đổi lịch MegaTrip**
+
+**Tour:**
+- Trên 5 ngày: Phí 30% giá trị tour
+- Từ 5 ngày trước: Phí 50% giá trị tour
+- 3 ngày trước: Phí 100% giá trị tour
+
+**Xe khách:**
+- ≥ 72 giờ trước: Phí 50.000đ/khách
+- 24-72 giờ trước: Phí 50.000đ/khách + 25% giá vé
+- < 24 giờ: Không đổi
+
+**Vé máy bay:**
+- Theo chính sách hãng, thường cao hơn hủy.
+- Có thể đổi với phí + chênh lệch giá.
+
+Liên hệ hỗ trợ để đổi lịch cụ thể.
+            `;
+            }
+            
+
+            else if (lowerInput.includes('thanh toán') || lowerInput.includes('hoàn tiền') || lowerInput.includes('chuyển khoản')) {
+                dataPrompt = `
+**Thanh toán & hoàn tiền MegaTrip**
+
+**Phương thức thanh toán:**
+- **Ví điện tử**: ZaloPay, VNPay, MoMo (phí 0%)
+
+**Thanh toán như thế nào?**
+- Chọn dịch vụ → Điền thông tin → Chọn phương thức → Xác nhận thanh toán.
+
+**Khi nào nhận được tiền hoàn?**
+- **Tour/Xe khách**: 7-14 ngày làm việc sau khi hủy.
+- **Vé máy bay**: Theo chính sách hãng, thường 30-60 ngày.
+- Hoàn về phương thức thanh toán gốc.
+
+Liên hệ hỗ trợ nếu cần.
+    `;
+            }
+
+            else if (lowerInput.includes('liên hệ') || lowerInput.includes('hotline') || lowerInput.includes('hỗ trợ') || lowerInput.includes('cskh')) {
+                dataPrompt = `
+**Hỗ trợ & liên hệ MegaTrip**
+
+**Liên hệ ai khi có sự cố?**
+- Gửi email: support@megatrip.vn
+- Chat trực tiếp trên app/website.
+
+**Có số hotline không?**
+- Hotline: 1900 1234
+- Zalo OA: @MegaTripVN
+👉 [Xem ưu đãi ngay](http://localhost:3000/ho-tro)
+Chúng tôi luôn sẵn sàng giúp đỡ!
+    `;
+            }
+
+            else if (lowerInput.includes('khuyến mãi') || lowerInput.includes('giảm giá')) {
+                dataPrompt = `
+**Khuyến mãi MegaTrip**
+👉 [Xem ưu đãi ngay](http://localhost:3000/khuyen-mai)
+    `;
+            }
+
+            else if (lowerInput.includes('hành lý') || lowerInput.includes('ăn uống') || lowerInput.includes('wifi')) {
+                dataPrompt = `
+**Chi tiết dịch vụ MegaTrip**
+
+**Mang hành lý bao nhiêu ký?**
+- **Tour**: Hành lý cá nhân 7kg, ký gửi 20kg (tùy tour).
+- **Xe khách**: Hành lý miễn phí 10kg, thêm 50.000đ/kg.
+- **Vé máy bay**: Theo hãng, phổ thông 7kg handbag + 23kg checkin.
+
+**Tour có bao gồm ăn uống không?**
+- Phụ thuộc tour: Một số bao gồm bữa sáng/trưa, một số không. Kiểm tra chi tiết tour.
+
+**Xe có wifi không?**
+- Một số tuyến có wifi miễn phí, một số không. Kiểm tra chi tiết xe.
+
+Xem chi tiết trên trang dịch vụ nhé!
+    `;
+            }
+
+                
             else {
-                dataPrompt = 'Mình hỗ trợ tìm **tour**, **xe khách** và **vé máy bay**. Bạn cần gì ạ?'
+                dataPrompt = 'Mình hỗ trợ tìm **tour**, **xe khách**, **vé máy bay**, và tư vấn **chính sách hủy đơn** hoặc **đổi lịch**. Bạn cần gì ạ?'
             }
 
             const prompt = `Bạn là trợ lý MegaTrip. Dùng đúng data sau, KHÔNG bịa thêm:\n\n${dataPrompt}\n\nCâu hỏi: ${input}\n\nTrả lời tự nhiên, ngắn gọn, dùng emoji hợp lý, tên in đậm. Nếu có link thì giữ nguyên [Đặt ngay](...), nếu không thì KHÔNG thêm link.`
@@ -106,6 +217,8 @@ const Chatbot = () => {
             setIsLoading(false)
         }
     }
+
+    
 
     return (
         <>

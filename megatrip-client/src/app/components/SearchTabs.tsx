@@ -334,7 +334,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
         includedAirlineCodes: 'VN',
         nonStop: 'true',
         currencyCode: 'VND',
-        max: String(3)
+        max: String(10)
       };
       // outbound / inbound payloads
       const outboundPayload = { ...basePayload, departureDate };

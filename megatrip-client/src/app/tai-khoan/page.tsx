@@ -1150,7 +1150,13 @@ export default function TaiKhoan() {
                                                                         </Button>
                                                                     )}
                                                                     {booking.status === 'confirmed' && (
-                                                                        <Button size="sm">
+                                                                        <Button
+                                                                            size="sm"
+                                                                            onClick={() => {
+                                                                                const extraData = JSON.stringify({ download: true });
+                                                                                window.open(`/thanh-toan-thanh-cong?orderId=${booking.id}&extraData=${encodeURIComponent(extraData)}`, '_blank');
+                                                                            }}
+                                                                        >
                                                                             <Download className="h-3 w-3 mr-1" />
                                                                             Tải vé
                                                                         </Button>
