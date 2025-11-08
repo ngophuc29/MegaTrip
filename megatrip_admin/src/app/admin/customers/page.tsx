@@ -933,7 +933,7 @@ export default function Customers() {
         <div className="p-6 space-y-6 bg-gray-50">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Quản lý khách hàng</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Quản lý người dùng</h1>
                     <p className="text-gray-600 mt-1">Quản lý thông tin và hoạt động của khách hàng</p>
                 </div>
                 <div className="flex items-center space-x-3">

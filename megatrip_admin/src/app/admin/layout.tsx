@@ -50,7 +50,7 @@ interface AdminLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Thống kê & Báo cáo', href: '/admin/reports', icon: BarChart3 },
-  { name: 'Quản lý khách hàng', href: '/admin/customers', icon: Users },
+  { name: 'Quản lý người dùng', href: '/admin/customers', icon: Users },
   { name: 'Quản lý tour', href: '/admin/tours', icon: MapPin },
   // { name: 'Quản lý chuyến bay', href: '/admin/flights', icon: Plane },
   { name: 'Quản lý vé xe', href: '/admin/buses', icon: Bus },

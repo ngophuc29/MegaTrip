@@ -499,17 +499,16 @@ export default function Tours() {
         return () => { mounted = false; };
     }, []);
 
-    const filteredTours = mockTours
+    const filteredTours = tours
         .filter((tour) => {
             if (filters.status !== "all" && tour.status !== filters.status) return false;
             if (filters.category !== "all" && tour.categoryId !== filters.category) return false;
             if (searchQuery && !tour.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             return true;
-        })
-        .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
+        });
 
     const toursData = {
-        data: filteredTours,
+        data: filteredTours.slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize),
         pagination: {
             total: filteredTours.length,
         },
@@ -1219,7 +1218,7 @@ export default function Tours() {
         },
     });
 
-    const total = toursData?.pagination?.total || 0;
+    const total = tours.length;
 
     // Form validation
     const validateForm = (data: TourFormData, modalMode: string, originalTour: Tour | null = null): Record<string, string> => {
@@ -1611,10 +1610,10 @@ export default function Tours() {
             sortable: true,
             render: (_, record: Tour) => (
                 <div className="text-sm">
-                    <div className="flex items-center">
+                    {/* <div className="flex items-center">
                         <Users className="w-3 h-3 mr-1" />
                         {record.seatsBooked}/{record.maxGroupSize}
-                    </div>
+                    </div> */}
                     <div
                         className={`text-xs ${record.maxGroupSize - record.seatsBooked <= record.maxGroupSize * 0.2
                             ? "text-orange-600"
@@ -1623,7 +1622,7 @@ export default function Tours() {
                                 : "text-green-600"
                             }`}
                     >
-                        {record.maxGroupSize - record.seatsBooked} chỗ trống
+                        {record.maxGroupSize - record.seatsBooked} chỗ 
                     </div>
                 </div>
             ),
@@ -2982,7 +2981,7 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tổng tour</p>
-                                <p className="text-2xl font-bold">{total || 0}</p>
+                                <p className="text-2xl font-bold">{total}</p>
                             </div>
                             <MapPin className="w-8 h-8 text-primary" />
                         </div>
@@ -2994,7 +2993,7 @@ export default function Tours() {
                             <div>
                                 <p className="text-sm text-gray-600">Đang bán</p>
                                 <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.status === "active").length}
+                                    {tours.filter((t: Tour) => t.isVisible).length}
                                 </p>
                             </div>
                             <Eye className="w-8 h-8 text-green-500" />
@@ -3007,8 +3006,7 @@ export default function Tours() {
                             <div>
                                 <p className="text-sm text-gray-600">Sắp hết chỗ</p>
                                 <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.maxGroupSize - t.seatsBooked <= t.maxGroupSize * 0.2)
-                                        .length}
+                                    {tours.filter((t: Tour) => t.maxGroupSize - t.seatsBooked <= t.maxGroupSize * 0.2).length}
                                 </p>
                             </div>
                             <Users className="w-8 h-8 text-orange-500" />
@@ -3020,7 +3018,9 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đánh giá TB</p>
-                                <p className="text-2xl font-bold">4.7</p>
+                                <p className="text-2xl font-bold">
+                                    {tours.length > 0 ? (tours.reduce((sum, t) => sum + t.ratingsAverage, 0) / tours.length).toFixed(1) : '0.0'}
+                                </p>
                             </div>
                             <Star className="w-8 h-8 text-yellow-500" />
                         </div>
@@ -3085,7 +3085,7 @@ export default function Tours() {
                             selectedRowKeys: selectedTours,
                             onChange: setSelectedTours,
                         }}
-                        bulkActions={bulkActions}
+                        // bulkActions={bulkActions}
                         actions={actions}
                         exportable
                         onExport={() =>

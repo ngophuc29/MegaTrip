@@ -2360,7 +2360,7 @@ export default function Buses() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -2397,7 +2397,7 @@ export default function Buses() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -2407,7 +2407,7 @@ export default function Buses() {
                             <DollarSign className="w-8 h-8 text-blue-500" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
             </div>
 
             <Card>
@@ -2463,7 +2463,7 @@ export default function Buses() {
                             selectedRowKeys: selectedBuses,
                             onChange: setSelectedBuses,
                         }}
-                        bulkActions={bulkActions}
+                        // bulkActions={bulkActions}
                         actions={actions}
                         exportable
                         onExport={() => toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })}

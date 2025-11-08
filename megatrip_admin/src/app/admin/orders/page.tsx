@@ -435,6 +435,20 @@ export default function Orders() {
     const [bulkLoadingMessage, setBulkLoadingMessage] = useState("");
 
 
+    // Thêm query để fetch tất cả orders cho stats
+    const { data: allOrdersData } = useQuery({
+        queryKey: ['orders-all'],
+        queryFn: async () => {
+            const res = await fetch(`${API_BASE}/api/orders?page=1&pageSize=10000`); // Fetch nhiều để có đủ data
+            if (!res.ok) throw new Error('Failed to fetch all orders');
+            const json = await res.json();
+            return json.data.map((order: any) => ({
+                ...order,
+                id: order._id,
+            }));
+        },
+    });
+
     // Fetch orders with API
     // const { data: ordersData, isLoading, error, refetch } = useQuery({
     //     queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters],
@@ -638,7 +652,7 @@ export default function Orders() {
     });
 
     const orders = ordersData?.data || [];
-    const total = ordersData?.pagination?.total || 0;
+    const total = allOrdersData?.length || 0;
 
     const getStatusInfo = (status: string, type: 'order' | 'payment') => {
         const statuses = type === 'order' ? orderStatuses : paymentStatuses;
@@ -790,10 +804,26 @@ export default function Orders() {
             sortable: true,
             render: (value, record: Order) => {
                 const snap = record.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = record.changeCalendar && record.dateChangeCalendar ? record.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toLocaleDateString('vi-VN') : '--';
-                return <div className="text-sm">{serviceDate}</div>;
+                const item = record.items?.[0];
+                let serviceDate = '';
+                if (item?.type === 'flight' && !record.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+                    } else if (flights?.outbound) {
+                        serviceDate = flights.outbound.date;
+                    } else if (flights?.inbound) {
+                        serviceDate = flights.inbound.date;
+                    }
+                } else {
+                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                    serviceDate = record.changeCalendar && record.dateChangeCalendar ? record.dateChangeCalendar : originalServiceDateRaw;
+                    if (serviceDate) {
+                        const serviceDateObj = new Date(serviceDate);
+                        serviceDate = serviceDateObj.toISOString().slice(0, 10);
+                    }
+                }
+                return <div className="text-sm">{serviceDate || '--'}</div>;
             },
         },
     ];
@@ -827,8 +857,21 @@ export default function Orders() {
     const handleCompleteOrder = (order: Order) => {
         // Tính ngày sử dụng từ metadata
         const snap = order.metadata?.bookingDataSnapshot;
-        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        const item = order.items?.[0];
+        let serviceDateRaw = '';
+        if (item?.type === 'flight' && !order.changeCalendar) {
+            const flights = snap?.flights;
+            if (flights?.outbound && flights?.inbound) {
+                serviceDateRaw = flights.outbound.date; // Dùng outbound để check
+            } else if (flights?.outbound) {
+                serviceDateRaw = flights.outbound.date;
+            } else if (flights?.inbound) {
+                serviceDateRaw = flights.inbound.date;
+            }
+        } else {
+            const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+            serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        }
         const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
 
         // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
@@ -1063,7 +1106,7 @@ export default function Orders() {
                             continue; // Bỏ qua đơn này, không cập nhật
                         }
 
-                        console.log("Cập nhật đơn hàng:", id);
+                        console.log("Cập nhật đơn hàng:", order.id);
                         // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
                         await updateOrderMutation.mutateAsync({
                             id: order.id,
@@ -1076,9 +1119,10 @@ export default function Orders() {
                         description: "Đã hoàn thành các đơn hàng được chọn.",
                     });
                 } catch (error) {
+                    console.error("Bulk complete error:", error); // Thêm log để debug
                     toast({
                         title: "Lỗi khi hoàn thành",
-                        description: "Có lỗi xảy ra khi hoàn thành đơn hàng.",
+                        description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
                         variant: "destructive",
                     });
                 } finally {
@@ -1380,7 +1424,7 @@ export default function Orders() {
                     <div className="mt-2 space-y-2">
                         <div className="flex justify-between">
                             <span>Phương thức:</span>
-                            <span>{paymentMethods.find(m => m.value === selectedOrder.paymentMethod)?.label}</span>
+                            <span>Banking</span>
                         </div>
                         {selectedOrder.transId && (
                             <div className="flex justify-between">
@@ -1402,6 +1446,8 @@ export default function Orders() {
                         )}
                     </div>
                 </div>
+              
+
                 {/* Ticket Information */}
                 {loadingDetails ? (
                     <div className="text-center">Đang tải thông tin vé...</div>
@@ -1409,47 +1455,100 @@ export default function Orders() {
                     <div>
                         <Label className="text-sm font-medium text-gray-700">Thông tin vé</Label>
                         <div className="mt-2 space-y-4">
-                            {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
-                                <div>
-                                    <h4 className="font-semibold">Vé cũ</h4>
-                                    <div className="space-y-2">
-                                        {orderDetails.oldTickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
-                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                <div>
-                                                    <div className="font-medium">{ticket.ticketNumber}</div>
-                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
-                                                </div>
-                                                <div className="text-sm">
-                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                    <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                </div>
+                            {selectedOrder.changeCalendar && selectedOrder.orderStatus !== 'cancelled' ? (
+                                <>
+                                    {/* Đơn đổi lịch chưa hủy: Hiển thị Vé cũ và Vé đã đổi */}
+                                    {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold">Vé cũ</h4>
+                                            <div className="space-y-2">
+                                                {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                                    <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-medium">{ticket.ticketNumber}</div>
+                                                            <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                        </div>
+                                                        <div className="text-sm">
+                                                            <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                            <Badge className="ml-2 bg-red-100 text-red-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {orderDetails.tickets && orderDetails.tickets.length > 0 && (
-                                <div>
-                                    <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
-                                    <div className="space-y-2">
-                                        {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
-                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                <div>
-                                                    <div className="font-medium">{ticket.ticketNumber}</div>
-                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
-                                                </div>
-                                                <div className="text-sm">
-                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                    <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                </div>
+                                        </div>
+                                    )}
+                                    {orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold">Vé đã đổi</h4>
+                                            <div className="space-y-2">
+                                                {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid').map((ticket) => (
+                                                    <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-medium">{ticket.ticketNumber}</div>
+                                                            <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                        </div>
+                                                        <div className="text-sm">
+                                                            <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                            <Badge className="ml-2 bg-blue-100 text-blue-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        </div>
+                                    )}
+                                </>
+                            ) : selectedOrder.orderStatus === 'cancelled' ? (
+                                /* Đơn hủy (bao gồm vừa đổi lịch vừa hủy): Hiển thị Vé đã hủy */
+                                        (() => {
+                                            const allCancelledTickets = [...(orderDetails.tickets || []), ...(orderDetails.oldTickets || [])].filter((ticket) => ticket.status === 'cancelled');
+                                            const uniqueTickets = allCancelledTickets.filter((ticket, index, self) => self.findIndex(t => t.ticketNumber === ticket.ticketNumber) === index);
+                                            return (
+                                                <div>
+                                                    <h4 className="font-semibold">Vé đã hủy</h4>
+                                                    <div className="space-y-2">
+                                                        {uniqueTickets.map((ticket) => (
+                                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                                <div>
+                                                                    <div className="font-medium">{ticket.ticketNumber}</div>
+                                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                                </div>
+                                                                <div className="text-sm">
+                                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                                    <Badge className="ml-2 bg-red-100 text-red-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                            ) : (
+                                /* Đơn không đổi lịch và không hủy: Hiển thị Vé bình thường */
+                                orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold">Vé</h4>
+                                        <div className="space-y-2">
+                                            {orderDetails.tickets.filter((ticket) => ticket.status === 'paid').map((ticket) => (
+                                                <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                    <div>
+                                                        <div className="font-medium">{ticket.ticketNumber}</div>
+                                                        <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                    </div>
+                                                    <div className="text-sm">
+                                                        <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                        <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )
                             )}
                         </div>
                     </div>
                 )}
+
+                
 
 
 
@@ -1474,10 +1573,10 @@ export default function Orders() {
                                 <span>Chênh lệch:</span>
                                 <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.inforChangeCalendar.diff)} ₫</span>
                             </div>
-                            <div className="flex justify-between">
+                            {/* <div className="flex justify-between">
                                 <span>Mã giao dịch đổi:</span>
                                 <span>{selectedOrder.inforChangeCalendar.transId}</span>
-                            </div>
+                            </div> */}
                             <div className="flex justify-between">
                                 <span>Mã đổi lịch:</span>
                                 <span>{selectedOrder.inforChangeCalendar.codeChange}</span>
@@ -1532,7 +1631,7 @@ export default function Orders() {
                                     </div>
                                 </div>
                             )}
-                            {selectedOrder.metadata.bookingDataSnapshot.pricing && (
+                            {/* {selectedOrder.metadata.bookingDataSnapshot.pricing && (
                                 <div>
                                     <h4 className="font-medium">Giá chi tiết</h4>
                                     <div className="space-y-1 text-sm">
@@ -1543,7 +1642,7 @@ export default function Orders() {
                                         <div>Tổng: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.total)} ₫</div>
                                     </div>
                                 </div>
-                            )}
+                            )} */}
                         </div>
                     </div>
                 )}
@@ -1627,13 +1726,13 @@ export default function Orders() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tổng đơn hàng</p>
-                                <p className="text-2xl font-bold">{total || 0}</p>
+                                <p className="text-2xl font-bold">{total}</p>
                             </div>
                             <ShoppingBag className="w-8 h-8 text-primary" />
                         </div>
@@ -1645,7 +1744,20 @@ export default function Orders() {
                             <div>
                                 <p className="text-sm text-gray-600">Chờ xử lý</p>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o: Order) => o.orderStatus === "pending").length}
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "pending").length || 0}
+                                </p>
+                            </div>
+                            <Clock className="w-8 h-8 text-yellow-500" />
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Đã xác nhận</p>
+                                <p className="text-2xl font-bold">
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "confirmed").length || 0}
                                 </p>
                             </div>
                             <Clock className="w-8 h-8 text-yellow-500" />
@@ -1658,7 +1770,7 @@ export default function Orders() {
                             <div>
                                 <p className="text-sm text-gray-600">Hoàn thành</p>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o: Order) => o.orderStatus === "completed").length}
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "completed").length || 0}
                                 </p>
                             </div>
                             <CheckCircle className="w-8 h-8 text-green-500" />
@@ -1675,9 +1787,9 @@ export default function Orders() {
                                         notation: 'compact',
                                         compactDisplay: 'short'
                                     }).format(
-                                        orders
-                                            .filter((o: Order) => o.paymentStatus === "paid")
-                                            .reduce((sum: number, o: Order) => sum + o.total, 0)
+                                        allOrdersData
+                                            ?.filter((o: Order) => o.paymentStatus === "paid")
+                                            .reduce((sum: number, o: Order) => sum + o.total, 0) || 0
                                     )} ₫
                                 </p>
                             </div>
@@ -1700,7 +1812,7 @@ export default function Orders() {
                                 variant="outline"
                                 onClick={handleSelectCompletable}
                             >
-                                {isSelectingCompletable ? "Hủy chọn đơn có thể hoàn thành" : "Chọn đơn có thể hoàn thành"}
+                                {isSelectingCompletable ? "Hủy chọn đơn đánh dấu hoàn thành" : "Chọn đơn đánh dấu hoàn thành"}
                             </Button>
                             <Select value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))}>
                                 <SelectTrigger className="w-40">
