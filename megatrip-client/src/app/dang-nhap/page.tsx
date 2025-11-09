@@ -14,6 +14,7 @@ export default function DangNhap() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [checked, setChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   // Check if already logged in and redirect without rendering
@@ -35,6 +36,7 @@ export default function DangNhap() {
       setError('Vui lòng nhập đầy đủ thông tin');
       return;
     }
+    setIsLoading(true);
     try {
       const res: any = await auth.login({ email: form.email, password: form.password });
       const token = res?.accessToken ?? res?.token ?? res?.data?.accessToken;
@@ -66,6 +68,8 @@ export default function DangNhap() {
       }
     } catch (err: any) {
       setError(err?.message || 'Lỗi khi đăng nhập');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -107,7 +111,10 @@ export default function DangNhap() {
                 </div>
                 {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                 {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-                <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng nhập</Button>
+                {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng nhập</Button> */}
+                <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
+                  {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </Button>
                 <div className="text-center text-sm mt-2">
                   Chưa có tài khoản?{' '}
                   <Link href="/dang-ky" className="text-primary font-medium hover:underline">Đăng ký ngay</Link>
@@ -118,7 +125,8 @@ export default function DangNhap() {
                 <span className="px-3 text-xs text-muted-foreground">hoặc đăng nhập với</span>
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
               </div>
-              <Button
+
+              {/* <Button
                 type="button"
                 className="w-full flex items-center justify-center gap-2 rounded-full font-bold shadow transition px-4 py-3 border text-base"
                 style={{ background: 'hsl(var(--primary-50))', color: 'hsl(var(--primary-700))', borderColor: 'hsl(var(--primary))' }}
@@ -139,7 +147,9 @@ export default function DangNhap() {
                     </g>
                   </svg>
                 </span>
-              </Button>
+              </Button> */}
+
+
               <div className="text-xs text-muted-foreground text-center mt-6">
                 Bằng cách tiếp tục, bạn đồng ý với <Link href="/dieu-khoan" className="text-primary underline">Điều khoản</Link> và <Link href="/dieu-kien" className="text-primary underline">Điều kiện</Link> này và bạn đã được thông báo về <Link href="/chinh-sach-bao-mat" className="text-primary underline">Chính sách bảo vệ dữ liệu</Link> của chúng tôi.
               </div>
