@@ -27,7 +27,9 @@ import {
   Plus,
   Newspaper
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
+import auth from '../../apis/auth';
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -65,13 +67,84 @@ const navigation = [
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [user, setUser] = useState<any | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const hasToken = typeof window !== 'undefined' ? !!localStorage.getItem('accessToken') : false;
 
   const getBreadcrumb = () => {
     const currentNav = navigation.find(nav => nav.href === pathname);
     return currentNav ? currentNav.name : 'Dashboard';
   };
+
+  useEffect(() => {
+    // If no token at all, redirect immediately to login to prevent unauthenticated access
+    if (pathname !== '/admin/login') {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      if (!token) {
+        router.replace('/admin/login');
+        return;
+      }
+    }
+
+    // Skip auth check for login page
+    if (pathname === '/admin/login') {
+      setAuthChecked(true);
+      return;
+    }
+
+    const check = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        if (!token) {
+          router.push('/admin/login');
+          return;
+        }
+        const meRes: any = await auth.me();
+        if (!meRes || meRes.role !== 'admin') {
+          localStorage.removeItem('accessToken');
+          router.push('/admin/login');
+          return;
+        }
+        setUser(meRes);
+      } catch (err) {
+        localStorage.removeItem('accessToken');
+        router.push('/admin/login');
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+    check();
+  }, [pathname, router]);
+
+  // Nếu đang ở trang admin (không phải /admin/login) và chưa check auth xong hoặc không có token -> hiện spinner
+  if (pathname !== '/admin/login' && (!authChecked || !hasToken)) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mb-4">
+            <svg className="animate-spin h-10 w-10 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+          </div>
+          <div className="text-gray-700">Đang kiểm tra quyền truy cập...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Nếu đang ở trang login admin, chỉ render nội dung con (không render chrome của admin)
+  if (pathname === '/admin/login') {
+    return (
+      <main className="min-h-[calc(100vh-4rem)]">
+        {children}
+        <Toaster />
+      </main>
+    );
+  }
 
   return (
     <>
@@ -279,9 +352,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">Nguyễn Văn Admin</p>
+                        <p className="text-sm font-medium leading-none">{user?.name || 'Quản trị viên'}</p>
                         <p className="text-xs leading-none text-muted-foreground">
-                          admin@travelcompany.vn
+                          {user?.email || '---'}
                         </p>
                       </div>
                     </DropdownMenuLabel>
@@ -295,7 +368,13 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       <span>Cài đặt</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
+                    <DropdownMenuItem
+                      className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors"
+                      onSelect={() => {
+                        try { localStorage.removeItem('accessToken'); } catch (e) { }
+                        router.push('/admin/login');
+                      }}
+                    >
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Đăng xuất</span>
                     </DropdownMenuItem>
