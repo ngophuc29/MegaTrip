@@ -366,9 +366,10 @@ export function DataTable({
                     checked={allSelected ? true : someSelected ? "indeterminate" : false}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        rowSelection.onChange(
-                          data.map((_, index) => index.toString())
+                        const keys = data.map((record, idx) =>
+                          String(record[rowKey] ?? record.id ?? record.key ?? idx)
                         );
+                        rowSelection.onChange(keys);
                       } else {
                         rowSelection.onChange([]);
                       }
@@ -438,14 +439,13 @@ export function DataTable({
                     <TableCell>
                       <Checkbox
                         checked={rowSelection.selectedRowKeys.includes(
-                          index.toString()
+                          String(record[rowKey] ?? record.id ?? record.key ?? index)
                         )}
                         onCheckedChange={(checked) => {
+                          const recordKey = String(record[rowKey] ?? record.id ?? record.key ?? index);
                           const newSelection = checked
-                            ? [...rowSelection.selectedRowKeys, index.toString()]
-                            : rowSelection.selectedRowKeys.filter(
-                              (key) => key !== index.toString()
-                            );
+                            ? [...rowSelection.selectedRowKeys, recordKey]
+                            : rowSelection.selectedRowKeys.filter((key) => key !== recordKey);
                           rowSelection.onChange(newSelection);
                         }}
                         {...rowSelection.getCheckboxProps?.(record)}

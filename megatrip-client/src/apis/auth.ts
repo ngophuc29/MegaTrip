@@ -24,6 +24,17 @@ export async function resendOtp(payload: ResendOtpPayload) {
     return axiosClient.post(API_NAMES.auth.resendOtp, payload);
 }
 
+type ForgotPayload = { email: string };
+type ResetPayload = { email: string; token: string; password: string };
+
+export async function forgotPassword(payload: ForgotPayload) {
+    return axiosClient.post(API_NAMES.auth.forgotPassword, payload);
+}
+
+export async function resetPassword(payload: ResetPayload) {
+    return axiosClient.post(API_NAMES.auth.resetPassword, payload);
+}
+
 export async function updateProfile(payload: UpdateProfilePayload) {
     // Use direct URL since this API is on different port
     return axios.put('http://localhost:7700/api/auth/me', payload, {
@@ -38,4 +49,4 @@ export async function me() {
     return axiosClient.get(API_NAMES.users.me);
 }
 
-export default { login, register, verifyOtp, resendOtp, updateProfile, me };
+export default { login, register, verifyOtp, resendOtp, updateProfile, me, forgotPassword, resetPassword };

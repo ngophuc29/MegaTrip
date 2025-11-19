@@ -8,5 +8,7 @@ export const API_NAMES = {
     auth: {
         verifyOtp: '/api/auth/verify-otp',
         resendOtp: '/api/auth/resend-otp',
+        forgotPassword: '/api/auth/forgot-password',
+        resetPassword: '/api/auth/reset-password',
     },
 };

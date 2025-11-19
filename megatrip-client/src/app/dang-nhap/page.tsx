@@ -119,6 +119,9 @@ export default function DangNhap() {
                   Chưa có tài khoản?{' '}
                   <Link href="/dang-ky" className="text-primary font-medium hover:underline">Đăng ký ngay</Link>
                 </div>
+              <div className="text-center text-sm mt-2">
+                <Link href="/quen-mat-khau" className="text-primary font-medium hover:underline">Quên mật khẩu?</Link>
+              </div>
               </form>
               <div className="my-4 w-full flex items-center">
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
