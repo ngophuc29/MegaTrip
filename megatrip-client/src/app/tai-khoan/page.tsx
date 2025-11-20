@@ -414,6 +414,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
                     </ModalFooter>
                 </ModalContent>
             </Modal>
+
         </div>
     );
 }
@@ -495,6 +496,14 @@ export default function TaiKhoan() {
     const [activeTab, setActiveTab] = useState<string>('overview');
     // Thêm state cho customerId
     const [customerId, setCustomerId] = useState<string | null>(null);
+    const [showChangePassword, setShowChangePassword] = useState(false);
+    const [changePasswordData, setChangePasswordData] = useState({ currentPassword: '', newPassword: '' });
+    const [changingPassword, setChangingPassword] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editForm, setEditForm] = useState(userData.profile);
+    const [bookings, setBookings] = useState(null);
+    const [loadingBookings, setLoadingBookings] = useState(false);
+    const [bookingsError, setBookingsError] = useState(null);
     useEffect(() => {
         // Try to read a possible navigation state (if any) without relying on react-router
         try {
@@ -553,11 +562,63 @@ export default function TaiKhoan() {
         } catch { }
     }, [version]);
 
-    const [isEditing, setIsEditing] = useState(false);
-    const [editForm, setEditForm] = useState(userData.profile);
-    const [bookings, setBookings] = useState(null);
-    const [loadingBookings, setLoadingBookings] = useState(false);
-    const [bookingsError, setBookingsError] = useState(null);
+
+    // ...existing code...
+
+    // Hàm gọi API đổi mật khẩu
+    const handleChangePassword = async () => {
+        console.log('handleChangePassword called'); // Log khi hàm được gọi
+        if (!changePasswordData.currentPassword || !changePasswordData.newPassword) {
+            console.log('Validation fail: input rỗng');
+            toast.error('Vui lòng nhập đầy đủ thông tin');
+            return;
+        }
+        if (changePasswordData.newPassword.length < 8) {
+            console.log('Validation fail: mật khẩu <8 ký tự');
+            toast.error('Mật khẩu mới phải có ít nhất 8 ký tự');
+            return;
+        }
+        console.log('Validation pass, calling API'); // Log trước API call
+        setChangingPassword(true);
+        try {
+            const token = localStorage.getItem('accessToken');
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/auth/me/password`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    currentPassword: changePasswordData.currentPassword,
+                    newPassword: changePasswordData.newPassword,
+                }),
+            });
+            const data = await response.json();
+            console.log('API response:', response.status, data); // Log response
+            if (response.ok) {
+                console.log('API success, closing modal');
+                toast.success('Đổi mật khẩu thành công');
+                setShowChangePassword(false);
+                setChangePasswordData({ currentPassword: '', newPassword: '' });
+            } else {
+                console.error('API error:', data);
+                toast.error(data.message || 'Đổi mật khẩu thất bại');
+            }
+        } catch (error) {
+            console.error('Fetch error:', error);
+            toast.error('Lỗi kết nối, vui lòng thử lại');
+        } finally {
+            setChangingPassword(false);
+        }
+    };
+
+    // ...existing code...
+
+    useEffect(() => {
+        console.log('showChangePassword changed:', showChangePassword);
+    }, [showChangePassword]);
+    // ...existing code...
+    
     useEffect(() => {
         let mounted = true;
         async function loadBookings() {
@@ -1264,7 +1325,7 @@ export default function TaiKhoan() {
                                                     <div className="font-medium">Đổi mật khẩu</div>
                                                     <div className="text-sm text-muted-foreground">Cập nhật mật khẩu để bảo mật tài khoản</div>
                                                 </div>
-                                                <Button variant="outline">Đổi mật khẩu</Button>
+                                                <Button onClick={() => setShowChangePassword(true)}>Đổi mật khẩu</Button>
                                             </div>
                                             <Separator />
                                             <div className="flex items-center justify-between">
@@ -1539,6 +1600,45 @@ export default function TaiKhoan() {
                         toast('Cảm ơn bạn đã chia sẻ trải nghiệm.');
                     }}
                 />
+
+                <Modal open={showChangePassword} onOpenChange={setShowChangePassword}>
+                    <ModalContent>
+                        <ModalHeader>
+                            <ModalTitle>Đổi mật khẩu</ModalTitle>
+                            <ModalDescription>
+                                Nhập mật khẩu hiện tại và mật khẩu mới để cập nhật.
+                            </ModalDescription>
+                        </ModalHeader>
+                        <div className="p-4 space-y-4">
+                            <div>
+                                <Label htmlFor="currentPassword">Mật khẩu hiện tại</Label>
+                                <Input
+                                    id="currentPassword"
+                                    type="password"
+                                    value={changePasswordData.currentPassword}
+                                    onChange={(e) => setChangePasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+                                    placeholder="Nhập mật khẩu hiện tại"
+                                />
+                            </div>
+                            <div>
+                                <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                                <Input
+                                    id="newPassword"
+                                    type="password"
+                                    value={changePasswordData.newPassword}
+                                    onChange={(e) => setChangePasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                                    placeholder="Nhập mật khẩu mới (ít nhất 8 ký tự)"
+                                />
+                            </div>
+                        </div>
+                        <ModalFooter>
+                            <Button variant="outline" onClick={() => setShowChangePassword(false)}>Hủy</Button>
+                            <Button onClick={handleChangePassword} disabled={changingPassword}>
+                                {changingPassword ? 'Đang đổi...' : 'Đổi mật khẩu'}
+                            </Button>
+                        </ModalFooter>
+                    </ModalContent>
+                </Modal>
             </>
         </Protected>
     );
