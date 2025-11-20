@@ -260,32 +260,68 @@ export default function Customers() {
             const usersRaw = dataObj.users || [];
             const users = usersRaw.filter((u: any) => u.role === 'user');
             const total = dataObj.total || 0;
-            return {
-                data: users.map((u: any) => ({
-                    key: String(u._id || u.id),
-                    id: String(u._id || u.id),
-                    name: u.name || '',
-                    email: u.email || '',
-                    phone: u.phone || '',
-                    // map isVerified to status
-                    // keep avatar field but not used in admin UI
-                    avatar: (u.avatar || '') as string,
-                    type: 'Normal' as any,
-                    status: u.isVerified ? 'active' as any : 'blocked' as any,
-                    isVerified: Boolean(u.isVerified),
-                    registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
-                    totalOrders: 0,
-                    totalSpent: 0,
-                    lastOrderAt: undefined,
-                    address: u.address || '',
-                    notes: ''
-                })),
-                pagination: {
-                    total,
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                }
-            };
+
+            // fetch aggregated order stats for displayed users
+            try {
+                const ids = users.map((u: any) => String(u._id || u.id));
+                const statsRes: any = ids.length ? await api.getUserOrderStats(ids) : null;
+                // const statsMap = statsRes?.data?.data || statsRes?.data || {};
+                // console.log("b:", statsMap);
+                return {
+                    data: users.map((u: any) => {
+                        const idStr = String(u._id || u.id);
+                        const s = statsRes && statsRes[idStr] ? statsRes[idStr] : null;
+                        return {
+                            key: idStr,
+                            id: idStr,
+                            name: u.name || '',
+                            email: u.email || '',
+                            phone: u.phone || '',
+                            avatar: (u.avatar || '') as string,
+                            type: 'Normal' as any,
+                            status: u.isVerified ? 'active' as any : 'blocked' as any,
+                            isVerified: Boolean(u.isVerified),
+                            registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
+                            totalOrders: s ? (s.totalOrders || 0) : 0,
+                            totalSpent: s ? (s.totalSpent || 0) : 0,
+                            lastOrderAt: s ? s.lastOrderAt : undefined,
+                            address: u.address || '',
+                            notes: ''
+                        };
+                    }),
+                    pagination: {
+                        total,
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                    }
+                };
+            } catch (e) {
+                // if stats fetch fails, return users with zeroed stats
+                return {
+                    data: users.map((u: any) => ({
+                        key: String(u._id || u.id),
+                        id: String(u._id || u.id),
+                        name: u.name || '',
+                        email: u.email || '',
+                        phone: u.phone || '',
+                        avatar: (u.avatar || '') as string,
+                        type: 'Normal' as any,
+                        status: u.isVerified ? 'active' as any : 'blocked' as any,
+                        isVerified: Boolean(u.isVerified),
+                        registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
+                        totalOrders: 0,
+                        totalSpent: 0,
+                        lastOrderAt: undefined,
+                        address: u.address || '',
+                        notes: ''
+                    })),
+                    pagination: {
+                        total,
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                    }
+                };
+            }
         }
     });
 

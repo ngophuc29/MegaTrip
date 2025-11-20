@@ -66,6 +66,10 @@ export async function adminDeleteUser(id: string) {
     return axiosAuth.delete(`${API_NAMES.users.adminDelete}/${id}`);
 }
 
+export async function getUserOrderStats(ids: string[]) {
+    return axiosAuth.post(API_NAMES.orders.statsByCustomers, { ids });
+}
+
 export async function logout() {
     try {
         localStorage.removeItem('accessToken');
@@ -75,4 +79,4 @@ export async function logout() {
     } catch (e) { }
 }
 
-export default { login, register, verifyOtp, resendOtp, forgotPassword, resetPassword, me, logout, listUsers, getUserById, adminCreateUser, adminUpdateUser, adminDeleteUser };
+export default { login, register, verifyOtp, resendOtp, forgotPassword, resetPassword, me, logout, listUsers, getUserById, adminCreateUser, adminUpdateUser, adminDeleteUser, getUserOrderStats };

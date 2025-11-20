@@ -18,4 +18,7 @@ export const API_NAMES = {
         forgotPassword: '/api/auth/forgot-password',
         resetPassword: '/api/auth/reset-password',
     },
+    orders: {
+        statsByCustomers: '/api/orders/stats/by-customers'
+    }
 };

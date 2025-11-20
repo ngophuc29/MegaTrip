@@ -74,8 +74,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const [authChecked, setAuthChecked] = useState(false);
   const hasToken = typeof window !== 'undefined' ? !!localStorage.getItem('accessToken') : false;
 
-  const getBreadcrumb = () => {
-    const currentNav = navigation.find(nav => nav.href === pathname);
+  const getBreadcrumb = (visibleNav: typeof navigation) => {
+    const currentNav = visibleNav.find(nav => nav.href === pathname);
     return currentNav ? currentNav.name : 'Dashboard';
   };
 
@@ -103,7 +103,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           return;
         }
         const meRes: any = await auth.me();
-        if (!meRes || meRes.role !== 'admin') {
+        // Allow both 'admin' and 'employee' roles to access admin UI.
+        if (!meRes || (meRes.role !== 'admin' && meRes.role !== 'employee')) {
           localStorage.removeItem('accessToken');
           router.push('/admin/login');
           return;
@@ -185,7 +186,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </Button>
           </div>
           <nav className="flex-1 px-3 py-4 space-y-1">
-            {navigation.map((item) => {
+            {(user?.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -214,10 +215,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Desktop sidebar */}
-        <div className={cn(
-          "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col lg:bg-primary lg:shadow-xl lg:transition-all lg:duration-300",
-          sidebarCollapsed ? "lg:w-16" : "lg:w-64"
-        )}>
+          <div className={cn(
+            "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col lg:bg-primary lg:shadow-xl lg:transition-all lg:duration-300",
+            sidebarCollapsed ? "lg:w-16" : "lg:w-64"
+          )}>
           <div className="flex h-16 items-center justify-between px-4 border-b border-primary-600">
             {!sidebarCollapsed && (
               <div className="flex items-center space-x-3">
@@ -241,7 +242,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </Button>
           </div>
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {(user?.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -304,7 +305,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                           <span className="ml-1 text-sm font-medium text-gray-900 md:ml-2">
-                            {getBreadcrumb()}
+                            {getBreadcrumb(user ? (user.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation) : navigation)}
                           </span>
                         </div>
                       </li>
