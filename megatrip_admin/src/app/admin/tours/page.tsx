@@ -276,7 +276,7 @@ export default function Tours() {
         adultPrice: 0,
         childPrice: 0,
         infantPrice: 0,
-        maxGroupSize: 1,
+        maxGroupSize:40,
         minBooking: 1,
         categoryId: "",
         tags: [],
@@ -1333,9 +1333,9 @@ export default function Tours() {
             errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
         }
 
-        if (data.maxGroupSize < 1) {
-            errors.maxGroupSize = "Số chỗ tối đa phải ít nhất là 1";
-        }
+        // if (data.maxGroupSize < 1) {
+        //     errors.maxGroupSize = "Số chỗ tối đa phải ít nhất là 1";
+        // }
 
         if (data.minBooking < 1) {
             errors.minBooking = "Số booking tối thiểu phải ít nhất là 1";
@@ -1405,7 +1405,7 @@ export default function Tours() {
             adultPrice: 0,
             childPrice: 0,
             infantPrice: 0,
-            maxGroupSize: 1,
+            maxGroupSize: 40,
             minBooking: 1,
             categoryId: "",
             tags: [],
@@ -2608,7 +2608,7 @@ export default function Tours() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <Label htmlFor="maxGroupSize">Số chỗ tối đa *</Label>
                             <Input
@@ -2616,14 +2616,14 @@ export default function Tours() {
                                 type="number"
                                 value={formData.maxGroupSize || ""}
                                 onChange={(e) => handleFormChange("maxGroupSize", parseInt(e.target.value) || 1)}
-                                placeholder="30"
+                                placeholder="40"
                                 className={formErrors.maxGroupSize ? "border-red-500" : ""}
                             />
                             {formErrors.maxGroupSize && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.maxGroupSize}</p>
                             )}
                         </div>
-                        <div>
+                        {/* <div>
                             <Label htmlFor="minBooking">Số booking tối thiểu *</Label>
                             <Input
                                 id="minBooking"
@@ -2636,7 +2636,7 @@ export default function Tours() {
                             {formErrors.minBooking && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.minBooking}</p>
                             )}
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* <div>
@@ -2657,7 +2657,7 @@ export default function Tours() {
                         />
                     </div> */}
                     <div>
-                        <Label htmlFor="startLocationPickup">Pickup chính (startLocation.pickupDropoff) *</Label>
+                        <Label htmlFor="startLocationPickup">Điểm đón</Label>
                         <Input
                             id="startLocationPickup"
                             value={(formData.startLocation && formData.startLocation.pickupDropoff) || ""}
@@ -2675,7 +2675,7 @@ export default function Tours() {
                     </div>
 
                     <div className="mt-2">
-                        <Label htmlFor="startLocationAddress">Địa chỉ điểm đón (tùy chọn)</Label>
+                        <Label htmlFor="startLocationAddress">Địa chỉ điểm đón </Label>
                         <Input
                             id="startLocationAddress"
                             value={(formData.startLocation && formData.startLocation.address) || ""}
@@ -2685,7 +2685,7 @@ export default function Tours() {
                                     address: e.target.value,
                                 } as any)
                             }
-                            placeholder="Địa chỉ chi tiết (tùy chọn)"
+                            placeholder="Địa chỉ chi tiết"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">

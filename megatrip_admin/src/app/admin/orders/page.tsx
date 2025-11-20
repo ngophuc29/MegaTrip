@@ -1005,29 +1005,123 @@ export default function Orders() {
         });
     };
 
+    // const getCompletableOrders = () => {
+    //     return orders
+    //         .map((order, index) => ({ order, index }))
+    //         .filter(({ order }) => {
+    //             // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+    //             const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
+
+    //             // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+    //             const snap = order.metadata?.bookingDataSnapshot;
+    //             const item = order.items?.[0];
+    //             let isServiceDateValid = false;
+
+    //             // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+    //             const today = new Date();
+    //             today.setHours(0, 0, 0, 0);
+    //             const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    //             if (item?.type === 'flight' && !order.changeCalendar) {
+    //                 const flights = snap?.flights;
+    //                 if (flights?.outbound && flights?.inbound) {
+    //                     // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều <= today
+    //                     const outboundDate = new Date(flights.outbound.date);
+    //                     const inboundDate = new Date(flights.inbound.date);
+    //                     const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+    //                     const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+    //                     isServiceDateValid = outboundOnly <= todayOnly && inboundOnly <= todayOnly;
+    //                 } else if (flights?.outbound) {
+    //                     // Chỉ outbound
+    //                     const serviceDate = new Date(flights.outbound.date);
+    //                     const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+    //                     isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //                 } else if (flights?.inbound) {
+    //                     // Chỉ inbound
+    //                     const serviceDate = new Date(flights.inbound.date);
+    //                     const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+    //                     isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //                 }
+    //             } else {
+    //                 // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+    //                 let serviceDateRaw = '';
+    //                 if (item?.type === 'flight' && !order.changeCalendar) {
+    //                     // Đã xử lý ở trên, không vào đây
+    //                 } else {
+    //                     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    //                     serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+    //                 }
+    //                 const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+    //                 const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+    //                 isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //             }
+
+    //             return isValidStatus && isServiceDateValid;
+    //         })
+    //         .map(({ order }) => order.id);
+    // };
+
+    // ...existing code...
+
     const getCompletableOrders = () => {
-        return orders
-            .map((order, index) => ({ order, index }))
-            .filter(({ order }) => {
-                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
-                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
+        // Ưu tiên dùng allOrdersData (toàn bộ data), fallback về orders (pagination hiện tại)
+        const dataToCheck = allOrdersData || orders;
+
+        return dataToCheck
+            .filter((order) => {
+                // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+                const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
 
                 // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
                 const snap = order.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                const item = order.items?.[0];
+                let isServiceDateValid = false;
+
+                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
                 const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                if (item?.type === 'flight' && !order.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều <= today
+                        const outboundDate = new Date(flights.outbound.date);
+                        const inboundDate = new Date(flights.inbound.date);
+                        const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+                        const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+                        isServiceDateValid = outboundOnly <= todayOnly && inboundOnly <= todayOnly;
+                    } else if (flights?.outbound) {
+                        // Chỉ outbound
+                        const serviceDate = new Date(flights.outbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                    } else if (flights?.inbound) {
+                        // Chỉ inbound
+                        const serviceDate = new Date(flights.inbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                    }
+                } else {
+                    // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+                    let serviceDateRaw = '';
+                    if (item?.type === 'flight' && !order.changeCalendar) {
+                        // Đã xử lý ở trên, không vào đây
+                    } else {
+                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                        serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                    }
+                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                    isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                }
 
                 return isValidStatus && isServiceDateValid;
             })
-            .map(({ index }) => index.toString());
+            .map((order) => order.id);
     };
 
+    // ...existing code...
     const handleSelectCompletable = () => {
         if (isSelectingCompletable) {
             setSelectedOrders([]);
@@ -1064,14 +1158,13 @@ export default function Orders() {
         // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
         {
             label: "Hoàn thành",
-            action: async (keys: string[]) => {
+            action: async (keys: string[]) => { // keys giờ là array của id
                 setBulkLoading(true);
                 setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
                 try {
                     console.log("Bulk hoàn thành: keys =", keys);
-                    for (const key of keys) {
-                        const index = parseInt(key);
-                        const order = orders[index];
+                    for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                        const order = orders.find(o => o.id === id); // Tìm order bằng id
                         console.log("Order found:", order);
                         if (!order) continue;
 
@@ -1133,15 +1226,14 @@ export default function Orders() {
         },
         {
             label: "Hủy đơn",
-            action: async (keys: string[]) => {
+            action: async (keys: string[]) => { // keys giờ là array của id
                 setBulkLoading(true);
                 setBulkLoadingMessage("Đang hủy đơn hàng...");
                 try {
                     let successCount = 0;
                     let errorCount = 0;
-                    for (const key of keys) {
-                        const index = parseInt(key);
-                        const order = orders[index];
+                    for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                        const order = orders.find(o => o.id === id); // Tìm order bằng id
                         if (!order) {
                             errorCount++;
                             continue;
@@ -1805,6 +1897,12 @@ export default function Orders() {
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle>Danh sách đơn hàng</CardTitle>
+                            {(() => {
+                                const completableCount = getCompletableOrders().length;
+                                return completableCount > 0 ? (
+                                    <p className="text-sm text-gray-600">Số lượng đơn có thể đánh dấu hoàn thành: {completableCount}</p>
+                                ) : null;
+                            })()}
                             <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái</CardDescription>
                         </div>
                         <div className="flex items-center space-x-2">
@@ -1871,6 +1969,7 @@ export default function Orders() {
                     <DataTable
                         columns={columns}
                         data={orders}
+                        rowKey="id" // Thêm: dùng id làm key cho row
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
@@ -1881,8 +1980,8 @@ export default function Orders() {
                         }
                         onSearch={setSearchQuery}
                         rowSelection={{
-                            selectedRowKeys: selectedOrders,
-                            onChange: setSelectedOrders,
+                            selectedRowKeys: selectedOrders, // Giờ là array của id
+                            onChange: setSelectedOrders, // onChange nhận array của id
                         }}
                         bulkActions={bulkActions}
                         actions={actions}

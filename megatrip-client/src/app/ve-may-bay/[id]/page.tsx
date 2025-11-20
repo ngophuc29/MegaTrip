@@ -2111,7 +2111,7 @@ export default function ChiTietVeMayBay() {
                                 </div>
 
                                 {/* Passenger Information */}
-                                <Card>
+                                {/* <Card>
                                     <CardHeader>
                                         <CardTitle>Thông tin hành khách</CardTitle>
                                         <p className="text-red-600">
@@ -2229,7 +2229,7 @@ export default function ChiTietVeMayBay() {
                                             </TabsContent>
                                         </Tabs>
                                     </CardContent>
-                                </Card>
+                                </Card> */}
                             </div>
 
                             {/* Sidebar - Booking Summary */}
@@ -2598,11 +2598,11 @@ export default function ChiTietVeMayBay() {
                                                 className="w-full"
                                                 size="lg"
                                                 onClick={() => {
-                                                    if (!validateLeadPassengerAndContact()) {
-                                                        window.scrollTo({ top: 200, behavior: "smooth" });
-                                                        alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
-                                                        return;
-                                                    }
+                                                    // if (!validateLeadPassengerAndContact()) {
+                                                    //     window.scrollTo({ top: 200, behavior: "smooth" });
+                                                    //     alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
+                                                    //     return;
+                                                    // }
 
                                                     // Hàm dọn dẹp booking cũ
                                                     const cleanOldBookings = () => {

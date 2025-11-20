@@ -906,7 +906,7 @@ export default function ChiTietXeDuLich() {
                         </Card>
 
                         {/* Passenger Information */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle>Thông tin liên hệ</CardTitle>
                             </CardHeader>
@@ -952,7 +952,7 @@ export default function ChiTietXeDuLich() {
 
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Policies */}
                         <Card>

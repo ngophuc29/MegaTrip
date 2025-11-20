@@ -749,7 +749,7 @@ export default function Index() {
         </div>
       </section>
 
-      <Chatbot />
+      {/* <Chatbot /> */}
     </>
 
   );

@@ -359,14 +359,14 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
+                    {/* <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
                       <UserCheck className="mr-2 h-4 w-4" />
                       <span>Hồ sơ cá nhân</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
                       <Cog className="mr-2 h-4 w-4" />
                       <span>Cài đặt</span>
-                    </DropdownMenuItem>
+                    </DropdownMenuItem> */}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors"

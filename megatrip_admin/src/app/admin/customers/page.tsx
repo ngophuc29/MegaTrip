@@ -840,7 +840,7 @@ export default function Customers() {
                         {formErrors.password && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.password}</p>
                         )}
-                        <div className="flex items-center space-x-2 mt-2">
+                        {/* <div className="flex items-center space-x-2 mt-2">
                             <Checkbox
                                 id="sendInvite"
                                 checked={formData.sendInviteEmail}
@@ -849,7 +849,7 @@ export default function Customers() {
                             <Label htmlFor="sendInvite" className="text-sm">
                                 Gửi email mời đăng nhập
                             </Label>
-                        </div>
+                        </div> */}
                     </div>
                 )}
 

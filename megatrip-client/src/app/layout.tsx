@@ -8,7 +8,8 @@ import Footer from "@/app/components/Footer";
 import "./globals.css";
 import { usePathname } from "next/navigation";
 import cleanExpiredFlightCaches from "@/lib/cacheCleaner";
-
+import Chatbot from "./components/Chatbot";
+import { Toaster, toast } from 'sonner'
 interface LayoutProps {
   children: ReactNode;
 }
@@ -58,12 +59,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="min-h-screen">{children}</main>
         ) : (
           <div className="min-h-screen flex flex-col">
+            <Toaster />
             <Header />
             <main className="flex-1">{children}</main>
             <Footer />
           </div>
         )}
+        <Chatbot />
+
       </body>
+
     </html>
   );
 }

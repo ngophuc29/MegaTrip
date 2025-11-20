@@ -885,6 +885,8 @@ export default function Buses() {
             // ensure routeFrom/routeTo always exist to avoid undefined errors in UI/delete flow
             routeFrom: b.routeFrom || (b.route && b.route.from) || { code: b.routeFrom?.code || '', name: b.routeFrom?.name || '', city: b.routeFrom?.city || '' },
             routeTo: b.routeTo || (b.route && b.route.to) || { code: b.routeTo?.code || '', name: b.routeTo?.name || '', city: b.routeTo?.city || '' },
+            // ensure operator always exist to avoid undefined errors in UI
+            operator: b.operator || { id: '', name: '', logo: '/placeholder.svg', code: '' },
         };
     }) : [];
     const total = busesData?.pagination?.total || 0;
@@ -893,9 +895,8 @@ export default function Buses() {
     const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = [], changedFields?: string[]): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields
-        const shouldValidate = (field: string) => !changedFields || changedFields.includes(field);
-
+        // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields (chỉ cho edit)
+        const shouldValidate = (field: string) => modalMode === "edit" && (!changedFields || changedFields.includes(field));
 
         // Thêm check: Nếu edit, có bookings, và departureDates thay đổi -> block
         if (modalMode === "edit" && hasBookings && originalDepartureDates.length > 0) {
@@ -904,8 +905,9 @@ export default function Buses() {
                 errors.departureAt = "Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ. ";
             }
         }
-        // busCode: required, uppercase alnum/_- 3-12 chars
-        if (shouldValidate('busCode')) {
+
+        // Cho create: luôn validate tất cả required fields, không dùng shouldValidate
+        if (modalMode === "create") {
             if (!data.busCode || !data.busCode.trim()) {
                 errors.busCode = "Bạn phải nhập mã tuyến xe";
             } else {
@@ -913,44 +915,32 @@ export default function Buses() {
                 const re = /^[A-Z0-9_-]{3,12}$/;
                 if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
             }
-        }
 
-        // operator: must exist in loaded operators (if available)
-        if (shouldValidate('operatorId')) {
             if (!data.operatorId) {
                 errors.operatorId = "Bạn phải chọn nhà xe";
             } else if (operatorsData && Array.isArray(operatorsData)) {
                 const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
                 if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
             }
-        }
 
-        // routeFrom / routeTo: required and must map to a station
-        // Validate cả hai nếu một trong hai thay đổi (do check phụ thuộc)
-        const routeChanged = changedFields && (changedFields.includes('routeFrom') || changedFields.includes('routeTo'));
-        if (shouldValidate('routeFrom') || routeChanged) {
-            if (!data.routeFrom) {
+            if (!data.routeFrom || !data.routeFrom.trim()) {
                 errors.routeFrom = "Bạn phải chọn điểm đi";
             } else {
                 const parsedFrom = parseRouteValue(data.routeFrom);
-                if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+                if (!parsedFrom || !parsedFrom.name || !parsedFrom.code) errors.routeFrom = "Điểm đi không hợp lệ";
             }
-        }
-        if (shouldValidate('routeTo') || routeChanged) {
-            if (!data.routeTo) {
+
+            if (!data.routeTo || !data.routeTo.trim()) {
                 errors.routeTo = "Bạn phải chọn điểm đến";
             } else {
                 const parsedTo = parseRouteValue(data.routeTo);
-                if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+                if (!parsedTo || !parsedTo.name || !parsedTo.code) errors.routeTo = "Điểm đến không hợp lệ";
             }
-            // Ensure they are different (chỉ check nếu cả hai được validate)
+
             if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
                 errors.routeTo = "Điểm đến phải khác điểm đi";
             }
-        }
 
-        // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
-        if (shouldValidate('departureDates')) {
             const now = new Date();
             if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
                 errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
@@ -962,9 +952,7 @@ export default function Buses() {
                         errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
                     } else {
                         const dt = new Date(d);
-                        // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
-                        const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
-                        if (isChanged && dt < now) {
+                        if (dt < now) {
                             errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
                         }
                         const key = dt.toISOString();
@@ -975,10 +963,7 @@ export default function Buses() {
                     }
                 }
             }
-        }
 
-        // arrivalAt validation: must be valid and after earliest departure
-        if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
             if (!data.arrivalAt) {
                 errors.arrivalAt = "Bạn phải chọn giờ đến";
             } else if (isNaN(new Date(data.arrivalAt).getTime())) {
@@ -989,44 +974,36 @@ export default function Buses() {
                     errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
                 }
             }
-        }
 
-        // numeric checks
-        if (shouldValidate('adultPrice')) {
             if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
                 errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
             }
-        }
-        if (shouldValidate('childPrice')) {
+
             if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
                 errors.childPrice = "Giá vé trẻ em phải là số >= 0";
             }
+
             if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
                 errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
             }
-        }
-        if (shouldValidate('seatsTotal')) {
+
             if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
                 errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
             }
-        }
-        if (shouldValidate('seatsAvailable')) {
+
             if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
                 errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
-            } else if (data.seatsAvailable > data.seatsTotal) {
+            }
+
+            if (data.seatsAvailable > data.seatsTotal) {
                 errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
             }
-        }
 
-        // busType must have at least one entry
-        if (shouldValidate('busType')) {
             if (!Array.isArray(data.busType) || data.busType.length === 0) {
                 errors.busType = "Bạn phải chọn ít nhất một loại xe";
             }
-        }
 
-        // arrivalDates: if present, must pair with departures and be after each corresponding departure
-        if (shouldValidate('arrivalDates')) {
+            // arrivalDates: if present, must pair with departures and be after each corresponding departure
             if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
                 for (let i = 0; i < (data.departureDates || []).length; i++) {
                     const dep = data.departureDates?.[i];
@@ -1040,10 +1017,160 @@ export default function Buses() {
                     }
                 }
             }
+        } else {
+            // Cho edit: dùng shouldValidate (chỉ validate changed fields)
+            if (shouldValidate('busCode')) {
+                if (!data.busCode || !data.busCode.trim()) {
+                    errors.busCode = "Bạn phải nhập mã tuyến xe";
+                } else {
+                    const code = data.busCode.trim().toUpperCase();
+                    const re = /^[A-Z0-9_-]{3,12}$/;
+                    if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+                }
+            }
+
+            if (shouldValidate('operatorId')) {
+                if (!data.operatorId) {
+                    errors.operatorId = "Bạn phải chọn nhà xe";
+                } else if (operatorsData && Array.isArray(operatorsData)) {
+                    const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+                    if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+                }
+            }
+
+            // routeFrom / routeTo: required and must map to a station
+            // Validate cả hai nếu một trong hai thay đổi (do check phụ thuộc)
+            const routeChanged = changedFields && (changedFields.includes('routeFrom') || changedFields.includes('routeTo'));
+            if (shouldValidate('routeFrom') || routeChanged) {
+                if (!data.routeFrom || !data.routeFrom.trim()) {
+                    errors.routeFrom = "Bạn phải chọn điểm đi";
+                } else {
+                    const parsedFrom = parseRouteValue(data.routeFrom);
+                    if (!parsedFrom || !parsedFrom.name || !parsedFrom.code) errors.routeFrom = "Điểm đi không hợp lệ";
+                }
+            }
+            if (shouldValidate('routeTo') || routeChanged) {
+                if (!data.routeTo || !data.routeTo.trim()) {
+                    errors.routeTo = "Bạn phải chọn điểm đến";
+                } else {
+                    const parsedTo = parseRouteValue(data.routeTo);
+                    if (!parsedTo || !parsedTo.name || !parsedTo.code) errors.routeTo = "Điểm đến không hợp lệ";
+                }
+                // Ensure they are different (chỉ check nếu cả hai được validate)
+                if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+                    errors.routeTo = "Điểm đến phải khác điểm đi";
+                }
+            }
+
+            // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
+            if (shouldValidate('departureDates')) {
+                const now = new Date();
+                if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
+                    errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
+                } else {
+                    const seen = new Set<string>();
+                    for (let i = 0; i < data.departureDates.length; i++) {
+                        const d = data.departureDates[i];
+                        if (!d || isNaN(new Date(d).getTime())) {
+                            errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
+                        } else {
+                            const dt = new Date(d);
+                            // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
+                            const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
+                            if (isChanged && dt < now) {
+                                errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+                            }
+                            const key = dt.toISOString();
+                            if (seen.has(key)) {
+                                errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
+                            }
+                            seen.add(key);
+                        }
+                    }
+                }
+            }
+
+            // arrivalAt validation: must be valid and after earliest departure
+            if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
+                if (!data.arrivalAt) {
+                    errors.arrivalAt = "Bạn phải chọn giờ đến";
+                } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+                    errors.arrivalAt = "Giờ đến không hợp lệ";
+                } else {
+                    const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
+                    if (earliest && new Date(data.arrivalAt) <= earliest) {
+                        errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+                    }
+                }
+            }
+
+            // numeric checks
+            if (shouldValidate('adultPrice')) {
+                if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
+                    errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
+                }
+            }
+            if (shouldValidate('childPrice')) {
+                if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
+                    errors.childPrice = "Giá vé trẻ em phải là số >= 0";
+                }
+                if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
+                    errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
+                }
+            }
+            if (shouldValidate('seatsTotal')) {
+                if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+                    errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+                }
+            }
+            if (shouldValidate('seatsAvailable')) {
+                if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+                    errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+                } else if (data.seatsAvailable > data.seatsTotal) {
+                    errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+                }
+            }
+
+            // busType must have at least one entry
+            if (shouldValidate('busType')) {
+                if (!Array.isArray(data.busType) || data.busType.length === 0) {
+                    errors.busType = "Bạn phải chọn ít nhất một loại xe";
+                }
+            }
+
+            // arrivalDates: if present, must pair with departures and be after each corresponding departure
+            if (shouldValidate('arrivalDates') || shouldValidate('arrivalAt')) {
+                if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
+                    for (let i = 0; i < (data.departureDates || []).length; i++) {
+                        const dep = data.departureDates?.[i];
+                        const arr = data.arrivalDates?.[i];
+                        if (!arr || isNaN(new Date(arr).getTime())) {
+                            errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
+                        } else if (dep && !isNaN(new Date(dep).getTime())) {
+                            if (new Date(arr) <= new Date(dep)) {
+                                errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                            }
+                        }
+                    }
+                } else {
+                    // fallback to single arrivalAt check (existing)
+                    if (!data.arrivalAt) {
+                        errors.arrivalAt = "Bạn phải chọn giờ đến";
+                    } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+                        errors.arrivalAt = "Giờ đến không hợp lệ";
+                    } else {
+                        const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
+                        if (earliest && new Date(data.arrivalAt) <= earliest) {
+                            errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+                        }
+                    }
+                }
+            }
         }
 
         return errors;
     };
+
 
     const resetForm = () => {
         setFormData({
@@ -1161,15 +1288,18 @@ export default function Buses() {
         {
             key: "operator",
             title: "Nhà xe",
-            render: (value, record: BusRoute) => (
-                <div className="flex items-center space-x-2">
-
-                    <div>
-                        <div className="font-medium">{value.name}</div>
-                        <div className="text-sm text-gray-500">{value.code}</div>
+            render: (value, record: BusRoute) => {
+                // Thêm kiểm tra an toàn để tránh lỗi nếu operator undefined
+                const op = value || { name: '', code: '' };
+                return (
+                    <div className="flex items-center space-x-2">
+                        <div>
+                            <div className="font-medium">{op.name}</div>
+                            <div className="text-sm text-gray-500">{op.code}</div>
+                        </div>
                     </div>
-                </div>
-            ),
+                );
+            },
         },
         {
             key: "route",
