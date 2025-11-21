@@ -1829,19 +1829,30 @@ export default function Buses() {
                                             const arrDate = arr ? new Date(arr) : null;
                                             const duration = (dep && arr) ? calculateDuration(dep, arr) : (selectedBus.duration || "");
 
-                                            // Tìm slot cho ngày này
-                                            const dateIso = depDate ? depDate.toISOString().split('T')[0] : null;
+                                            // Trong renderBusForm, ngoài loop
+                                            console.log('selectedBus.id:', selectedBus.id, 'busSlotsData:', busSlotsData);
+
+                                            // Trong loop của depArray.map
+                                            const dateIso = dep ? dep.split('T')[0] : null; // Thay đổi: dùng dep.split thay vì new Date().toISOString()
                                             const slotEntry = busSlotsData?.dateBookings?.find((d: any) => d.dateIso === dateIso);
 
-                                            // Debug log để kiểm tra
-                                            console.log('slotEntry:', slotEntry, 'dateIso:', dateIso, 'busSlotsData:', busSlotsData, 'dep:', dep, 'depDate:', depDate);
+                                            console.log(`Chuyến ${i + 1}, dep: ${dep}, dateIso: ${dateIso}, slotEntry found: ${!!slotEntry}`);
 
-                                            // Ưu tiên dùng slotEntry nếu có và seatsAvailable hợp lệ
                                             let slotsAvailable = selectedBus.seatsAvailable;
                                             let slotsTotal = selectedBus.seatsTotal;
-                                            if (slotEntry && typeof slotEntry.seatsAvailable === 'number') {
-                                                slotsAvailable = slotEntry.seatsAvailable;
-                                                slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                            if (slotEntry) {
+                                                if (Array.isArray(slotEntry.seatmapFill)) {
+                                                    const bookedCount = slotEntry.seatmapFill.filter((s: any) => s.status === 'booked').length;
+                                                    slotsAvailable = (slotEntry.seatsTotal || selectedBus.seatsTotal) - bookedCount;
+                                                    slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                                    console.log(`Chuyến ${i + 1}, bookedCount: ${bookedCount}, slotsAvailable calculated: ${slotsAvailable}`);
+                                                } else if (typeof slotEntry.seatsAvailable === 'number') {
+                                                    slotsAvailable = slotEntry.seatsAvailable;
+                                                    slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                                    console.log(`Chuyến ${i + 1}, slotsAvailable from slotEntry: ${slotsAvailable}`);
+                                                }
+                                            } else {
+                                                console.log(`Chuyến ${i + 1}, no slotEntry, using selectedBus.seatsAvailable: ${slotsAvailable}`);
                                             }
 
                                             return (
