@@ -186,6 +186,7 @@ export default function VeMayBay() {
         to: 'Hà Nội (HAN)'
     });
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingFlights, setIsLoadingFlights] = useState(false);
     const [apiFlights, setApiFlights] = useState<any[]>([]); // mapped flights returned from Amadeus (legacy single-leg pointer)
     // Per-leg results for roundtrip flows (cached separately by leg)
     const [outboundFlights, setOutboundFlights] = useState<any[]>([]);
@@ -796,6 +797,7 @@ export default function VeMayBay() {
                             setHasSearched(true);
                             setShowPromotions(false);
                             setIsLoading(false);
+                            setIsLoadingFlights(false);
                             setCacheExpired(false);
                             return;
                         }
@@ -807,6 +809,7 @@ export default function VeMayBay() {
                         setShowPromotions(false);
                         setIsLoading(false);
                         setCacheExpired(true);
+                        setIsLoadingFlights(false); // Thêm: load xong
                         return;
                     }
 
@@ -835,6 +838,7 @@ export default function VeMayBay() {
                             setShowPromotions(false);
                             setIsLoading(false);
                             setCacheExpired(false);
+                            setIsLoadingFlights(false); // Thêm: load xong
                             return;
                         }
                         setOutboundFlights(outboundList);
@@ -844,6 +848,7 @@ export default function VeMayBay() {
                         setShowPromotions(false);
                         setIsLoading(false);
                         setCacheExpired(true);
+                        setIsLoadingFlights(false); // Thêm: load xong
                         return;
                     }
                 }
@@ -912,6 +917,7 @@ export default function VeMayBay() {
                 }
                 setHasSearched(true);
                 setShowPromotions(false);
+                setIsLoadingFlights(false);
                 setIsLoading(false);
             }
 
@@ -979,6 +985,7 @@ export default function VeMayBay() {
                 setShowPromotions(false);
                 setIsLoading(false);
                 setCacheExpired(false);
+                setIsLoadingFlights(false); // Thêm: load xong
                 return;
             }
             try { removeCache(cacheKey); } catch { }
@@ -987,6 +994,7 @@ export default function VeMayBay() {
             setShowPromotions(false);
             setIsLoading(false);
             setCacheExpired(true);
+            setIsLoadingFlights(false); // Thêm: load xong
             return;
         }
 
@@ -1094,6 +1102,7 @@ export default function VeMayBay() {
     const handleSearch = () => {
         setHasSearched(true);
         setShowPromotions(false);
+        setIsLoadingFlights(true); // Thêm: bắt đầu load
         setIsLoading(true);
         setTimeout(() => setIsLoading(false), 3000);
     };
@@ -2474,7 +2483,7 @@ export default function VeMayBay() {
                                 {isLoading ? (
                                     Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
                                 ) : allFlights.length === 0 ? (
-                                    showEmptyDebounce ? (
+                                    showEmptyDebounce || isLoadingFlights ? (
                                         Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
                                     ) : hasSearched ? (
                                         <Card className="text-center py-12">
