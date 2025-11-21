@@ -33,7 +33,8 @@ import {
     Plus,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-
+// Thêm import
+import { toast } from 'sonner';
 // Sample bus data
 const busDetails = {
     id: 1,
@@ -597,6 +598,10 @@ export default function ChiTietXeDuLich() {
         });
     }, [selectedIndex, busSlotsMap, remoteBus]);
 
+    // Thêm function kiểm tra đăng nhập
+    const isLoggedIn = () => {
+        return !!localStorage.getItem('accessToken');
+    };
 
     return (
         <>
@@ -1271,6 +1276,17 @@ export default function ChiTietXeDuLich() {
                                         size="lg"
                                         disabled={isDeparturePast || (selectedSeats.length !== totalParticipants) || totalParticipants === 0 || seatEditMode}
                                         onClick={() => {
+                                            // Kiểm tra đăng nhập trước
+                                            if (!isLoggedIn()) {
+                                                toast.info('Bạn chưa đăng nhập. Đang chuyển sang trang đăng nhập...');
+                                                // Thêm delay 2.5 giây trước khi chuyển hướng
+                                                setTimeout(() => {
+                                                    router.push(`/dang-nhap?redirect=${encodeURIComponent(window.location.pathname)}`);
+                                                }, 2500); // 2.5 giây
+                                                return;
+                                            }
+
+                                            
                                             const adultUnitForCheckout = bus.adultPrice ?? 0;
                                             const childUnitForCheckout = (typeof bus.childPrice === 'number' && bus.childPrice > 0) ? bus.childPrice : Math.round(adultUnitForCheckout * 0.75);
                                             const basePrice = (participants.adults * adultUnitForCheckout) + (participants.children * childUnitForCheckout);

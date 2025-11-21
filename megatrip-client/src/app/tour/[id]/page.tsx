@@ -51,6 +51,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useRouter } from 'next/navigation';
 import { log } from 'console';
+import { toast } from 'sonner';
 
 // Sample tour data with enhanced information
 const tourDetails = {
@@ -447,7 +448,7 @@ export default function ChiTietTour() {
             }
         }
         fetchBySlug();
-        
+
         return () => { mounted = false; };
     }, [id]);
 
@@ -469,6 +470,10 @@ export default function ChiTietTour() {
     const [showImageModal, setShowImageModal] = useState(false);
     const [modalImageIndex, setModalImageIndex] = useState(0);
 
+
+    const isLoggedIn = () => {
+        return !!localStorage.getItem('accessToken');
+    };
 
     const formatPrice = (price: number) => {
         return new Intl.NumberFormat('vi-VN', {
@@ -698,7 +703,7 @@ export default function ChiTietTour() {
                 tourDetails.reviews = db.reviews ? mapped.reviews : keepReviews;
 
                 if (mounted) setDbLoaded(true); // trigger re-render
-                 
+
                 // Fetch reviews only if tour data is successfully loaded
                 fetchReviews(tourDetails.id);
             } catch (err) {
@@ -708,7 +713,7 @@ export default function ChiTietTour() {
         fetchBySlug();
 
 
-       
+
 
         return () => { mounted = false; };
     }, [id]);
@@ -1028,7 +1033,7 @@ export default function ChiTietTour() {
                                 <CardTitle>Lịch trình chi tiết</CardTitle>
                             </CardHeader>
                             <CardContent>
-                                <Accordion type="multiple"  className="w-full">
+                                <Accordion type="multiple" className="w-full">
                                     {tourDetails.itinerary.map((day) => (
                                         <AccordionItem key={day.day} value={`day-${day.day}`}>
                                             <AccordionTrigger>
@@ -1231,7 +1236,7 @@ export default function ChiTietTour() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        
+
                                         {Object.entries(distribution.reduce((acc, d) => ({ ...acc, [d.star]: d.count }), {})).reverse().map(([stars, count]) => (
                                             <div key={stars} className="flex items-center gap-2">
                                                 <span className="text-sm w-8">{stars}★</span>
@@ -1330,7 +1335,7 @@ export default function ChiTietTour() {
                                                                 <Badge variant="secondary">Đã trải nghiệm</Badge>
                                                             </div>
                                                             <div className="text-xs text-muted-foreground">
-                                                               Đã gửi • {new Date(review.createdAt).toLocaleDateString('vi-VN')}
+                                                                Đã gửi • {new Date(review.createdAt).toLocaleDateString('vi-VN')}
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1596,70 +1601,81 @@ export default function ChiTietTour() {
 
                                 {/* Action Buttons */}
                                 <div className="space-y-2 ">
-                                    <Button className="w-full" size="lg" disabled={!selectedDate} onClick={() => {
-                                        if (!selectedDate) return;
-                                        const selectedDateInfo = getSelectedDateInfo();
-                                        const unit = getUnitPrices();
-                                        const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
-                                        const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
-                                        const addOns = 0; // tour chưa có dịch vụ thêm
-                                        const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
-                                        const total = basePrice + taxes + addOns - discount;
-
-                                        // breakdown per passenger type
-                                        const passengers: any[] = [];
-                                        if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
-                                        if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
-                                        if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
-
-                                        const params = new URLSearchParams();
-                                        params.set('type', 'tour');
-                                        params.set('route', tourDetails.name);
-                                        params.set('date', selectedDateInfo?.date || '');
-                                        params.set('time', '');
-                                        params.set('basePrice', String(basePrice));
-                                        params.set('taxes', String(taxes));
-                                        params.set('addOns', String(addOns));
-                                        params.set('discount', String(discount));
-                                        params.set('total', String(total));
-                                        params.set('adults', String(participants.adults));
-                                        params.set('children', String(participants.children));
-                                        params.set('infants', String(participants.infants));
-                                        // additional requested fields
-                                        params.set('unitAdult', String(unit.adult));
-                                        params.set('unitChild', String(unit.child));
-                                        params.set('unitInfant', String(unit.infant));
-                                        params.set('singleRooms', String(singleRooms));
-                                        params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
-                                        params.set('breakdown', JSON.stringify(passengers));
-
-                                        // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
-                                        // tourCode: use db id or fallback to generated id
-                                        const tourCode = String(tourDetails.id ?? id ?? '');
-                                        params.set('tourCode', tourCode);
-                                        const startLocation = tourDetails.startLocation;
-                                        params.set('pickupDropoff', startLocation?.pickupDropoff || "");
-                                        // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
-                                        const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
-                                        // Fix: startIso is now local YYYY-MM-DD, so use it directly
-                                        params.set('startDateTime', startIso);  // Local YYYY-MM-DD
-                                        // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
-                                        let endIso = (selectedDateInfo as any)?.endIso ?? '';
-                                        if (!endIso) {
-                                            try {
-                                                const startDate = new Date(startIso);
-                                                // Assume tour duration is in days, add to start date
-                                                const durationDays = parseInt(tourDetails.duration) || 1;
-                                                const endDate = new Date(startDate);
-                                                endDate.setDate(startDate.getDate() + durationDays - 1); // End on last day
-                                                endIso = toLocalYMD(endDate);  // Local YYYY-MM-DD
-                                            } catch (e) {
-                                                endIso = startIso; // Fallback
+                                    <Button className="w-full" size="lg" disabled={!selectedDate}
+                                        onClick={() => {
+                                            // Kiểm tra đăng nhập trước
+                                            if (!isLoggedIn()) {
+                                                toast.info('Bạn chưa đăng nhập. Đang chuyển sang trang đăng nhập...');
+                                                // Thêm delay 2.5 giây trước khi chuyển hướng
+                                                setTimeout(() => {
+                                                    router.push(`/dang-nhap?redirect=${encodeURIComponent(window.location.pathname)}`);
+                                                }, 2500); // 2.5 giây
+                                                return;
                                             }
-                                        }
-                                        params.set('endDateTime', endIso);  // Local YYYY-MM-DD
-                                        router.push(`/thanh-toan?${params.toString()}`);
-                                    }}>
+
+                                            if (!selectedDate) return;
+                                            const selectedDateInfo = getSelectedDateInfo();
+                                            const unit = getUnitPrices();
+                                            const basePrice = (participants.adults * unit.adult) + (participants.children * unit.child) + (participants.infants * unit.infant) + (singleRooms * tourDetails.pricing.singleSupplement);
+                                            const taxes = Math.round(basePrice * 0.08); // demo: 8% thuế
+                                            const addOns = 0; // tour chưa có dịch vụ thêm
+                                            const discount = tourDetails.originalPrice ? basePrice - calculateTotal() : 0;
+                                            const total = basePrice + taxes + addOns - discount;
+
+                                            // breakdown per passenger type
+                                            const passengers: any[] = [];
+                                            if (participants.adults > 0) passengers.push({ type: 'adult', qty: participants.adults, unit: unit.adult, total: participants.adults * unit.adult });
+                                            if (participants.children > 0) passengers.push({ type: 'child', qty: participants.children, unit: unit.child, total: participants.children * unit.child });
+                                            if (participants.infants > 0) passengers.push({ type: 'infant', qty: participants.infants, unit: unit.infant, total: participants.infants * unit.infant });
+
+                                            const params = new URLSearchParams();
+                                            params.set('type', 'tour');
+                                            params.set('route', tourDetails.name);
+                                            params.set('date', selectedDateInfo?.date || '');
+                                            params.set('time', '');
+                                            params.set('basePrice', String(basePrice));
+                                            params.set('taxes', String(taxes));
+                                            params.set('addOns', String(addOns));
+                                            params.set('discount', String(discount));
+                                            params.set('total', String(total));
+                                            params.set('adults', String(participants.adults));
+                                            params.set('children', String(participants.children));
+                                            params.set('infants', String(participants.infants));
+                                            // additional requested fields
+                                            params.set('unitAdult', String(unit.adult));
+                                            params.set('unitChild', String(unit.child));
+                                            params.set('unitInfant', String(unit.infant));
+                                            params.set('singleRooms', String(singleRooms));
+                                            params.set('singleSupplement', String(tourDetails.pricing.singleSupplement));
+                                            params.set('breakdown', JSON.stringify(passengers));
+
+                                            // Attach tour code and explicit start/end datetimes so thanh-toan can show them clearly
+                                            // tourCode: use db id or fallback to generated id
+                                            const tourCode = String(tourDetails.id ?? id ?? '');
+                                            params.set('tourCode', tourCode);
+                                            const startLocation = tourDetails.startLocation;
+                                            params.set('pickupDropoff', startLocation?.pickupDropoff || "");
+                                            // prefer exact ISO start/end from availableDates (mapDbTourToClient now saves startIso/endIso)
+                                            const startIso = (selectedDateInfo as any)?.startIso ?? (selectedDateInfo?.date ? `${selectedDateInfo.date}T00:00:00` : '');
+                                            // Fix: startIso is now local YYYY-MM-DD, so use it directly
+                                            params.set('startDateTime', startIso);  // Local YYYY-MM-DD
+                                            // prefer exact endIso if present, otherwise compute fallback end-of-day by duration
+                                            let endIso = (selectedDateInfo as any)?.endIso ?? '';
+                                            if (!endIso) {
+                                                try {
+                                                    const startDate = new Date(startIso);
+                                                    // Assume tour duration is in days, add to start date
+                                                    const durationDays = parseInt(tourDetails.duration) || 1;
+                                                    const endDate = new Date(startDate);
+                                                    endDate.setDate(startDate.getDate() + durationDays - 1); // End on last day
+                                                    endIso = toLocalYMD(endDate);  // Local YYYY-MM-DD
+                                                } catch (e) {
+                                                    endIso = startIso; // Fallback
+                                                }
+                                            }
+                                            params.set('endDateTime', endIso);  // Local YYYY-MM-DD
+                                            router.push(`/thanh-toan?${params.toString()}`);
+                                        }}>
                                         Đặt tour ngay
                                     </Button>
                                     {/* <Button variant="outline" className="w-full" disabled={!selectedDate}>

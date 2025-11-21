@@ -34,6 +34,7 @@ import {
     Minus,
     Plus,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 
 // same cache key used in FlightResults
@@ -179,6 +180,9 @@ export default function ChiTietVeMayBay() {
         }
     };
 
+    const isLoggedIn = () => {
+        return !!localStorage.getItem('accessToken');
+    };
     // --- NEW: helper to parse a seatmap payload into rows/summary/amenities and suggest free seats ---
     const parseSeatmap = (raw: any) => {
         try {
@@ -2598,6 +2602,16 @@ export default function ChiTietVeMayBay() {
                                                 className="w-full"
                                                 size="lg"
                                                 onClick={() => {
+
+                                                    if (!isLoggedIn()) {
+                                                        toast.info('Bạn chưa đăng nhập. Đang chuyển sang trang đăng nhập...');
+                                                        // Thêm delay 2.5 giây trước khi chuyển hướng
+                                                        setTimeout(() => {
+                                                            router.push(`/dang-nhap?redirect=${encodeURIComponent(window.location.pathname)}`);
+                                                        }, 2500); // 2.5 giây
+                                                        return;
+                                                    }
+
                                                     // if (!validateLeadPassengerAndContact()) {
                                                     //     window.scrollTo({ top: 200, behavior: "smooth" });
                                                     //     alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");

@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { LogIn } from 'lucide-react';
 import auth from '../../apis/auth';
 
+// Thêm import
+import { toast } from 'sonner';
 export default function DangNhap() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
@@ -16,6 +18,9 @@ export default function DangNhap() {
   const [checked, setChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams?.get('redirect') || '/';
+
 
   // Check if already logged in and redirect without rendering
   useEffect(() => {
@@ -37,6 +42,7 @@ export default function DangNhap() {
       return;
     }
     setIsLoading(true);
+    
     try {
       const res: any = await auth.login({ email: form.email, password: form.password });
       const token = res?.accessToken ?? res?.token ?? res?.data?.accessToken;
@@ -55,13 +61,16 @@ export default function DangNhap() {
           const needsProfileUpdate = !userProfile.name || !userProfile.address || !userProfile.phone;
 
           if (needsProfileUpdate) {
-            router.push('/cap-nhat-thong-tin');
+            // Chuyển đến cập nhật thông tin, và sau đó có thể redirect
+            router.push(`/cap-nhat-thong-tin?redirect=${encodeURIComponent(redirect)}`);
           } else {
-            router.push('/');
+            // Hiển thị toast và chuyển đến redirect
+            toast.success('Đăng nhập thành công! Đang chuyển về trang trước...');
+            router.push(redirect);
           }
         } catch (profileErr) {
-          // If can't get profile, assume needs update
-          router.push('/cap-nhat-thong-tin');
+          // Nếu không lấy được profile, giả sử cần cập nhật
+          router.push(`/cap-nhat-thong-tin?redirect=${encodeURIComponent(redirect)}`);
         }
       } else {
         setError('Đăng nhập thành công nhưng không nhận được token');
@@ -71,6 +80,7 @@ export default function DangNhap() {
     } finally {
       setIsLoading(false);
     }
+
   };
 
   return (
