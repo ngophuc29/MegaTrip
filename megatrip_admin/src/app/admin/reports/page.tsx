@@ -497,20 +497,20 @@ export default function Reports() {
 
       case "revenue":
         return (
-          <ResponsiveContainer width="100%" height={500}>
-            <BarChart data={revenueData} style={{ margin: 10 }}>
+          <ResponsiveContainer width="99%" height={600}>
+            <BarChart
+              data={revenueData}
+              margin={{ top: 20, right: 10, left: 40, bottom: 10 }} // 👈 THÊM DÒNG NÀY
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
               <YAxis tickFormatter={(value) => formatCurrency(value)} />
-              // Sửa Tooltip không nhân nữa
               <Tooltip
-                formatter={(value: number) => [
-                  formatCurrency(value),
-                  "",
-                ]}
+                formatter={(value: number) => [formatCurrency(value), ""]}
                 labelFormatter={(label) => `${granularity === 'day' ? 'Ngày' : 'Tháng'} ${label}`}
               />
               <Legend />
+
               <Bar
                 dataKey="flight"
                 stackId="a"
@@ -526,11 +526,12 @@ export default function Reports() {
               <Bar dataKey="bus" stackId="a" fill="#4CAF50" name="Vé xe" />
             </BarChart>
           </ResponsiveContainer>
+
         );
 
       case "orders":
         return (
-          <ResponsiveContainer width="100%" height={500} style={{ margin: 40 }}>
+          <ResponsiveContainer width="100%" height={500} style={{ margin: 10 }}>
             <LineChart data={orderStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
@@ -1083,7 +1084,9 @@ export default function Reports() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>{renderChart()}</CardContent>
+        <CardContent
+        style={{margin:'0 10px'}}
+        >{renderChart()}</CardContent>
       </Card>
 
       {reportType !== "products" && (
