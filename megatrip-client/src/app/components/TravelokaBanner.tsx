@@ -313,16 +313,11 @@ export default function TravelokaBanner() {
       // map selected province code -> name (fallback to raw value)
       const fromName = provinces.find(p => String(p.code) === (tourFrom || ''))?.name || tourFrom || '';
       const toName = provinces.find(p => String(p.code) === (tourTo || ''))?.name || tourTo || '';
-      // include passenger breakdown and total so SearchTabs can prefill correctly
+      // Chỉ include params cần thiết cho tour
       const qs = new URLSearchParams({
         from: fromName || '',
         to: toName || '',
-        departure,
-        adults: String(passengerCounts.adults || 1),
-        children: String(passengerCounts.children || 0),
-        infants: String(passengerCounts.infants || 0),
-        total: String(totalPassengers), // explicit total
-        travelClass: travelClass // optional for tours, kept for consistency
+        departure
       });
       console.log('Tour search params:', Object.fromEntries(qs.entries()));
       setIsSearching(true);

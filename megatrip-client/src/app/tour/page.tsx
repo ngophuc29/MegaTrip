@@ -262,7 +262,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([200000, 100000000]); 
+    const [priceRange, setPriceRange] = useState([200000, 10000000]); 
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
@@ -872,10 +872,11 @@ export default function Tour() {
                                             <div className="px-2">
                                                 <Slider
                                                     value={priceRange}
-                                                    onValueChange={setPriceRange}
-                                                    max={100000000}
-                                                    min={1000000}
-                                                    step={200000}
+                                                    onValueChange={setPriceRange} // Remove để không cho thay đổi
+                                                    max={1000000}
+                                                    min={200000}
+                                                    step={10000}
+                                                    // disabled // Thêm disabled để khóa Slider
                                                     className="mb-3"
                                                 />
                                                 <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
@@ -883,7 +884,6 @@ export default function Tour() {
                                                     <span>{formatPrice(priceRange[1])}</span>
                                                 </div>
                                             </div>
-                                            
                                         </div>
 
                                         <Separator />

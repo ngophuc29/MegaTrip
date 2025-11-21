@@ -1070,7 +1070,7 @@ export default function XeDuLich() {
                                                     onValueChange={setPriceRange}
                                                     max={500000}
                                                     min={200000}
-                                                    step={50000}
+                                                    step={20000}
                                                     className="mb-3"
                                                 />
                                                 <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
