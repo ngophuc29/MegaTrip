@@ -613,6 +613,7 @@ export default function ChiTietVeMayBay() {
         if (!id) return;
         const fetchAndMatchTickets = async () => {
             try {
+                setIsLoadingSeatmap(true);
                 // Log ngày của flight hiện tại từ pricing
                 console.log(`🔍 [ChiTietMayBay] Ngày flight outbound:`, outboundCachedPricing ? extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] : cachedPricing ? extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] : 'Không có');
                 if (isRoundtrip && inboundCachedPricing) {
@@ -840,8 +841,10 @@ export default function ChiTietVeMayBay() {
                 console.log('📊 Tổng ghế booked inbound:', bookedSeatsByLeg.inbound.length);
 
                 console.log('✅ Final bookedSeatsByLeg (including paid and changed):', { outbound: [...new Set(outboundBooked)], inbound: [...new Set(inboundBooked)] });
+                setIsLoadingSeatmap(false);
             } catch (e) {
                 console.warn('Error fetching/matching tickets', e);
+                setIsLoadingSeatmap(false);
             }
         };
 

@@ -417,6 +417,7 @@ export default function Orders() {
     const [orderDetails, setOrderDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [isSelectingCompletable, setIsSelectingCompletable] = useState(false);
+    const [isSelectingCancellable, setIsSelectingCancellable] = useState(false);
     const [refundData, setRefundData] = useState({
         amount: 0,
         reason: "",
@@ -1121,8 +1122,92 @@ export default function Orders() {
             .map((order) => order.id);
     };
 
-    // ...existing code...
+    const getCancellableOrders = () => {
+        // Ưu tiên dùng allOrdersData (toàn bộ data), fallback về orders (pagination hiện tại)
+        const dataToCheck = allOrdersData || orders;
+
+        return dataToCheck
+            .filter((order) => {
+                // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+                const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
+
+                // Kiểm tra ngày sử dụng (chọn đơn chưa qua ngày hiện tại: serviceDate > today)
+                const snap = order.metadata?.bookingDataSnapshot;
+                const item = order.items?.[0];
+                let isServiceDateValid = false;
+
+                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+                if (item?.type === 'flight' && !order.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều > today
+                        const outboundDate = new Date(flights.outbound.date);
+                        const inboundDate = new Date(flights.inbound.date);
+                        const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+                        const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+                        isServiceDateValid = outboundOnly > todayOnly && inboundOnly > todayOnly;
+                    } else if (flights?.outbound) {
+                        // Chỉ outbound
+                        const serviceDate = new Date(flights.outbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = serviceDateOnly > todayOnly;
+                    } else if (flights?.inbound) {
+                        // Chỉ inbound
+                        const serviceDate = new Date(flights.inbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = serviceDateOnly > todayOnly;
+                    }
+                } else {
+                    // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+                    let serviceDateRaw = '';
+                    if (item?.type === 'flight' && !order.changeCalendar) {
+                        // Đã xử lý ở trên, không vào đây
+                    } else {
+                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                        serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                    }
+                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                    isServiceDateValid = serviceDateOnly && serviceDateOnly > todayOnly;
+                }
+
+                return isValidStatus && isServiceDateValid;
+            })
+            .map((order) => order.id);
+    };
+
+
+    const handleSelectCancellable = () => {
+        if (isSelectingCompletable) {
+            toast({
+                title: "Không thể chọn",
+                description: "Phải hủy chọn đơn hoàn thành trước khi chuyển sang chọn các đơn hủy",
+                variant: "destructive",
+            });
+            return;
+        }
+        if (isSelectingCancellable) {
+            setSelectedOrders([]);
+            setIsSelectingCancellable(false);
+        } else {
+            setSelectedOrders(getCancellableOrders());
+            setIsSelectingCancellable(true);
+        }
+    };
+     
     const handleSelectCompletable = () => {
+        if (isSelectingCancellable) {
+            toast({
+                title: "Không thể chọn",
+                description: "Phải hủy chọn đơn hủy trước khi chuyển sang chọn các đơn hoàn thành",
+                variant: "destructive",
+            });
+            return;
+        }
         if (isSelectingCompletable) {
             setSelectedOrders([]);
             setIsSelectingCompletable(false);
@@ -1131,6 +1216,7 @@ export default function Orders() {
             setIsSelectingCompletable(true);
         }
     };
+
 
     // Hàm tính hoàn tiền (dựa trên metadata, ví dụ cho flight)
     const calculateRefundAmount = (order: Order) => {
@@ -1899,9 +1985,17 @@ export default function Orders() {
                             <CardTitle>Danh sách đơn hàng</CardTitle>
                             {(() => {
                                 const completableCount = getCompletableOrders().length;
-                                return completableCount > 0 ? (
-                                    <p className="text-sm text-gray-600">Số lượng đơn có thể đánh dấu hoàn thành: {completableCount}</p>
-                                ) : null;
+                                const cancellableCount = getCancellableOrders().length;
+                                return (
+                                    <>
+                                        {completableCount > 0 && (
+                                            <p className="text-sm text-gray-600">Số lượng đơn có thể đánh dấu hoàn thành: {completableCount}</p>
+                                        )}
+                                        {cancellableCount > 0 && (
+                                            <p className="text-sm text-gray-600">Số lượng đơn có thể hủy: {cancellableCount}</p>
+                                        )}
+                                    </>
+                                );
                             })()}
                             <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái</CardDescription>
                         </div>
@@ -1912,6 +2006,13 @@ export default function Orders() {
                             >
                                 {isSelectingCompletable ? "Hủy chọn đơn đánh dấu hoàn thành" : "Chọn đơn đánh dấu hoàn thành"}
                             </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleSelectCancellable}
+                            >
+                                {isSelectingCancellable ? "Hủy chọn đơn có thể hủy" : "Chọn đơn có thể hủy"}
+                            </Button>
+
                             <Select value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />

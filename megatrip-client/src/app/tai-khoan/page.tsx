@@ -641,7 +641,7 @@ export default function TaiKhoan() {
         }
         loadBookings();
         return () => { mounted = false; };
-    }, [customerId]); 
+    }, [customerId]);
 
     const displayBookings = Array.isArray(bookings) ? bookings : [];
     const formatPrice = (price: number) => {
@@ -1013,7 +1013,7 @@ export default function TaiKhoan() {
                                                                 <Badge className={getStatusColor(booking.status)}>
                                                                     {getStatusText(booking.status)}
                                                                 </Badge>
-                                                                {booking.changeCalendar && (
+                                                                {booking.changeCalendar && booking.status !== 'cancelled' && (
                                                                     <>
                                                                         <Badge variant="secondary">Đã đổi lịch</Badge>
                                                                         {/* <span className="text-xs text-muted-foreground">
@@ -1084,7 +1084,7 @@ export default function TaiKhoan() {
                                                                         <Badge className={getStatusColor(booking.status)}>
                                                                             {getStatusText(booking.status)}
                                                                         </Badge>
-                                                                        {booking.changeCalendar && (
+                                                                        {booking.changeCalendar && booking.status !== 'cancelled' && (
                                                                             <Badge variant="secondary">Đã đổi lịch</Badge>
                                                                         )}
                                                                     </div>
@@ -1113,7 +1113,7 @@ export default function TaiKhoan() {
                                                                         <Eye className="h-3 w-3 mr-1" />
                                                                         Xem chi tiết
                                                                     </Button>
-                                                                    {booking.paymentStatus === 'paid' && booking.status !== 'completed' && (
+                                                                    {booking.paymentStatus === 'paid' && booking.status !== 'completed' && booking.status !== 'cancelled' && (
                                                                         booking.hasRefundRequest ? (
                                                                             <Tooltip.Provider>
                                                                                 <Tooltip.Root>
@@ -1170,7 +1170,7 @@ export default function TaiKhoan() {
                                                                         )
                                                                     )}
                                                                     {/* Always render change button but disable with tooltip when not allowed */}
-                                                                    {booking.status !== 'completed' && (
+                                                                    {booking.status !== 'completed' && booking.status !== 'cancelled' && (
                                                                         booking.canChange ? (
                                                                             <Button size="sm" variant="outline" asChild>
                                                                                 <a href={`/tai-khoan/doi-lich/${booking.id}`}>
@@ -1432,29 +1432,29 @@ export default function TaiKhoan() {
                                             const serviceDateObj = serviceDateRaw ? new Date(serviceDateRaw) : null;
                                             return serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '--';
                                         })()}</div> */}
-                                            <div><strong>Ngày sử dụng:</strong> {(() => {
-                                                const snap = orderDetails.order.metadata?.bookingDataSnapshot;
-                                                const item = orderDetails.order.items?.[0];
-                                                let serviceDate = '';
-                                                if (item?.type === 'flight' && !orderDetails.order.changeCalendar) {
-                                                    const flights = snap?.flights;
-                                                    if (flights?.outbound && flights?.inbound) {
-                                                        serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
-                                                    } else if (flights?.outbound) {
-                                                        serviceDate = flights.outbound.date;
-                                                    } else if (flights?.inbound) {
-                                                        serviceDate = flights.inbound.date;
-                                                    }
-                                                } else {
-                                                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                                                    serviceDate = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
-                                                    if (serviceDate) {
-                                                        const serviceDateObj = new Date(serviceDate);
-                                                        serviceDate = serviceDateObj.toISOString().slice(0, 10);
-                                                    }
+                                        <div><strong>Ngày sử dụng:</strong> {(() => {
+                                            const snap = orderDetails.order.metadata?.bookingDataSnapshot;
+                                            const item = orderDetails.order.items?.[0];
+                                            let serviceDate = '';
+                                            if (item?.type === 'flight' && !orderDetails.order.changeCalendar) {
+                                                const flights = snap?.flights;
+                                                if (flights?.outbound && flights?.inbound) {
+                                                    serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+                                                } else if (flights?.outbound) {
+                                                    serviceDate = flights.outbound.date;
+                                                } else if (flights?.inbound) {
+                                                    serviceDate = flights.inbound.date;
                                                 }
-                                                return serviceDate || '--';
-                                            })()}</div>
+                                            } else {
+                                                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                                serviceDate = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
+                                                if (serviceDate) {
+                                                    const serviceDateObj = new Date(serviceDate);
+                                                    serviceDate = serviceDateObj.toISOString().slice(0, 10);
+                                                }
+                                            }
+                                            return serviceDate || '--';
+                                        })()}</div>
                                         <div><strong>Trạng thái:</strong> {getStatusText(orderDetails.order.orderStatus)}</div>
                                         {/* Pickup / Dropoff details (tour or bus) */}
                                         {(() => {
