@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShoppingBag, Plus, Edit, Eye, Trash2, FileText, Printer, RefreshCw, DollarSign, Package, Truck, CheckCircle, XCircle, Clock, AlertTriangle, Download } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -1229,142 +1229,401 @@ export default function Orders() {
     };
 
 
-    const bulkActions = [
-        // {
-        //     label: "Xác nhận",
-        //     action: (keys: string[]) => {
-        //         keys.forEach(id => {
-        //             updateOrderMutation.mutate({ id, status: "confirmed" });
-        //         });
-        //     },
-        //     icon: <CheckCircle className="w-4 h-4 mr-2" />,
-        // },
+    // const bulkActions = [
+    //     // {
+    //     //     label: "Xác nhận",
+    //     //     action: (keys: string[]) => {
+    //     //         keys.forEach(id => {
+    //     //             updateOrderMutation.mutate({ id, status: "confirmed" });
+    //     //         });
+    //     //     },
+    //     //     icon: <CheckCircle className="w-4 h-4 mr-2" />,
+    //     // },
 
-        //ở đây cần 1 button để lọc những đơn nào có thể hoàn thành 
-        // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
-        {
-            label: "Hoàn thành",
-            action: async (keys: string[]) => { // keys giờ là array của id
-                setBulkLoading(true);
-                setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
-                try {
-                    console.log("Bulk hoàn thành: keys =", keys);
-                    for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                        const order = orders.find(o => o.id === id); // Tìm order bằng id
-                        console.log("Order found:", order);
-                        if (!order) continue;
+    //     //ở đây cần 1 button để lọc những đơn nào có thể hoàn thành 
+    //     // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
+    //     {
+    //         label: "Hoàn thành",
+    //         action: async (keys: string[]) => { // keys giờ là array của id
+    //             setBulkLoading(true);
+    //             setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+    //             try {
+    //                 console.log("Bulk hoàn thành: keys =", keys);
+    //                 for (const id of keys) { // Thay đổi: dùng id trực tiếp
+    //                     const order = orders.find(o => o.id === id); // Tìm order bằng id
+    //                     console.log("Order found:", order);
+    //                     if (!order) continue;
 
-                        // Tính ngày sử dụng từ metadata
-                        const snap = order.metadata?.bookingDataSnapshot;
-                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                        const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+    //                     // Tính ngày sử dụng từ metadata
+    //                     const snap = order.metadata?.bookingDataSnapshot;
+    //                     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    //                     const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+    //                     const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
 
-                        console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+    //                     console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
 
-                        // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
+    //                     // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+    //                     const today = new Date();
+    //                     today.setHours(0, 0, 0, 0);
 
-                        // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
-                        const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                        const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                        const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //                     // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+    //                     const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+    //                     const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    //                     const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
 
-                        console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
-                        console.log("Is past service date:", isPastServiceDate);
+    //                     console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+    //                     console.log("Is past service date:", isPastServiceDate);
 
-                        // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
-                        if (!isPastServiceDate) {
-                            console.log("Ngày chưa đến, không cập nhật");
+    //                     // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+    //                     if (!isPastServiceDate) {
+    //                         console.log("Ngày chưa đến, không cập nhật");
+    //                         toast({
+    //                             title: "Không thể hoàn thành",
+    //                             description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+    //                             variant: "destructive",
+    //                         });
+    //                         continue; // Bỏ qua đơn này, không cập nhật
+    //                     }
+
+    //                     console.log("Cập nhật đơn hàng:", order.id);
+    //                     // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+    //                     await updateOrderMutation.mutateAsync({
+    //                         id: order.id,
+    //                         status: "completed",
+    //                         note: "Đơn hàng đã hoàn thành"
+    //                     });
+    //                 }
+    //                 toast({
+    //                     title: "Hoàn thành thành công",
+    //                     description: "Đã hoàn thành các đơn hàng được chọn.",
+    //                 });
+    //             } catch (error) {
+    //                 console.error("Bulk complete error:", error); // Thêm log để debug
+    //                 toast({
+    //                     title: "Lỗi khi hoàn thành",
+    //                     description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
+    //                     variant: "destructive",
+    //                 });
+    //             } finally {
+    //                 setBulkLoading(false);
+    //             }
+    //         },
+    //         icon: <Package className="w-4 h-4 mr-2" />,
+    //     },
+    //     {
+    //         label: "Hủy đơn",
+    //         action: async (keys: string[]) => { // keys giờ là array của id
+    //             setBulkLoading(true);
+    //             setBulkLoadingMessage("Đang hủy đơn hàng...");
+    //             try {
+    //                 let successCount = 0;
+    //                 let errorCount = 0;
+    //                 for (const id of keys) { // Thay đổi: dùng id trực tiếp
+    //                     const order = orders.find(o => o.id === id); // Tìm order bằng id
+    //                     if (!order) {
+    //                         errorCount++;
+    //                         continue;
+    //                     }
+    //                     const orderId = order.id || order.orderNumber;
+    //                     try {
+    //                         const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+    //                             method: 'PUT',
+    //                             headers: {
+    //                                 'Content-Type': 'application/json',
+    //                             },
+    //                             body: JSON.stringify({
+    //                                 note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+    //                             }),
+    //                         });
+    //                         if (res.ok) {
+    //                             successCount++;
+    //                         } else {
+    //                             errorCount++;
+    //                         }
+    //                     } catch (error) {
+    //                         errorCount++;
+    //                         console.error(`Failed to cancel order ${orderId}:`, error);
+    //                     }
+    //                 }
+    //                 queryClient.invalidateQueries({ queryKey: ['orders'] });
+    //                 toast({
+    //                     title: "Hoàn thành hủy đơn hàng loạt",
+    //                     description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+    //                     variant: errorCount > 0 ? "destructive" : "default",
+    //                 });
+    //             } catch (error) {
+    //                 toast({
+    //                     title: "Lỗi khi hủy đơn hàng",
+    //                     description: "Có lỗi xảy ra khi hủy đơn hàng.",
+    //                     variant: "destructive",
+    //                 });
+    //             } finally {
+    //                 setBulkLoading(false);
+    //             }
+    //         },
+    //         icon: <XCircle className="w-4 h-4 mr-2" />,
+    //         variant: "destructive" as const,
+    //     },
+    // ];
+
+    
+    const bulkActions = useMemo(() => {
+        if (isSelectingCompletable) {
+            return [
+                {
+                    label: "Hoàn thành",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+                        try {
+                            console.log("Bulk hoàn thành: keys =", keys);
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                console.log("Order found:", order);
+                                if (!order) continue;
+
+                                // Tính ngày sử dụng từ metadata
+                                const snap = order.metadata?.bookingDataSnapshot;
+                                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+                                console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+
+                                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+
+                                // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                                console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                                console.log("Is past service date:", isPastServiceDate);
+
+                                // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                                if (!isPastServiceDate) {
+                                    console.log("Ngày chưa đến, không cập nhật");
+                                    toast({
+                                        title: "Không thể hoàn thành",
+                                        description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                        variant: "destructive",
+                                    });
+                                    continue; // Bỏ qua đơn này, không cập nhật
+                                }
+
+                                console.log("Cập nhật đơn hàng:", order.id);
+                                // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+                                await updateOrderMutation.mutateAsync({
+                                    id: order.id,
+                                    status: "completed",
+                                    note: "Đơn hàng đã hoàn thành"
+                                });
+                            }
                             toast({
-                                title: "Không thể hoàn thành",
-                                description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                title: "Hoàn thành thành công",
+                                description: "Đã hoàn thành các đơn hàng được chọn.",
+                            });
+                        } catch (error) {
+                            console.error("Bulk complete error:", error); // Thêm log để debug
+                            toast({
+                                title: "Lỗi khi hoàn thành",
+                                description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
                                 variant: "destructive",
                             });
-                            continue; // Bỏ qua đơn này, không cập nhật
+                        } finally {
+                            setBulkLoading(false);
                         }
-
-                        console.log("Cập nhật đơn hàng:", order.id);
-                        // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
-                        await updateOrderMutation.mutateAsync({
-                            id: order.id,
-                            status: "completed",
-                            note: "Đơn hàng đã hoàn thành"
-                        });
-                    }
-                    toast({
-                        title: "Hoàn thành thành công",
-                        description: "Đã hoàn thành các đơn hàng được chọn.",
-                    });
-                } catch (error) {
-                    console.error("Bulk complete error:", error); // Thêm log để debug
-                    toast({
-                        title: "Lỗi khi hoàn thành",
-                        description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
-                        variant: "destructive",
-                    });
-                } finally {
-                    setBulkLoading(false);
-                }
-            },
-            icon: <Package className="w-4 h-4 mr-2" />,
-        },
-        {
-            label: "Hủy đơn",
-            action: async (keys: string[]) => { // keys giờ là array của id
-                setBulkLoading(true);
-                setBulkLoadingMessage("Đang hủy đơn hàng...");
-                try {
-                    let successCount = 0;
-                    let errorCount = 0;
-                    for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                        const order = orders.find(o => o.id === id); // Tìm order bằng id
-                        if (!order) {
-                            errorCount++;
-                            continue;
-                        }
-                        const orderId = order.id || order.orderNumber;
+                    },
+                    icon: <Package className="w-4 h-4 mr-2" />,
+                },
+            ];
+        } else if (isSelectingCancellable) {
+            return [
+                {
+                    label: "Hủy đơn",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hủy đơn hàng...");
                         try {
-                            const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
-                                method: 'PUT',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
-                                }),
-                            });
-                            if (res.ok) {
-                                successCount++;
-                            } else {
-                                errorCount++;
+                            let successCount = 0;
+                            let errorCount = 0;
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                if (!order) {
+                                    errorCount++;
+                                    continue;
+                                }
+                                const orderId = order.id || order.orderNumber;
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                                        }),
+                                    });
+                                    if (res.ok) {
+                                        successCount++;
+                                    } else {
+                                        errorCount++;
+                                    }
+                                } catch (error) {
+                                    errorCount++;
+                                    console.error(`Failed to cancel order ${orderId}:`, error);
+                                }
                             }
+                            queryClient.invalidateQueries({ queryKey: ['orders'] });
+                            toast({
+                                title: "Hoàn thành hủy đơn hàng loạt",
+                                description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+                                variant: errorCount > 0 ? "destructive" : "default",
+                            });
                         } catch (error) {
-                            errorCount++;
-                            console.error(`Failed to cancel order ${orderId}:`, error);
+                            toast({
+                                title: "Lỗi khi hủy đơn hàng",
+                                description: "Có lỗi xảy ra khi hủy đơn hàng.",
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
                         }
-                    }
-                    queryClient.invalidateQueries({ queryKey: ['orders'] });
-                    toast({
-                        title: "Hoàn thành hủy đơn hàng loạt",
-                        description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
-                        variant: errorCount > 0 ? "destructive" : "default",
-                    });
-                } catch (error) {
-                    toast({
-                        title: "Lỗi khi hủy đơn hàng",
-                        description: "Có lỗi xảy ra khi hủy đơn hàng.",
-                        variant: "destructive",
-                    });
-                } finally {
-                    setBulkLoading(false);
-                }
-            },
-            icon: <XCircle className="w-4 h-4 mr-2" />,
-            variant: "destructive" as const,
-        },
-    ];
+                    },
+                    icon: <XCircle className="w-4 h-4 mr-2" />,
+                    variant: "destructive" as const,
+                },
+            ];
+        } else {
+            return [
+                {
+                    label: "Hoàn thành",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+                        try {
+                            console.log("Bulk hoàn thành: keys =", keys);
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                console.log("Order found:", order);
+                                if (!order) continue;
+
+                                // Tính ngày sử dụng từ metadata
+                                const snap = order.metadata?.bookingDataSnapshot;
+                                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+                                console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+
+                                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+
+                                // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                                console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                                console.log("Is past service date:", isPastServiceDate);
+
+                                // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                                if (!isPastServiceDate) {
+                                    console.log("Ngày chưa đến, không cập nhật");
+                                    toast({
+                                        title: "Không thể hoàn thành",
+                                        description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                        variant: "destructive",
+                                    });
+                                    continue; // Bỏ qua đơn này, không cập nhật
+                                }
+
+                                console.log("Cập nhật đơn hàng:", order.id);
+                                // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+                                await updateOrderMutation.mutateAsync({
+                                    id: order.id,
+                                    status: "completed",
+                                    note: "Đơn hàng đã hoàn thành"
+                                });
+                            }
+                            toast({
+                                title: "Hoàn thành thành công",
+                                description: "Đã hoàn thành các đơn hàng được chọn.",
+                            });
+                        } catch (error) {
+                            console.error("Bulk complete error:", error); // Thêm log để debug
+                            toast({
+                                title: "Lỗi khi hoàn thành",
+                                description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <Package className="w-4 h-4 mr-2" />,
+                },
+                {
+                    label: "Hủy đơn",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hủy đơn hàng...");
+                        try {
+                            let successCount = 0;
+                            let errorCount = 0;
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                if (!order) {
+                                    errorCount++;
+                                    continue;
+                                }
+                                const orderId = order.id || order.orderNumber;
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                                        }),
+                                    });
+                                    if (res.ok) {
+                                        successCount++;
+                                    } else {
+                                        errorCount++;
+                                    }
+                                } catch (error) {
+                                    errorCount++;
+                                    console.error(`Failed to cancel order ${orderId}:`, error);
+                                }
+                            }
+                            queryClient.invalidateQueries({ queryKey: ['orders'] });
+                            toast({
+                                title: "Hoàn thành hủy đơn hàng loạt",
+                                description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+                                variant: errorCount > 0 ? "destructive" : "default",
+                            });
+                        } catch (error) {
+                            toast({
+                                title: "Lỗi khi hủy đơn hàng",
+                                description: "Có lỗi xảy ra khi hủy đơn hàng.",
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <XCircle className="w-4 h-4 mr-2" />,
+                    variant: "destructive" as const,
+                },
+            ];
+        }
+    }, [isSelectingCompletable, isSelectingCancellable, orders, updateOrderMutation, queryClient, toast]);
+
 
     const actions = [
         {
@@ -1997,7 +2256,14 @@ export default function Orders() {
                                     </>
                                 );
                             })()}
-                            <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái</CardDescription>
+                            <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái
+
+                            </CardDescription>
+
+                            {/* <div className="mt-2 text-sm text-gray-500">
+                                <p><strong>Đơn có thể hoàn thành:</strong> Các đơn có trạng thái "Đã xác nhận" hoặc "Đang xử lý" và ngày sử dụng đã qua hoặc đang trong ngày.</p>
+                                <p><strong>Đơn có thể hủy:</strong> Các đơn có trạng thái khác "Hoàn thành" và "Đã hủy" và ngày sử dụng chưa qua.</p>
+                            </div> */}
                         </div>
                         <div className="flex items-center space-x-2">
                             <Button
@@ -2070,7 +2336,7 @@ export default function Orders() {
                     <DataTable
                         columns={columns}
                         data={orders}
-                        rowKey="id" // Thêm: dùng id làm key cho row
+                        rowKey="id"
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
@@ -2080,10 +2346,13 @@ export default function Orders() {
                             setPagination({ current: page, pageSize })
                         }
                         onSearch={setSearchQuery}
-                        rowSelection={{
-                            selectedRowKeys: selectedOrders, // Giờ là array của id
-                            onChange: setSelectedOrders, // onChange nhận array của id
-                        }}
+                        rowSelection={isSelectingCompletable || isSelectingCancellable ? {
+                            selectedRowKeys: selectedOrders,
+                            onChange: setSelectedOrders,
+                            getCheckboxProps: (record) => ({
+                                disabled: isSelectingCompletable ? !getCompletableOrders().includes(record.id) : !getCancellableOrders().includes(record.id),
+                            }),
+                        } : undefined}
                         bulkActions={bulkActions}
                         actions={actions}
                         exportable

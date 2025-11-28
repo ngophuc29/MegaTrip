@@ -316,6 +316,14 @@ export default function ChiTietXeDuLich() {
         setSelectedIndex(resolved === -1 ? (reqIdx === -1 ? 0 : reqIdx) : resolved);
     }, [targetDateStr, remoteBus?.raw?.departureDates?.length]);
 
+    // Thêm useEffect để clear selected seats khi chọn ngày khác
+    useEffect(() => {
+        setSelectedSeats([]);
+        setSeatSaved(false);
+        setSeatEditMode(false);
+        setActiveReplaceIndex(null);
+        setPrevSelectedSeats([]);
+    }, [selectedIndex]);
 
     // format using VN timezone to avoid local offset issues
     const dtDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });

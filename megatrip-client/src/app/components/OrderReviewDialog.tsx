@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Star } from 'lucide-react';
+import { toast } from 'sonner';
 // import { DialogOverlay } from '@radix-ui/react-dialog'; // nếu không dùng thì nên bỏ
 
 type BookingLite = {
@@ -58,14 +59,14 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, custome
                 onOpenChange(false);
                 setRating(5);
                 setComment('');
-                // toast('Cảm ơn bạn đã chia sẻ trải nghiệm.'); // Nếu có toast
+                toast.success('Cảm ơn bạn đã chia sẻ trải nghiệm.'); // Sử dụng Sonner toast
             } else {
                 // Lỗi từ server
-                // toast('Có lỗi xảy ra khi gửi đánh giá.');
+                toast.error('Có lỗi xảy ra khi gửi đánh giá.'); // Sử dụng Sonner toast
             }
         } catch (error) {
             // Lỗi network
-            // toast('Có lỗi xảy ra khi gửi đánh giá.');
+            toast.error('Có lỗi xảy ra khi gửi đánh giá.'); // Sử dụng Sonner toast
         } finally {
             setLoading(false);
         }

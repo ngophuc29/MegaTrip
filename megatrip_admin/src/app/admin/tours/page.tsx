@@ -2572,7 +2572,11 @@ export default function Tours() {
                                 onChange={(e) => handleFormChange("adultPrice", parseInt(e.target.value) || 0)}
                                 placeholder="3500000"
                                 className={formErrors.adultPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.adultPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
                             )}
@@ -2584,10 +2588,13 @@ export default function Tours() {
                                 type="number"
                                 value={formData.childPrice || ""}
                                 onChange={(e) => handleFormChange("childPrice", parseInt(e.target.value) || 0)}
-
                                 placeholder="2800000"
                                 className={formErrors.childPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.childPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
                             )}
@@ -2601,7 +2608,11 @@ export default function Tours() {
                                 onChange={(e) => handleFormChange("infantPrice", parseInt(e.target.value) || 0)}
                                 placeholder="1000000"
                                 className={formErrors.infantPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.infantPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.infantPrice}</p>
                             )}

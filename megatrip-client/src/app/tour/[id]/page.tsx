@@ -1327,11 +1327,11 @@ export default function ChiTietTour() {
                                                     <div className="flex items-center gap-3">
                                                         <Avatar className="h-10 w-10">
                                                             <AvatarImage src="" />
-                                                            <AvatarFallback>{review.customerId?.name?.charAt(0) || 'U'}</AvatarFallback>
+                                                            <AvatarFallback>{review.orderId?.customerName?.charAt(0) || 'U'}</AvatarFallback>
                                                         </Avatar>
                                                         <div>
                                                             <div className="flex items-center gap-2">
-                                                                <span className="font-medium">{review.customerId?.name || 'Anonymous'}</span>
+                                                                <span className="font-medium">{review.orderId?.customerName || 'Anonymous'}</span>
                                                                 <Badge variant="secondary">Đã trải nghiệm</Badge>
                                                             </div>
                                                             <div className="text-xs text-muted-foreground">
@@ -1339,9 +1339,9 @@ export default function ChiTietTour() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <Button variant="ghost" size="sm">
+                                                    {/* <Button variant="ghost" size="sm">
                                                         <MoreHorizontal className="h-4 w-4" />
-                                                    </Button>
+                                                    </Button> */}
                                                 </div>
 
                                                 <div className="flex items-center gap-2 mb-2">
@@ -1357,19 +1357,6 @@ export default function ChiTietTour() {
                                                 </div>
 
                                                 <p className="text-sm text-muted-foreground mb-3">{review.comment}</p>
-
-                                                {/* <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-4">
-                                                        <Button variant="ghost" size="sm">
-                                                            <ThumbsUp className="h-4 w-4 mr-1" />
-                                                            Hữu ích (0)
-                                                        </Button>
-                                                        <Button variant="ghost" size="sm">
-                                                            <Flag className="h-4 w-4 mr-1" />
-                                                            Báo cáo
-                                                        </Button>
-                                                    </div>
-                                                </div> */}
                                             </CardContent>
                                         </Card>
                                     ))}

@@ -1094,7 +1094,7 @@ export default function TaiKhoan() {
                                                                         <div>Ngày đặt: {booking.bookingDate}</div>
                                                                         {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
                                                                         <div>
-                                                                            <strong>Ngày sử dụngx1:</strong> {booking.serviceDate}
+                                                                            <strong>Ngày sử dụng:</strong> {booking.serviceDate}
                                                                         </div>
                                                                         {/* <div>Số khách: {booking.passengers}</div> */}
                                                                         {/* {booking.refunded && (

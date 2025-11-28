@@ -2294,7 +2294,11 @@ export default function Buses() {
                             onChange={(e) => handleFormChange('adultPrice', parseInt(e.target.value) || 0)}
                             placeholder="350000"
                             className={formErrors.adultPrice ? "border-red-500" : ""}
+                            disabled={hasBookings && modalMode === "edit"}
                         />
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                        )}
                         {formErrors.adultPrice && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
                         )}
@@ -2308,7 +2312,11 @@ export default function Buses() {
                             onChange={(e) => handleFormChange('childPrice', parseInt(e.target.value) || 0)}
                             placeholder="200000"
                             className={formErrors.childPrice ? "border-red-500" : ""}
+                            disabled={hasBookings && modalMode === "edit"}
                         />
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                        )}
                         {formErrors.childPrice && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
                         )}

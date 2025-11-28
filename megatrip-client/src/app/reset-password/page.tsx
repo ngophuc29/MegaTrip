@@ -30,6 +30,7 @@ export default function ResetPasswordPage() {
         setSuccess('');
         if (!email || !token) return setError('Link đặt lại không hợp lệ');
         if (!password) return setError('Vui lòng nhập mật khẩu mới');
+        if (password.length < 8) return setError('Mật khẩu phải có ít nhất 8 ký tự');
         if (password !== confirm) return setError('Mật khẩu không khớp');
         setLoading(true);
         try {
