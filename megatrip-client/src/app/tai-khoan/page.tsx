@@ -41,6 +41,7 @@ import OrderReviewDialog from '../components/OrderReviewDialog';
 import { me, updateProfile } from '@/apis/auth';
 import Protected from '../components/Protected';
 import { toast } from 'sonner';
+import { useSearchParams } from 'next/navigation';
 
 const FAKE_CUSTOMER_ID = '64e65e8d3d5e2b0c8a3e9f12';
 // Sample user data
@@ -493,6 +494,7 @@ function mapOrderToBooking(order: any) {
 
 
 export default function TaiKhoan() {
+    const searchParams: any = useSearchParams();
     const [activeTab, setActiveTab] = useState<string>('overview');
     // Thêm state cho customerId
     const [customerId, setCustomerId] = useState<string | null>(null);
@@ -504,6 +506,7 @@ export default function TaiKhoan() {
     const [bookings, setBookings] = useState(null);
     const [loadingBookings, setLoadingBookings] = useState(false);
     const [bookingsError, setBookingsError] = useState(null);
+    const [memberSinceDate, setMemberSinceDate] = useState<string>('');
     useEffect(() => {
         // Try to read a possible navigation state (if any) without relying on react-router
         try {
@@ -514,7 +517,10 @@ export default function TaiKhoan() {
             // ignore if anything fails
         }
     }, []);
-
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
     // Minimal auth check + load real profile into the existing `userData` object.
     // We purposely mutate the `userData.profile` object (keeps changes minimal) and
     // bump `version` to force a re-render so the UI updates.
@@ -539,7 +545,10 @@ export default function TaiKhoan() {
                 userData.profile.dateOfBirth = payload.dob ? new Date(payload.dob).toISOString().slice(0, 10) : userData.profile.dateOfBirth;
                 // don't override avatar/memberSince/verified unless provided
                 if (payload.avatar) userData.profile.avatar = payload.avatar;
-                if (payload.memberSince) userData.profile.memberSince = payload.memberSince;
+                if (payload.createdAt) {
+                    userData.profile.memberSince = payload.createdAt;
+                    setMemberSinceDate(new Date(payload.createdAt).toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }));
+                }// Use createdAt for memberSince
                 if (payload.role) userData.profile.verified = payload.role === 'user' ? true : userData.profile.verified;
                 // Thêm: Lấy customerId
                 const resolvedUserId = payload?._id ?? payload?.id ?? payload?.userId ?? payload?._id?.$oid ?? null;
@@ -618,7 +627,7 @@ export default function TaiKhoan() {
         console.log('showChangePassword changed:', showChangePassword);
     }, [showChangePassword]);
     // ...existing code...
-    
+
     useEffect(() => {
         let mounted = true;
         async function loadBookings() {
@@ -716,6 +725,7 @@ export default function TaiKhoan() {
 
     const [reviewOpen, setReviewOpen] = useState(false);
     const [reviewBooking, setReviewBooking] = useState<any>(null);
+    const [statusFilter, setStatusFilter] = useState<string>('all');
     function getPassengerTypeLabel(type: string) {
         switch (type) {
             case 'adult': return 'Người lớn';
@@ -819,30 +829,30 @@ export default function TaiKhoan() {
                                             <FileText className="h-4 w-4 mr-2" />
                                             Đơn hàng của tôi
                                         </Button>
-                                        <Button
+                                        {/* <Button
                                             variant={activeTab === 'travelers' ? 'default' : 'ghost'}
                                             className="w-full justify-start"
                                             onClick={() => setActiveTab('travelers')}
                                         >
                                             <Users className="h-4 w-4 mr-2" />
                                             Hành khách thường đi
-                                        </Button>
+                                        </Button> */}
                                         <Button
                                             variant={activeTab === 'requests' ? 'default' : 'ghost'}
                                             className="w-full justify-start"
                                             onClick={() => setActiveTab('requests')}
                                         >
                                             <FileText className="h-4 w-4 mr-2" />
-                                            Yêu cầu
+                                            Yêu cầu đã gửi
                                         </Button>
-                                        <Button
+                                        {/* <Button
                                             variant={activeTab === 'notifications' ? 'default' : 'ghost'}
                                             className="w-full justify-start"
                                             onClick={() => setActiveTab('notifications')}
                                         >
                                             <Bell className="h-4 w-4 mr-2" />
                                             Thông báo
-                                        </Button>
+                                        </Button> */}
                                         <Button
                                             variant={activeTab === 'settings' ? 'default' : 'ghost'}
                                             className="w-full justify-start"
@@ -859,17 +869,17 @@ export default function TaiKhoan() {
                                     <div className="space-y-3">
                                         <div className="flex justify-between">
                                             <span className="text-sm text-muted-foreground">Tổng đơn hàng</span>
-                                            <span className="font-medium">{userData.bookings.length}</span>
+                                            <span className="font-medium">{displayBookings.length}</span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-sm text-muted-foreground">Đã hoàn thành</span>
                                             <span className="font-medium">
-                                                {userData.bookings.filter(b => b.status === 'completed').length}
+                                                {displayBookings.filter(b => b.status === 'completed').length}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
                                             <span className="text-sm text-muted-foreground">Thành viên từ</span>
-                                            <span className="font-medium">Jan 2023</span>
+                                            <span className="font-medium">{memberSinceDate}</span>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -1043,8 +1053,8 @@ export default function TaiKhoan() {
                                     <div className="flex items-center justify-between">
                                         <h1 className="text-2xl font-bold">Đơn hàng của tôi</h1>
 
-                                        {/* <div className="flex gap-2">
-                                            <Select defaultValue="all">
+                                        <div className="flex gap-2">
+                                            <Select value={statusFilter} onValueChange={setStatusFilter}>
                                                 <SelectTrigger className="w-40">
                                                     <SelectValue />
                                                 </SelectTrigger>
@@ -1055,7 +1065,7 @@ export default function TaiKhoan() {
                                                     <SelectItem value="cancelled">Đã hủy</SelectItem>
                                                 </SelectContent>
                                             </Select>
-                                        </div> */}
+                                        </div>
                                     </div>
 
                                     {/* Note ở đây */}
@@ -1069,168 +1079,176 @@ export default function TaiKhoan() {
                                     ) : (
                                         <div className="max-h-[64vh] overflow-y-auto space-y-4 pr-2">
                                             {/* {userData.bookings.map((booking) => ( */}
-                                            {displayBookings.map((booking: any) => (
+                                            {(() => {
+                                                const filteredBookings = displayBookings.filter((booking: any) =>
+                                                    statusFilter === 'all' || booking.status === statusFilter
+                                                );
+                                                return filteredBookings.map((booking: any) => (
 
-                                                <Card key={booking.id}>
-                                                    <CardContent className="p-6">
-                                                        <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                                                            <div className="flex items-start gap-4">
-                                                                <div className="p-3 bg-primary/10 rounded-lg">
-                                                                    {getServiceIcon(booking.type)}
-                                                                </div>
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-start gap-2 mb-2">
-                                                                        <h3 className="font-semibold">{booking.title}</h3>
-                                                                        <Badge className={getStatusColor(booking.status)}>
-                                                                            {getStatusText(booking.status)}
-                                                                        </Badge>
-                                                                        {booking.changeCalendar && booking.status !== 'cancelled' && (
-                                                                            <Badge variant="secondary">Đã đổi lịch</Badge>
-                                                                        )}
+                                                    <Card key={booking.id}>
+                                                        <CardContent className="p-6">
+                                                            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                                                                <div className="flex items-start gap-4">
+                                                                    <div className="p-3 bg-primary/10 rounded-lg">
+                                                                        {getServiceIcon(booking.type)}
                                                                     </div>
-                                                                    <div className="text-sm text-muted-foreground space-y-1">
-                                                                        <div>Mã đơn hàng: {booking.id}</div>
-                                                                        {/* <div>Chi tiết: {booking.details}</div> */}
-                                                                        <div>Ngày đặt: {booking.bookingDate}</div>
-                                                                        {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
-                                                                        <div>
-                                                                            <strong>Ngày sử dụng:</strong> {booking.serviceDate}
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-start gap-2 mb-2">
+                                                                            <h3 className="font-semibold">{booking.title}</h3>
+                                                                            <Badge className={getStatusColor(booking.status)}>
+                                                                                {getStatusText(booking.status)}
+                                                                            </Badge>
+                                                                            {booking.changeCalendar && booking.status !== 'cancelled' && (
+                                                                                <Badge variant="secondary">Đã đổi lịch</Badge>
+                                                                            )}
                                                                         </div>
-                                                                        {/* <div>Số khách: {booking.passengers}</div> */}
-                                                                        {/* {booking.refunded && (
+                                                                        <div className="text-sm text-muted-foreground space-y-1">
+                                                                            <div>Mã đơn hàng: {booking.id}</div>
+                                                                            {/* <div>Chi tiết: {booking.details}</div> */}
+                                                                            <div>Ngày đặt: {booking.bookingDate}</div>
+                                                                            {/* <div>Ngày sử dụng: {booking.serviceDate}</div> */}
+                                                                            <div>
+                                                                                <strong>Ngày sử dụng:</strong> {booking.serviceDate.includes('T') ? booking.serviceDate.split('T')[0] : booking.serviceDate}
+                                                                            </div>
+
+                                                                            {/* <div>Số khách: {booking.passengers}</div> */}
+                                                                            {/* {booking.refunded && (
                                                                         <div className="text-green-600">Đã hoàn: {formatPrice(booking.refunded)}</div>
                                                                     )} */}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="text-right space-y-2">
+                                                                    <div className="text-xl font-bold text-primary">
+                                                                        {formatPrice(booking.total)}
+                                                                    </div>
+                                                                    <div className="flex flex-col gap-2">
+                                                                        <Button size="sm" variant="outline" onClick={() => openOrderDetail(booking.id)}>
+                                                                            <Eye className="h-3 w-3 mr-1" />
+                                                                            Xem chi tiết
+                                                                        </Button>
+                                                                        {booking.paymentStatus === 'paid' && booking.status !== 'completed' && booking.status !== 'cancelled' && (
+                                                                            booking.hasRefundRequest ? (
+                                                                                <Tooltip.Provider>
+                                                                                    <Tooltip.Root>
+                                                                                        <Tooltip.Trigger asChild>
+                                                                                            <Button
+                                                                                                disabled
+                                                                                                variant={'outline'}
+                                                                                                className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                                            >
+                                                                                                <XCircle className="h-3 w-3 mr-1" />
+                                                                                                Hủy đơn
+                                                                                            </Button>
+                                                                                        </Tooltip.Trigger>
+                                                                                        <Tooltip.Portal>
+                                                                                            <Tooltip.Content
+                                                                                                className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                                sideOffset={5}
+                                                                                            >
+                                                                                                Đã gửi yêu cầu hoàn
+                                                                                            </Tooltip.Content>
+                                                                                        </Tooltip.Portal>
+                                                                                    </Tooltip.Root>
+                                                                                </Tooltip.Provider>
+                                                                            ) : new Date(booking.serviceDate) < new Date() ? (
+                                                                                <Tooltip.Provider>
+                                                                                    <Tooltip.Root>
+                                                                                        <Tooltip.Trigger asChild>
+                                                                                            <Button
+                                                                                                disabled
+                                                                                                variant={'outline'}
+                                                                                                className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                                            >
+                                                                                                <XCircle className="h-3 w-3 mr-1" />
+                                                                                                Hủy đơn
+                                                                                            </Button>
+                                                                                        </Tooltip.Trigger>
+                                                                                        <Tooltip.Portal>
+                                                                                            <Tooltip.Content
+                                                                                                className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                                sideOffset={5}
+                                                                                            >
+                                                                                                Ngày sử dụng đã qua
+                                                                                            </Tooltip.Content>
+                                                                                        </Tooltip.Portal>
+                                                                                    </Tooltip.Root>
+                                                                                </Tooltip.Provider>
+                                                                            ) : (
+                                                                                <Button size="sm" variant="outline" asChild>
+                                                                                    <a href={`/tai-khoan/huy-don/${booking.id}`}>
+                                                                                        <XCircle className="h-3 w-3 mr-1" />
+                                                                                        Hủy đơn
+                                                                                    </a>
+                                                                                </Button>
+                                                                            )
+                                                                        )}
+                                                                        {/* Always render change button but disable with tooltip when not allowed */}
+                                                                        {booking.status !== 'completed' && booking.status !== 'cancelled' && (
+                                                                            booking.canChange ? (
+                                                                                <Button size="sm" variant="outline" asChild>
+                                                                                    <a href={`/tai-khoan/doi-lich/${booking.id}`}>
+                                                                                        <Edit className="h-3 w-3 mr-1" />
+                                                                                        Đổi lịch
+                                                                                    </a>
+                                                                                </Button>
+                                                                            ) : (
+                                                                                <Tooltip.Provider>
+                                                                                    <Tooltip.Root>
+                                                                                        <Tooltip.Trigger asChild>
+                                                                                            <Button
+                                                                                                disabled
+                                                                                                variant={'outline'}
+                                                                                                className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
+                                                                                            >
+                                                                                                <Edit className="h-3 w-3 mr-1" />
+                                                                                                Đổi lịch
+                                                                                            </Button>
+                                                                                        </Tooltip.Trigger>
+                                                                                        <Tooltip.Portal>
+                                                                                            <Tooltip.Content
+                                                                                                className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
+                                                                                                sideOffset={5}
+                                                                                            >
+                                                                                                {booking.daysUntilService <= 3 ? 'Khả dụng trước ngày sử dụng 3 ngày' : 'Đơn hàng đã đổi lịch'}
+                                                                                            </Tooltip.Content>
+                                                                                        </Tooltip.Portal>
+                                                                                    </Tooltip.Root>
+                                                                                </Tooltip.Provider>
+                                                                            )
+                                                                        )}
+
+                                                                        {booking.status === 'completed' && (
+                                                                            <Button size="sm" variant="outline" onClick={() => {
+                                                                                setReviewBooking(booking);
+                                                                                setReviewOpen(true);
+                                                                            }}>
+                                                                                <Star className="h-3 w-3 mr-1" />
+                                                                                Đánh giá
+                                                                            </Button>
+                                                                        )}
+                                                                        {booking.status === 'confirmed' && (
+                                                                            <Button
+                                                                                size="sm"
+                                                                                onClick={() => {
+                                                                                    const extraData = JSON.stringify({ download: true });
+                                                                                    window.open(`/thanh-toan-thanh-cong?orderId=${booking.id}&extraData=${encodeURIComponent(extraData)}`, '_blank');
+                                                                                }}
+                                                                            >
+                                                                                <Download className="h-3 w-3 mr-1" />
+                                                                                Tải vé
+                                                                            </Button>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             </div>
+                                                        </CardContent>
+                                                    </Card>
+                                                ))
 
-                                                            <div className="text-right space-y-2">
-                                                                <div className="text-xl font-bold text-primary">
-                                                                    {formatPrice(booking.total)}
-                                                                </div>
-                                                                <div className="flex flex-col gap-2">
-                                                                    <Button size="sm" variant="outline" onClick={() => openOrderDetail(booking.id)}>
-                                                                        <Eye className="h-3 w-3 mr-1" />
-                                                                        Xem chi tiết
-                                                                    </Button>
-                                                                    {booking.paymentStatus === 'paid' && booking.status !== 'completed' && booking.status !== 'cancelled' && (
-                                                                        booking.hasRefundRequest ? (
-                                                                            <Tooltip.Provider>
-                                                                                <Tooltip.Root>
-                                                                                    <Tooltip.Trigger asChild>
-                                                                                        <Button
-                                                                                            disabled
-                                                                                            variant={'outline'}
-                                                                                            className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
-                                                                                        >
-                                                                                            <XCircle className="h-3 w-3 mr-1" />
-                                                                                            Hủy đơn
-                                                                                        </Button>
-                                                                                    </Tooltip.Trigger>
-                                                                                    <Tooltip.Portal>
-                                                                                        <Tooltip.Content
-                                                                                            className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
-                                                                                            sideOffset={5}
-                                                                                        >
-                                                                                            Đã gửi yêu cầu hoàn
-                                                                                        </Tooltip.Content>
-                                                                                    </Tooltip.Portal>
-                                                                                </Tooltip.Root>
-                                                                            </Tooltip.Provider>
-                                                                        ) : new Date(booking.serviceDate) < new Date() ? (
-                                                                            <Tooltip.Provider>
-                                                                                <Tooltip.Root>
-                                                                                    <Tooltip.Trigger asChild>
-                                                                                        <Button
-                                                                                            disabled
-                                                                                            variant={'outline'}
-                                                                                            className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
-                                                                                        >
-                                                                                            <XCircle className="h-3 w-3 mr-1" />
-                                                                                            Hủy đơn
-                                                                                        </Button>
-                                                                                    </Tooltip.Trigger>
-                                                                                    <Tooltip.Portal>
-                                                                                        <Tooltip.Content
-                                                                                            className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
-                                                                                            sideOffset={5}
-                                                                                        >
-                                                                                            Ngày sử dụng đã qua
-                                                                                        </Tooltip.Content>
-                                                                                    </Tooltip.Portal>
-                                                                                </Tooltip.Root>
-                                                                            </Tooltip.Provider>
-                                                                        ) : (
-                                                                            <Button size="sm" variant="outline" asChild>
-                                                                                <a href={`/tai-khoan/huy-don/${booking.id}`}>
-                                                                                    <XCircle className="h-3 w-3 mr-1" />
-                                                                                    Hủy đơn
-                                                                                </a>
-                                                                            </Button>
-                                                                        )
-                                                                    )}
-                                                                    {/* Always render change button but disable with tooltip when not allowed */}
-                                                                    {booking.status !== 'completed' && booking.status !== 'cancelled' && (
-                                                                        booking.canChange ? (
-                                                                            <Button size="sm" variant="outline" asChild>
-                                                                                <a href={`/tai-khoan/doi-lich/${booking.id}`}>
-                                                                                    <Edit className="h-3 w-3 mr-1" />
-                                                                                    Đổi lịch
-                                                                                </a>
-                                                                            </Button>
-                                                                        ) : (
-                                                                            <Tooltip.Provider>
-                                                                                <Tooltip.Root>
-                                                                                    <Tooltip.Trigger asChild>
-                                                                                        <Button
-                                                                                            disabled
-                                                                                            variant={'outline'}
-                                                                                            className="flex items-center border rounded px-2 py-1 text-sm opacity-50 cursor-not-allowed"
-                                                                                        >
-                                                                                            <Edit className="h-3 w-3 mr-1" />
-                                                                                            Đổi lịch
-                                                                                        </Button>
-                                                                                    </Tooltip.Trigger>
-                                                                                    <Tooltip.Portal>
-                                                                                        <Tooltip.Content
-                                                                                            className="rounded bg-gray-800 px-2 py-1 text-xs text-white shadow-lg"
-                                                                                            sideOffset={5}
-                                                                                        >
-                                                                                            {booking.daysUntilService <= 3 ? 'Khả dụng trước ngày sử dụng 3 ngày' : 'Đơn hàng đã đổi lịch'}
-                                                                                        </Tooltip.Content>
-                                                                                    </Tooltip.Portal>
-                                                                                </Tooltip.Root>
-                                                                            </Tooltip.Provider>
-                                                                        )
-                                                                    )}
 
-                                                                    {booking.status === 'completed' && (
-                                                                        <Button size="sm" variant="outline" onClick={() => {
-                                                                            setReviewBooking(booking);
-                                                                            setReviewOpen(true);
-                                                                        }}>
-                                                                            <Star className="h-3 w-3 mr-1" />
-                                                                            Đánh giá
-                                                                        </Button>
-                                                                    )}
-                                                                    {booking.status === 'confirmed' && (
-                                                                        <Button
-                                                                            size="sm"
-                                                                            onClick={() => {
-                                                                                const extraData = JSON.stringify({ download: true });
-                                                                                window.open(`/thanh-toan-thanh-cong?orderId=${booking.id}&extraData=${encodeURIComponent(extraData)}`, '_blank');
-                                                                            }}
-                                                                        >
-                                                                            <Download className="h-3 w-3 mr-1" />
-                                                                            Tải vé
-                                                                        </Button>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            ))}
+                                            })()}
                                         </div>
                                     )}
                                 </div>
@@ -1328,17 +1346,17 @@ export default function TaiKhoan() {
                                                 <Button onClick={() => setShowChangePassword(true)}>Đổi mật khẩu</Button>
                                             </div>
                                             <Separator />
-                                            <div className="flex items-center justify-between">
+                                            {/* <div className="flex items-center justify-between">
                                                 <div>
                                                     <div className="font-medium">Xác thực 2 bước</div>
                                                     <div className="text-sm text-muted-foreground">Tăng cường bảo mật với OTP</div>
                                                 </div>
                                                 <Button variant="outline">Thiết lập</Button>
-                                            </div>
+                                            </div> */}
                                         </CardContent>
                                     </Card>
 
-                                    <Card>
+                                    {/* <Card>
                                         <CardHeader>
                                             <CardTitle>Thông báo</CardTitle>
                                         </CardHeader>
@@ -1365,9 +1383,9 @@ export default function TaiKhoan() {
                                                 <input type="checkbox" className="toggle" />
                                             </div>
                                         </CardContent>
-                                    </Card>
+                                    </Card> */}
 
-                                    <Card>
+                                    {/* <Card>
                                         <CardHeader>
                                             <CardTitle>Khác</CardTitle>
                                         </CardHeader>
@@ -1376,7 +1394,7 @@ export default function TaiKhoan() {
                                                 Xóa tài khoản
                                             </Button>
                                         </CardContent>
-                                    </Card>
+                                    </Card> */}
                                 </div>
                             )}
                         </div>
@@ -1419,7 +1437,7 @@ export default function TaiKhoan() {
                                 <div className="text-center">Đang tải...</div>
                             ) : orderDetails ? (
                                 <>
-                                     
+
                                     {/* Thông tin cơ bản */}
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div><strong>Mã đơn:</strong> {orderDetails.order.orderNumber}</div>

@@ -382,7 +382,7 @@ export default function FlightResults({
       }
 
       // feedback unchanged
-      alert('Pricing & seatmaps response logged to console');
+      // alert('Pricing & seatmaps response logged to console');
 
       return { fromCache: false, key, signature: sigToSave, pricing: pricingJson, seatmap: normalizedSeat };
     } catch (err) {

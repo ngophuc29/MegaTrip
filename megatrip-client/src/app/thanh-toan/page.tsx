@@ -79,14 +79,14 @@ const paymentMethods = [
     fee: 0,
     instant: true,
   },
-  {
-    id: "vnpay",
-    name: "VNPay",
-    description: "Ví điện tử VNPay",
-    icon: Smartphone,
-    fee: 0,
-    instant: true,
-  },
+  // {
+  //   id: "vnpay",
+  //   name: "VNPay",
+  //   description: "Ví điện tử VNPay",
+  //   icon: Smartphone,
+  //   fee: 0,
+  //   instant: true,
+  // },
   {
     id: "momo",
     name: "MoMo",
@@ -927,7 +927,7 @@ export default function ThanhToan() {
           if (p.type === "child" && (age <= 4 || age >= 12))
             next[`passenger.${i}.dateOfBirth`] = "Trẻ em từ 5 đến 11 tuổi";
           if (p.type === "adult" && age < 12)
-            next[`passenger.${i}.dateOfBirth`] = "Người lớn từ 12 tuổi trở lên";
+            next[`passenger.${i}.dateOfBirth`] = "Người lớn từ 18 tuổi trở lên";
         }
         // Kiểm tra định dạng firstName và lastName: chỉ cho phép chữ cái, dấu cách, và một số ký tự đặc biệt
         const nameRegex = /^[a-zA-ZÀ-ỹ\s'-]+$/;

@@ -408,10 +408,10 @@ export default function Reviews() {
                     <p className="text-gray-600 mt-1">Quản lý đánh giá, bình luận của khách hàng</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                    {/* <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 

@@ -1062,10 +1062,10 @@ export default function Promotions() {
                     <p className="text-gray-600 mt-1">Quản lý mã giảm giá, voucher và chương trình khuyến mãi</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                    {/* <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Tạo khuyến mãi

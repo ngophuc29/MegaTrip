@@ -279,7 +279,7 @@ export function DataTable({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Nhập tên tour ..."
+              placeholder="Nhập tên để tìm kiếm..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               className="pl-10"
@@ -296,7 +296,7 @@ export function DataTable({
           </Button> */}
         </div>
 
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           {exportable && (
             <Button
               variant="outline"
@@ -308,7 +308,7 @@ export function DataTable({
               Xuất
             </Button>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Bulk Actions */}

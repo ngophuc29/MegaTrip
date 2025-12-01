@@ -235,7 +235,7 @@ export default function News() {
             slug: data.slug,
             category: data.category,
             status: data.status === "published" ? "published" : "unpublished",
-            author: { id: "local_admin", name: "Admin (local)", avatar: "" },
+            author: { id: "local_admin", name: "Admin ", avatar: "" },
             summary: data.summary,
             content: data.content,
             // tags removed
@@ -254,7 +254,7 @@ export default function News() {
             setTotalState(prev => prev + 1);
             setModalOpen(false);
             resetForm();
-            toast({ title: "Đã tạo (local)", description: "Bài viết được lưu tạm trên frontend" });
+            toast({ title: "Đã tạo ", description: "Bài viết được lưu tạm trên frontend" });
 
             if (BACKEND_AVAILABLE) {
                 // actual network create (kept here for when BE ready)
@@ -305,7 +305,7 @@ export default function News() {
                 heroImage: data.heroImage || undefined,
                 updatedAt: new Date().toISOString(),
             } : a));
-            toast({ title: "Cập nhật (local)", description: "Thay đổi đã áp dụng trên frontend" });
+            toast({ title: "Cập nhật ", description: "Thay đổi đã áp dụng trên frontend" });
             setModalOpen(false);
             resetForm();
 
@@ -345,7 +345,7 @@ export default function News() {
             setTotalState(prev => Math.max(0, prev - 1));
             setDeleteModalOpen(false);
             setArticleToDelete(null);
-            toast({ title: "Xóa (local)", description: `Đã xóa "${target?.title}" trên frontend` });
+            toast({ title: "Xóa ", description: `Đã xóa "${target?.title}" trên frontend` });
 
             if (BACKEND_AVAILABLE) {
                 (async () => {
@@ -375,7 +375,7 @@ export default function News() {
                 }
                 return prev;
             });
-            toast({ title: `Thao tác ${action} (local)`, description: "Đã áp dụng trên frontend" });
+            toast({ title: `Thao tác ${action} `, description: "Đã áp dụng trên frontend" });
 
             if (BACKEND_AVAILABLE) {
                 (async () => {
@@ -825,11 +825,11 @@ export default function News() {
         </div>
     );
 
+
     const bulkStats = {
-        total: total,
+        total: articles.length,
         published: articles.filter((item) => item.status === "published").length,
-        drafts: articles.filter((item) => item.status === "draft").length,
-        scheduled: articles.filter((item) => item.status === "scheduled").length,
+        drafts: articles.filter((item) => item.status === "unpublished").length,
     };
 
 
@@ -841,10 +841,10 @@ export default function News() {
                     <p className="text-gray-600 mt-1">Quản lý bài viết, công bố tin tức và nội dung truyền thông</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                    {/* <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Đăng tin mới
@@ -852,7 +852,7 @@ export default function News() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -875,17 +875,7 @@ export default function News() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-gray-600">Đang lên lịch</p>
-                                <p className="text-2xl font-bold text-blue-600">{bulkStats.scheduled}</p>
-                            </div>
-                            <Clock className="w-8 h-8 text-blue-500" />
-                        </div>
-                    </CardContent>
-                </Card>
+                
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">

@@ -287,7 +287,10 @@ export default function ChiTietTour() {
         return dt.toISOString().split('T')[0];
     };
 
-
+    function toLocalYMDT(d?: Date | null) {
+        if (!d) return null;
+        return d.toLocaleString('sv-SE').replace(' ', 'T'); // e.g., "2025-12-13T04:05:00"
+    }
 
 
     // Map server tour doc -> client tour shape (partial, only fields we need)
@@ -302,11 +305,11 @@ export default function ChiTietTour() {
         const availableDates = startDates.map((sd: any, idx: number) => {
             const rawStart = sd.$date ?? sd;
             const rawEnd = endDates?.[idx] ? (endDates[idx].$date ?? endDates[idx]) : null;
-            // Fix: Use local YYYY-MM-DD instead of UTC ISO
+            // Fix: Use local YYYY-MM-DDTHH:mm:ss instead of UTC ISO
             const startDateObj = rawStart ? new Date(rawStart) : null;
-            const startIso = startDateObj ? toLocalYMD(startDateObj) : null;  // Local YYYY-MM-DD
-            const endIso = rawEnd ? toLocalYMD(new Date(rawEnd)) : null;  // Local YYYY-MM-DD
-            const date = startIso || toIsoDate(sd);  // Use local date
+            const startIso = startDateObj ? toLocalYMDT(startDateObj) : null;  // Local YYYY-MM-DDTHH:mm:ss
+            const endIso = rawEnd ? toLocalYMDT(new Date(rawEnd)) : null;  // Local YYYY-MM-DDTHH:mm:ss
+            const date = startIso ? startIso.split('T')[0] : toIsoDate(sd);  // Keep date as YYYY-MM-DD for compatibility
             // Use Vietnam timezone (UTC+7) for date comparison
             const now = new Date();
             const vnNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
@@ -484,11 +487,13 @@ export default function ChiTietTour() {
 
     const formatDate = (dateStr: string) => {
         const date = new Date(dateStr);
-        return date.toLocaleDateString('vi-VN', {
-            weekday: 'short',
-            day: '2-digit',
-            month: '2-digit'
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const time = date.toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit'
         });
+        return `${time} ${day}/${month}`;
     };
 
     const getStatusBadge = (status: string, available: number) => {
@@ -948,7 +953,7 @@ export default function ChiTietTour() {
                                                 }}
                                             >
                                                 <div className="flex items-center justify-between">
-                                                    <div className="text-sm font-medium">{formatDate(dateInfo.date)}</div>
+                                                    <div className="text-sm font-medium">{formatDate(dateInfo.startIso || dateInfo.date)}</div>
                                                     {isSelected && <CheckCircle className="h-4 w-4 text-[hsl(var(--primary))] ml-2" />}
                                                 </div>
                                                 <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
@@ -1407,7 +1412,7 @@ export default function ChiTietTour() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Người lớn</div>
-                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button

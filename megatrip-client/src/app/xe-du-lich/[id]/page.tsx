@@ -1037,7 +1037,7 @@ export default function ChiTietXeDuLich() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Người lớn</div>
-                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button

@@ -300,7 +300,14 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       
       setTourFrom(prev => mapProvinceInputToCode(prev));
       setTourTo(prev => mapProvinceInputToCode(prev));
-    }, [provinces]);
+  }, [provinces]);
+  useEffect(() => {
+    if (flightType === "roundtrip" && flightDeparture && !flightReturn) {
+      const returnDate = new Date(flightDeparture);
+      returnDate.setDate(returnDate.getDate() + 3); // Ngày về = ngày đi + 3 ngày
+      setFlightReturn(returnDate);
+    }
+  }, [flightType, flightDeparture]);
   const totalPassengers = passengers.adults + passengers.children + passengers.infants;
 
   // Hàm chuyển route và truyền query
@@ -345,7 +352,9 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
       if (inboundPayload) console.log('Inbound payload (SearchTabs):', inboundPayload);
 
       // ask user to confirm before navigating (so you can inspect console)
-      const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      // const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      const ok = typeof window !== 'undefined' ? window.confirm('Bạn đồng ý tiếp tục tìm kiếm chuyến bay?') : true;
+
       if (!ok) return;
 
       // Build final querystring (keep compatibility with landing page params)
@@ -581,7 +590,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">Người lớn</div>
-                            <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                            <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Button
@@ -605,7 +614,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">Trẻ em</div>
-                            <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                            <div className="text-sm text-muted-foreground">4-11 tuổi</div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Button
@@ -629,7 +638,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">Em bé</div>
-                            <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                            <div className="text-sm text-muted-foreground">&lt; 4 tuổi</div>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Button

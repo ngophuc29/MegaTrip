@@ -1637,52 +1637,60 @@ export default function Orders() {
         //     icon: <CheckCircle className="mr-2 h-4 w-4" />,
         //     condition: (order: Order) => order.orderStatus === "pending",
         // },
-        {
-            label: "Hoàn thành",
-            action: handleCompleteOrder,
-            icon: <Package className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => {
-                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
-                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
 
-                // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
-                const snap = order.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
 
-                return isValidStatus && isServiceDateValid;
-            },
-        },
+        // {
+        //     label: "Hoàn thành",
+        //     action: handleCompleteOrder,
+        //     icon: <Package className="mr-2 h-4 w-4" />,
+        //     condition: (order: Order) => {
+        //         // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
+        //         const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
+
+        //         // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+        //         const snap = order.metadata?.bookingDataSnapshot;
+        //         const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+        //         const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        //         const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+        //         const today = new Date();
+        //         today.setHours(0, 0, 0, 0);
+        //         const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+        //         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        //         const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+
+        //         return isValidStatus && isServiceDateValid;
+        //     },
+        // },
+
+
         // {
         //     label: "Hoàn tiền",
         //     action: handleRefund,
         //     icon: <DollarSign className="mr-2 h-4 w-4" />,
         //     condition: (order: Order) => order.paymentStatus === "paid" && order.orderStatus !== "cancelled",
         // },
-        {
-            label: "Hủy đơn",
-            action: handleCancelOrder,
-            icon: <XCircle className="mr-2 h-4 w-4" />,
-            variant: "destructive" as const,
-            condition: (order: Order) => order.orderStatus !== "completed" && order.orderStatus !== "cancelled",
-            tooltip: "Hủy toàn bộ đơn hàng, chuyển trạng thái vé và hoàn tiền tự động nếu đã thanh toán.",
-        },
-        {
-            label: "Xuất hóa đơn",
-            action: handleExportInvoice,
-            icon: <Download className="mr-2 h-4 w-4" />,
-        },
-        {
-            label: "In hóa đơn",
-            action: handlePrintInvoice,
-            icon: <Printer className="mr-2 h-4 w-4" />,
-        },
+
+
+        // {
+        //     label: "Hủy đơn",
+        //     action: handleCancelOrder,
+        //     icon: <XCircle className="mr-2 h-4 w-4" />,
+        //     variant: "destructive" as const,
+        //     condition: (order: Order) => order.orderStatus !== "completed" && order.orderStatus !== "cancelled",
+        //     tooltip: "Hủy toàn bộ đơn hàng, chuyển trạng thái vé và hoàn tiền tự động nếu đã thanh toán.",
+        // },
+
+
+        // {
+        //     label: "Xuất hóa đơn",
+        //     action: handleExportInvoice,
+        //     icon: <Download className="mr-2 h-4 w-4" />,
+        // },
+        // {
+        //     label: "In hóa đơn",
+        //     action: handlePrintInvoice,
+        //     icon: <Printer className="mr-2 h-4 w-4" />,
+        // },
     ];
     function getPassengerTypeLabel(type: string) {
         switch (type) {
@@ -2151,14 +2159,14 @@ export default function Orders() {
                     <p className="text-gray-600 mt-1">Quản lý đơn hàng, thanh toán và trạng thái đơn</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 
@@ -2316,7 +2324,7 @@ export default function Orders() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.paymentMethod} onValueChange={(value) => setFilters(prev => ({ ...prev, paymentMethod: value }))}>
+                            {/* <Select value={filters.paymentMethod} onValueChange={(value) => setFilters(prev => ({ ...prev, paymentMethod: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -2328,7 +2336,7 @@ export default function Orders() {
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
-                            </Select>
+                            </Select> */}
                         </div>
                     </div>
                 </CardHeader>

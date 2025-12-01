@@ -339,7 +339,7 @@ export default function AdvancedSearchTabs() {
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium">Người lớn</div>
-                          <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                          <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Button
@@ -364,7 +364,7 @@ export default function AdvancedSearchTabs() {
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium">Trẻ em</div>
-                          <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                          <div className="text-sm text-muted-foreground">4-11 tuổi</div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Button
@@ -389,7 +389,7 @@ export default function AdvancedSearchTabs() {
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="font-medium">Em bé</div>
-                          <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                          <div className="text-sm text-muted-foreground">&lt; 4 tuổi</div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Button

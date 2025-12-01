@@ -2318,7 +2318,8 @@ export default function ChiTietVeMayBay() {
                                                             const addOns = selectedAddOnsByLeg.outbound.reduce((sum, id) => {
                                                                 const addOn = dynamicAddOnServices.find((s) => s.id === id);
                                                                 if (!addOn) return sum;
-                                                                const qty = addOnPerPassenger[id] ? totalParticipants : 1;
+                                                                // Sửa: Sử dụng giá trị số thực tế của addOnPerPassenger[id], không phải logic boolean
+                                                                const qty = addOnPerPassenger[id] || 1;
                                                                 return sum + (addOn.price * qty);
                                                             }, 0);
                                                             const seats = selectedSeatsByLeg.outbound.reduce((sum, s) => sum + (s.price || 0), 0);
@@ -2419,7 +2420,7 @@ export default function ChiTietVeMayBay() {
                                                                     const addOns = selectedAddOnsByLeg.inbound.reduce((sum, id) => {
                                                                         const addOn = dynamicAddOnServices.find((s) => s.id === id);
                                                                         if (!addOn) return sum;
-                                                                        const qty = addOnPerPassenger[id] ? totalParticipants : 1;
+                                                                        const qty = addOnPerPassenger[id] || 1;  // Sửa tương tự
                                                                         return sum + (addOn.price * qty);
                                                                     }, 0);
                                                                     const seats = selectedSeatsByLeg.inbound.reduce((sum, s) => sum + (s.price || 0), 0);

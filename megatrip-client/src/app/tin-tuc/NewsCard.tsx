@@ -52,7 +52,7 @@ export default function NewsCard({ article, featured = false }: { article: Artic
                             <div className="flex items-center gap-4">
                                 <span className="flex items-center"><User className="h-3 w-3 mr-1" />{article.author}</span>
                                 <span className="flex items-center"><Calendar className="h-3 w-3 mr-1" />{article.publishDate}</span>
-                                <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span>
+                                {/* <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span> */}
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="text-sm text-muted-foreground flex items-center"><Eye className="h-3 w-3 mr-1" />{(article.views || 0).toLocaleString()}</span>
@@ -84,7 +84,7 @@ export default function NewsCard({ article, featured = false }: { article: Artic
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center"><User className="h-3 w-3 mr-1" />{article.author}</span>
                             <span className="flex items-center"><Calendar className="h-3 w-3 mr-1" />{article.publishDate}</span>
-                            <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span>
+                            {/* <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span> */}
                         </div>
                         <div className="flex items-center gap-3">
                             <span className="text-sm text-muted-foreground flex items-center"><Eye className="h-3 w-3 mr-1" />{(article.views || 0).toLocaleString()}</span>

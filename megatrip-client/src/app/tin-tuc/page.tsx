@@ -64,7 +64,7 @@ export default function TinTuc() {
                         featured: !!a.featured,
                         author: a.author?.name || 'Admin',
                         publishDate: a.publishedAt ? (new Date(a.publishedAt)).toLocaleDateString('vi-VN') : (a.createdAt ? (new Date(a.createdAt)).toLocaleDateString('vi-VN') : ''),
-                        readTime: a.readTime || '3 phút đọc',
+                        readTime: a.readTime || '',
                         views: a.views || 0,
                         likes: a.likes || 0,
                         tags: a.tags || [],

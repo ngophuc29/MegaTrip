@@ -1037,21 +1037,38 @@ export default function VeMayBay() {
     }
 
     const allFlights = legFlights; // Chỉ dùng data từ API, không có fake data
-
+    const [selectedDepartureTime, setSelectedDepartureTime] = useState<string>('');
     const filteredFlights = allFlights.filter(flight => {
         const price = Number(flight?.price) || 0;
         const matchesPrice = price >= priceRange[0] && price <= priceRange[1];
         const matchesAirline = selectedAirlines.length === 0 || selectedAirlines.includes(flight.airline);
+
+        // Filter by departure time
+        let matchesTime = true;
+        if (selectedDepartureTime) {
+            const [start, end] = selectedDepartureTime.split('-').map(t => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m; // Convert to minutes
+            });
+            const flightTime = flight.departure?.time;
+            if (flightTime) {
+                const [h, m] = flightTime.split(':').map(Number);
+                const flightMinutes = h * 60 + m;
+                matchesTime = flightMinutes >= start && flightMinutes < end;
+            } else {
+                matchesTime = false;
+            }
+        }
 
         // If route is selected, prioritize matching routes
         if (selectedRoute) {
             const matchesRoute =
                 flight.departure.city === selectedRoute.from &&
                 flight.arrival.city === selectedRoute.to;
-            return matchesPrice && matchesAirline && matchesRoute;
+            return matchesPrice && matchesAirline && matchesTime && matchesRoute;
         }
 
-        return matchesPrice && matchesAirline;
+        return matchesPrice && matchesAirline && matchesTime;
     });
 
     const sortedFlights = [...filteredFlights].sort((a, b) => {
@@ -1957,7 +1974,7 @@ export default function VeMayBay() {
     const [promotions, setPromotions] = useState<any[]>([]);
     const [promotionsLoading, setPromotionsLoading] = useState(false);
     const [promotionsError, setPromotionsError] = useState<string | null>(null);
-
+    
     useEffect(() => {
         // load promotions applicable to flights
         const loadPromos = async () => {
@@ -2313,10 +2330,10 @@ export default function VeMayBay() {
                                             </div>
                                         </div>
 
-                                        <Separator />
+                                        {/* <Separator /> */}
 
                                         {/* Airlines */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Hãng hàng không</Label>
                                             <div className="space-y-3">
                                                 {airlines.map((airline) => (
@@ -2338,7 +2355,7 @@ export default function VeMayBay() {
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        </div> */}
 
                                         <Separator />
 
@@ -2346,17 +2363,45 @@ export default function VeMayBay() {
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <Button variant="outline" size="sm" className="text-xs">Sáng sớm<br />06:00 - 12:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Chiều<br />12:00 - 18:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '06:00-12:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '06:00-12:00' ? '' : '06:00-12:00')}
+                                                >
+                                                    Sáng sớm<br />06:00 - 12:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '12:00-18:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '12:00-18:00' ? '' : '12:00-18:00')}
+                                                >
+                                                    Chiều<br />12:00 - 18:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '18:00-24:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '18:00-24:00' ? '' : '18:00-24:00')}
+                                                >
+                                                    Tối<br />18:00 - 24:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '00:00-06:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '00:00-06:00' ? '' : '00:00-06:00')}
+                                                >
+                                                    Đêm<br />00:00 - 06:00
+                                                </Button>
                                             </div>
                                         </div>
 
                                         <Separator />
 
                                         {/* Quick Filters */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
                                             <div className="space-y-2">
                                                 <div className="flex items-center space-x-2">
@@ -2384,7 +2429,7 @@ export default function VeMayBay() {
                                                     </label>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </div> */}
                                     </CardContent>
                                 </Card>
                             )}

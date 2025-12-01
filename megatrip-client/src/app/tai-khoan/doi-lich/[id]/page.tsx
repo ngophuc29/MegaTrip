@@ -1160,12 +1160,17 @@ export default function DoiLichPage() {
                     let dates = Array.isArray(bus?.departureDates) ? bus.departureDates.map((d: string) => d.split('T')[0]) : (bus?.departureAt ? [bus.departureAt.split('T')[0]] : []);
                     // Filter chỉ giữ ngày > today + 3 days
                     const now = new Date();
+                    // dates = dates.filter(d => {
+                    //     const depDate = new Date(d);
+                    //     const depDateMidnight = new Date(depDate.getFullYear(), depDate.getMonth(), depDate.getDate());
+                    //     const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    //     const daysDiff = (depDateMidnight.getTime() - nowMidnight.getTime()) / (1000 * 60 * 60 * 24);
+                    //     return daysDiff > 3;
+                    // });
                     dates = dates.filter(d => {
-                        const depDate = new Date(d);
-                        const depDateMidnight = new Date(depDate.getFullYear(), depDate.getMonth(), depDate.getDate());
-                        const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                        const daysDiff = (depDateMidnight.getTime() - nowMidnight.getTime()) / (1000 * 60 * 60 * 24);
-                        return daysDiff > 3;
+                        const depDate = new Date(d + 'T00:00:00'); // assuming d is YYYY-MM-DD
+                        const hoursDiff = (depDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+                        return hoursDiff >= 24; // Match canChange policy for bus
                     });
                     console.log('dates bus after filter:', dates);
 

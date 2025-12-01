@@ -119,7 +119,7 @@ interface TourFormData {
 }
 
 interface TourFilters {
-    status: string;
+    visibility: string;
     category: string;
     priceRange?: [number, number];
     dateRange?: [string, string];
@@ -252,7 +252,7 @@ export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filters, setFilters] = useState<TourFilters>({
-        status: "all",
+        visibility: "all",
         category: "all",
     });
     const [modalOpen, setModalOpen] = useState(false);
@@ -276,7 +276,7 @@ export default function Tours() {
         adultPrice: 0,
         childPrice: 0,
         infantPrice: 0,
-        maxGroupSize:40,
+        maxGroupSize: 40,
         minBooking: 1,
         categoryId: "",
         tags: [],
@@ -421,7 +421,7 @@ export default function Tours() {
             maxGroupSize: Number(t.maxGroupSize || 1),
             seatsBooked: Number(t.seatsBooked || 0),
             minBooking: Number(t.minBooking || 1),
-            status: t.status || "draft",
+            status: t.status || (t.isVisible ? "active" : "hidden"),
             highlight: Boolean(t.highlight),
             isVisible: Boolean(t.isVisible),
             categoryId: t.categoryId || "",
@@ -501,7 +501,16 @@ export default function Tours() {
 
     const filteredTours = tours
         .filter((tour) => {
-            if (filters.status !== "all" && tour.status !== filters.status) return false;
+            // Debug: Log filter visibility (giữ lại để debug)
+            
+
+            if (filters.visibility !== "all") {
+                const expected = filters.visibility === "true";
+                if (tour.isVisible !== expected) {
+                    console.log(`[DEBUG] Tour ${tour.name} filtered out because isVisible ${tour.isVisible} !== ${expected}`);
+                    return false;
+                }
+            }
             if (filters.category !== "all" && tour.categoryId !== filters.category) return false;
             if (searchQuery && !tour.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             return true;
@@ -1043,7 +1052,11 @@ export default function Tours() {
                 updatedAt: createdTour.updatedAt ?? new Date().toISOString(),
             } as any;
 
-            setTours(prev => [...prev, newTour]);
+            // Thêm tour mới và sort lại theo createdAt descending (mới nhất trước)
+            setTours(prev => {
+                const newList = [...prev, newTour];
+                return newList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            });
             queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
@@ -1229,7 +1242,9 @@ export default function Tours() {
         }
 
 
-
+        if (!data.description || !data.description.trim()) {
+            errors.description = "Bạn phải nhập mô tả chi tiết";
+        }
         // if (!data.categoryId) {
         //     errors.categoryId = "Bạn phải chọn danh mục";
         // }
@@ -1238,13 +1253,15 @@ export default function Tours() {
             errors.departureFrom = "Bạn phải nhập điểm khởi hành";
         }
         if (!data.startLocation || !String(data.startLocation.pickupDropoff || "").trim()) {
-            errors.pickupDropoff = "Bạn phải nhập điểm đón chính (startLocation.pickupDropoff)";
+            errors.pickupDropoff = "Bạn phải nhập điểm đón chính ";
         }
 
         if (!data.destination.trim()) {
             errors.destination = "Bạn phải nhập điểm đến";
         }
-
+        if (!data.startLocation || !String(data.startLocation.address || "").trim()) {
+            errors.startLocationAddress = "Bạn phải nhập địa chỉ điểm đón";
+        }
 
         if (modalMode === "edit" && hasBookings && originalTour) {
             const originalStarts = Array.isArray(originalTour.startDates)
@@ -1269,13 +1286,13 @@ export default function Tours() {
                     errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không hợp lệ`;
                 } else {
                     // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
-                    const isChanged = modalMode === "create";
+                    let isChanged = modalMode === "create";  // <-- Changed from const to let
                     if (modalMode === "edit" && originalTour) {
                         const originalStarts = Array.isArray(originalTour.startDates)
                             ? originalTour.startDates.map(date => toLocalInput(new Date(date)))
                             : [toLocalInput(new Date(originalTour.startDate))];
                         if (originalStarts[i] !== d) {
-                            isChanged = true;
+                            isChanged = true;  // <-- Now this reassignment works
                         }
                     }
                     if (isChanged && dt.getTime() < now.getTime()) {
@@ -1319,18 +1336,24 @@ export default function Tours() {
             }
         }
 
-        if (data.adultPrice <= 0) {
-            errors.priceAdult = "Giá người lớn phải lớn hơn 0";
+        if (!data.adultPrice || data.adultPrice <= 0) {
+            errors.adultPrice = "Giá người lớn phải là số lớn hơn 0 và không được để trống";
         }
 
-        if (typeof data.childPrice !== "number" || isNaN(data.childPrice) || data.childPrice < 0) {
-            errors.childPrice = "Giá trẻ em (≥5 tuổi) phải là số không âm";
+        if (!data.childPrice || data.childPrice <= 0) {
+            errors.childPrice = "Giá trẻ em (≥5 tuổi) phải là số lớn hơn 0 và không được để trống";
         }
-        if (typeof data.infantPrice !== "number" || isNaN(data.infantPrice) || data.infantPrice < 0) {
-            errors.infantPrice = "Giá em bé (<5 tuổi) phải là số không âm";
+
+        if (!data.infantPrice || data.infantPrice <= 0) {
+            errors.infantPrice = "Giá em bé (<5 tuổi) phải là số lớn hơn 0 và không được để trống";
         }
-        if (typeof data.childPrice === "number" && typeof data.infantPrice === "number" && data.infantPrice > data.childPrice) {
-            errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
+
+        // Giữ nguyên các check so sánh giá
+        if (typeof data.childPrice === "number" && typeof data.adultPrice === "number" && data.childPrice > data.adultPrice) {
+            errors.childPrice = "Giá trẻ em phải không lớn hơn giá người lớn";
+        }
+        if (typeof data.infantPrice === "number" && typeof data.childPrice === "number" && data.infantPrice > data.childPrice) {
+            errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em";
         }
 
         // if (data.maxGroupSize < 1) {
@@ -1351,6 +1374,11 @@ export default function Tours() {
 
         return errors;
     };
+
+    useEffect(() => {
+        const errors = validateForm(formData, modalMode, originalTour);
+        setFormErrors(errors);
+    }, [formData, modalMode, originalTour]);
 
     const isValidVideoUrl = (url: string): boolean => {
         const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
@@ -1622,25 +1650,25 @@ export default function Tours() {
                                 : "text-green-600"
                             }`}
                     >
-                        {record.maxGroupSize - record.seatsBooked} chỗ 
+                        {record.maxGroupSize - record.seatsBooked} chỗ
                     </div>
                 </div>
             ),
         },
-        {
-            key: "ratingsAverage",
-            title: "Đánh giá",
-            sortable: true,
-            render: (value, record: Tour) => (
-                <div className="text-sm">
-                    <div className="flex items-center">
-                        <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
-                        {value}
-                    </div>
-                    <div className="text-gray-500 text-xs">{record.ratingsQuantity} đánh giá</div>
-                </div>
-            ),
-        },
+        // {
+        //     key: "ratingsAverage",
+        //     title: "Đánh giá",
+        //     sortable: true,
+        //     render: (value, record: Tour) => (
+        //         <div className="text-sm">
+        //             <div className="flex items-center">
+        //                 <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
+        //                 {value}
+        //             </div>
+        //             <div className="text-gray-500 text-xs">{record.ratingsQuantity} đánh giá</div>
+        //         </div>
+        //     ),
+        // },
         {
             key: "isVisible",
             title: "Trạng thái",
@@ -1809,9 +1837,10 @@ export default function Tours() {
 
         if (Object.keys(errors).length > 0) {
             console.warn("[DEBUG] Validation failed - showing toast and returning", errors);
+            const errorMessages = Object.values(errors).filter(Boolean);
             toast({
                 title: "Lỗi validation",
-                description: "Vui lòng kiểm tra lại thông tin nhập vào",
+                description: errorMessages.length > 0 ? errorMessages.join('; ') : "Vui lòng kiểm tra lại thông tin nhập vào",
                 variant: "destructive",
             });
             return;
@@ -2193,6 +2222,9 @@ export default function Tours() {
                             onChange={(newContent) => handleFormChange("description", newContent)}
                             placeholder="Mô tả chi tiết ngày này"
                         />
+                        {formErrors.description && (
+                            <p className="text-sm text-red-500 mt-1">{formErrors.description}</p>
+                        )}
                     </div>
 
                     <div>
@@ -2471,7 +2503,7 @@ export default function Tours() {
                                         </div>
                                     );
                                 })}
-                                <div>
+                                {/* <div>
                                     <Button variant="ghost" onClick={() => {
                                         const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
                                         const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
@@ -2498,7 +2530,7 @@ export default function Tours() {
                                     }}
                                         disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
                                     >Thêm ngày khởi hành</Button>
-                                </div>
+                                </div> */}
                             </div>
                         </div>
 
@@ -2698,6 +2730,7 @@ export default function Tours() {
                             }
                             placeholder="Địa chỉ chi tiết"
                         />
+                        {formErrors.startLocationAddress && <p className="text-sm text-red-500 mt-1">{formErrors.startLocationAddress}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
@@ -3049,46 +3082,51 @@ export default function Tours() {
                         </div>
                         <div className="flex items-center space-x-2">
                             <Select
-                                value={filters.status}
-                                onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
+                                value={filters.visibility}
+                                onValueChange={(value) => setFilters((prev) => ({ ...prev, visibility: value }))}
                             >
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                                    <SelectItem value="active">Hoạt động</SelectItem>
-                                    <SelectItem value="hidden">Ẩn</SelectItem>
-                                    <SelectItem value="draft">Bản nháp</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={filters.category}
-                                onValueChange={(value) => setFilters((prev) => ({ ...prev, category: value }))}
-                            >
-                                <SelectTrigger className="w-36">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Tất cả danh mục</SelectItem>
-                                    {mockCategories.map((category) => (
-                                        <SelectItem key={category.id} value={category.id}>
-                                            {category.name}
-                                        </SelectItem>
-                                    ))}
+                                    <SelectItem value="all">Tất cả</SelectItem>
+                                    <SelectItem value="true">Hiện hành</SelectItem>
+                                    <SelectItem value="false">Ẩn</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <DataTable
+                    {/* <DataTable
                         columns={columns}
                         data={tours}
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
                             total: total,
+                        }}
+                        onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
+                        onSearch={setSearchQuery}
+                        rowSelection={{
+                            selectedRowKeys: selectedTours,
+                            onChange: setSelectedTours,
+                        }}
+                        // bulkActions={bulkActions}
+                        actions={actions}
+                        exportable
+                        onExport={() =>
+                            toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })
+                        }
+                        loading={isLoading}
+                    /> */}
+                    <DataTable
+                        columns={columns}
+                        data={filteredTours}  // Thay đổi từ tours thành filteredTours để áp dụng bộ lọc
+                        pagination={{
+                            current: pagination.current,
+                            pageSize: pagination.pageSize,
+                            total: filteredTours.length,  // Cập nhật total thành filteredTours.length
                         }}
                         onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
                         onSearch={setSearchQuery}

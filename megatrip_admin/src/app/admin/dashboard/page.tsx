@@ -171,15 +171,7 @@ export default function Dashboard() {
                         icon: ShoppingBag,
                         period: "so với tháng trước"
                     },
-                    {
-                        title: "Khách hàng mới",
-                        value: "1,284", // Placeholder
-                        unit: "người",
-                        change: "+8.1%",
-                        trend: "up",
-                        icon: Users,
-                        period: "trong tháng này"
-                    },
+                    
                     {
                         title: "Dịch vụ đang bán",
                         value: (dashboardData.totalProducts?.tours || 0) + (dashboardData.totalProducts?.buses || 0),
@@ -261,15 +253,15 @@ export default function Dashboard() {
                             <SelectItem value="today">Ngày hôm nay</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm">
+                    {/* <Button variant="outline" size="sm">
                         <Download className="w-4 h-4 mr-2" />
                         Xuất báo cáo
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {kpiData.map((kpi, index) => (
                     <Card key={index} className="hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

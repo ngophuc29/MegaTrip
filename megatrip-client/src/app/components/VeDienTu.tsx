@@ -223,7 +223,14 @@ const VeDienTu = React.forwardRef<HTMLDivElement, VeDienTuProps>(({ bookingType,
                                 </div>
                                 <div className="text-sm space-y-1">
                                     <div className="flex justify-between"><span className="text-gray-500">Tên tour:</span><span className="font-medium">{bookingData.details.route}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">Ngày khởi hành:</span><span>{ticket?.travelDate || bookingData.details.date}</span></div>
+                                    {(() => {
+                                        const startDateTime = ticket?.reservationInfo?.details?.startDateTime || bookingData.details.startDateTime;
+                                        const time = startDateTime ? new Date(startDateTime).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+                                        const date = ticket?.travelDate ? (ticket.travelDate.includes('T') ? ticket.travelDate.split('T')[0] : ticket.travelDate) : bookingData.details.date;
+                                        return (
+                                            <div className="flex justify-between"><span className="text-gray-500">Ngày khởi hành:</span><span>{time} {date}</span></div>
+                                        );
+                                    })()}
                                     <div className="flex justify-between"><span className="text-gray-500">Giá vé:</span><span className="font-medium">{ticket?.price ? `${ticket.price.toLocaleString()} ${ticket.currency}` : '--'}</span></div>
                                     {bookingData.details.guide && <div className="flex justify-between"><span className="text-gray-500">Hướng dẫn viên:</span><span>{bookingData.details.guide}</span></div>}
                                 </div>

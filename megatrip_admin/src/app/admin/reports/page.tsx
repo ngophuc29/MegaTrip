@@ -972,8 +972,8 @@ export default function Reports() {
                 <SelectContent>
                   <SelectItem value="revenue">Doanh thu</SelectItem>
                   <SelectItem value="orders">Đơn hàng</SelectItem>
-                  <SelectItem value="customers">Khách hàng</SelectItem>
-                  <SelectItem value="promo">Khuyến mãi</SelectItem>
+                  {/* <SelectItem value="customers">Khách hàng</SelectItem>
+                  <SelectItem value="promo">Khuyến mãi</SelectItem> */}
                   <SelectItem value="products">Sản phẩm</SelectItem>
                 </SelectContent>
               </Select>

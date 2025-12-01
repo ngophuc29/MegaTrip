@@ -189,6 +189,14 @@ export default function TravelokaBanner() {
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+  
+  useEffect(() => {
+    if (tripType === 'roundtrip' && fromDate) {
+      const returnDate = new Date(fromDate);
+      returnDate.setDate(returnDate.getDate() + 3); // Ngày về = ngày đi + 3 ngày
+      setToDate(returnDate);
+    }
+  }, [tripType, fromDate]);
 
   const updatePassengerCount = (type: 'adults' | 'children' | 'infants', increment: boolean) => {
     setPassengerCounts(prev => {
@@ -286,7 +294,8 @@ export default function TravelokaBanner() {
       console.log('Outbound payload (TravelokaBanner):', outbound);
       if (inbound) console.log('Inbound payload (TravelokaBanner):', inbound);
 
-      const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      // const ok = typeof window !== 'undefined' ? window.confirm('Roundtrip detected. Outbound + inbound payloads logged to console. Proceed to search?') : true;
+      const ok = typeof window !== 'undefined' ? window.confirm('Bạn đồng ý tiếp tục tìm kiếm chuyến bay?') : true;
       if (!ok) return;
 
       const payload: Record<string, string> = { ...outbound };
@@ -540,7 +549,7 @@ export default function TravelokaBanner() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className="font-medium">Người lớn</div>
-                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                               </div>
                               <div className="flex items-center space-x-2">
                                 <Button
@@ -564,7 +573,7 @@ export default function TravelokaBanner() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className="font-medium">Trẻ em</div>
-                                <div className="text-sm text-muted-foreground">2-11 tuổi</div>
+                                <div className="text-sm text-muted-foreground">4-11 tuổi</div>
                               </div>
                               <div className="flex items-center space-x-2">
                                 <Button
@@ -588,7 +597,7 @@ export default function TravelokaBanner() {
                             <div className="flex items-center justify-between">
                               <div>
                                 <div className="font-medium">Em bé</div>
-                                <div className="text-sm text-muted-foreground">&lt; 2 tuổi</div>
+                                <div className="text-sm text-muted-foreground">&lt; 4 tuổi</div>
                               </div>
                               <div className="flex items-center space-x-2">
                                 <Button
@@ -637,7 +646,7 @@ export default function TravelokaBanner() {
                   </div>
 
                   {/* Quick Filters */}
-                  <div className="flex flex-wrap gap-2 pt-2">
+                  {/* <div className="flex flex-wrap gap-2 pt-2">
                     <span className="text-sm font-semibold text-white">Tìm nhanh:</span>
                     <Badge
                       variant="outline"
@@ -664,7 +673,7 @@ export default function TravelokaBanner() {
                       Không baggage
                     </Badge>
 
-                  </div>
+                  </div> */}
                 </div>
               )}
 
