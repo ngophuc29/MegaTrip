@@ -1,6 +1,7 @@
-import { Link, useLocation } from "react-router-dom";
-import { 
-  LayoutDashboard, 
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import {
+  LayoutDashboard,
   BarChart3,
   Users,
   MapPin,
@@ -58,27 +59,27 @@ const navigation = [
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
-  const location = useLocation();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const getBreadcrumb = () => {
-    const currentNav = navigation.find(nav => nav.href === location.pathname);
+    const currentNav = navigation.find(nav => nav.href === pathname);
     return currentNav ? currentNav.name : 'Dashboard';
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar backdrop */}
-      <div 
+      <div
         className={cn(
           "fixed inset-0 z-40 lg:hidden",
           sidebarOpen ? "block" : "hidden"
         )}
       >
-        <div 
-          className="fixed inset-0 bg-gray-600 bg-opacity-75" 
-          onClick={() => setSidebarOpen(false)} 
+        <div
+          className="fixed inset-0 bg-gray-600 bg-opacity-75"
+          onClick={() => setSidebarOpen(false)}
         />
       </div>
 
@@ -94,9 +95,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </div>
             <span className="text-lg font-semibold text-white">MegaTripAdmin</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setSidebarOpen(false)}
             className="text-white hover:bg-primary-600"
           >
@@ -105,11 +106,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive = pathname === item.href;
             return (
               <Link
                 key={item.name}
-                to={item.href}
+                href={item.href}
                 className={cn(
                   "group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all",
                   isActive
@@ -160,11 +161,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive = pathname === item.href;
             return (
               <Link
                 key={item.name}
-                to={item.href}
+                href={item.href}
                 className={cn(
                   "group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all",
                   isActive
@@ -205,7 +206,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               >
                 <Menu className="w-5 h-5" />
               </Button>
-              
+
               {/* Breadcrumb */}
               <div className="hidden sm:block">
                 <nav className="flex" aria-label="Breadcrumb">
@@ -276,14 +277,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  {/* <DropdownMenuItem>
+                  <DropdownMenuItem>
                     <UserCheck className="mr-2 h-4 w-4" />
                     <span>Hồ sơ cá nhân</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Cog className="mr-2 h-4 w-4" />
                     <span>Cài đặt</span>
-                  </DropdownMenuItem> */}
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <LogOut className="mr-2 h-4 w-4" />

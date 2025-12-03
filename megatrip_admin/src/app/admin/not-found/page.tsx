@@ -1,19 +1,20 @@
 "use client"
-import { Link, useLocation } from "react-router-dom";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 
 const NotFound = () => {
-    const location = useLocation();
+    const pathname = usePathname();
 
     useEffect(() => {
         console.error(
             "404 Error: User attempted to access non-existent route:",
-            location.pathname,
+            pathname,
         );
-    }, [location.pathname]);
+    }, [pathname]);
 
     return (
         <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -28,7 +29,7 @@ const NotFound = () => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Link to="/">
+                    <Link href="/">
                         <Button className="w-full">
                             Về trang chủ
                         </Button>
