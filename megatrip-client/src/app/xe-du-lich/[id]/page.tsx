@@ -591,10 +591,10 @@ export default function ChiTietXeDuLich() {
         const avail = getCurrentAvailable();
         if (!isFinite(avail)) return;
         setParticipants(prev => {
-            let adults = prev.adults;
-            let children = prev.children;
+            const adults = prev.adults;
+            const children = prev.children;
             // infants do not consume seats but must be <= adults
-            let seatCount = adults + children;
+            const seatCount = adults + children;
             if (seatCount <= avail && prev.infants <= adults) return prev;
             // reduce children first then adults, keep at least 1 adult
             let remain = Math.max(0, avail);

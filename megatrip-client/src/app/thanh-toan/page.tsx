@@ -534,7 +534,7 @@ export default function ThanhToan() {
       bookingData.price ??
       {};
     // normalize addOns array
-    let addOnsArr = Array.isArray(p.addOns)
+    const addOnsArr = Array.isArray(p.addOns)
       ? [...p.addOns]
       : p.addOns
         ? [p.addOns]
@@ -1370,7 +1370,7 @@ export default function ThanhToan() {
       const perUnit = Math.round(totalAmount / Math.max(1, qty));
 
       // determine product id and item name for flight
-      let detailItemId =
+      const detailItemId =
         bookingData?.meta?.id ??
         bookingData?.meta?.tourId ??
         bookingData?.meta?.busId ??

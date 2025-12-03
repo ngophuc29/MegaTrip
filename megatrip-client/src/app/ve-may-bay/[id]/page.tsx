@@ -1928,7 +1928,7 @@ export default function ChiTietVeMayBay() {
                                     {/* Info banner */}
                                     {showSeatSelectionInstruction && (
                                         <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm p-3 rounded-lg mb-4">
-                                            Bạn đã bật "Chọn chỗ ngồi". Nhấp vào sơ đồ bên dưới để chọn tối đa {totalParticipants} ghế.
+                                            Bạn đã bật &quot;Chọn chỗ ngồi&quot;. Nhấp vào sơ đồ bên dưới để chọn tối đa {totalParticipants} ghế.
                                         </div>
                                     )}
 

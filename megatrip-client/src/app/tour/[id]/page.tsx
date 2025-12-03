@@ -258,7 +258,7 @@ function computeSuggestedOriginal(basePrice: number | undefined) {
     if (!basePrice || Number.isNaN(basePrice)) return undefined;
     // tiered markup: nhỏ -> lớn hơn, cao -> ít markup
     const price = Number(basePrice);
-    let multiplier = price < 1_000_000 ? 1.25 : price < 5_000_000 ? 1.15 : 1.10;
+    const multiplier = price < 1_000_000 ? 1.25 : price < 5_000_000 ? 1.15 : 1.10;
     // round to nearest 100k for nicer display
     const suggested = Math.round(price * multiplier / 100000) * 100000;
     return suggested;

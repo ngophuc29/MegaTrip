@@ -424,7 +424,7 @@ export default function ThanhToanThanhCong() {
     // const passengers = order.metadata?.bookingDataSnapshot?.details?.passengers || [];
 
     const bookingType = order.items?.[0]?.type || 'tour';
-    let bookingData = {
+    const bookingData = {
         type: bookingType,
         details: order.metadata?.bookingDataSnapshot?.details || {},
         pricing: order.metadata?.bookingDataSnapshot?.pricing || {},

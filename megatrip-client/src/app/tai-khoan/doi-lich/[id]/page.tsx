@@ -171,7 +171,7 @@ export default function DoiLichPage() {
 
         const priceStr = String(offer.price?.total || offer.price?.grandTotal || '0');
         const currency = offer.price?.currency || 'VND';
-        let priceNumeric = Number(priceStr) || 0;
+        const priceNumeric = Number(priceStr) || 0;
 
         const amenities = {
             wifi: { available: false },

@@ -110,7 +110,7 @@ export default function DangKy() {
         {/* Form bên phải */}
         <div className="w-full max-w-md mx-auto lg:mr-16">
           <div className="mb-4 flex justify-start lg:justify-start">
-            <a href="/" className="text-base font-semibold" style={{ color: 'hsl(var(--primary))' }}>← Trở về trang chủ</a>
+            <Link href="/" className="text-base font-semibold" style={{ color: 'hsl(var(--primary))' }}>← Trở về trang chủ</Link>
           </div>
           <Card className="shadow-2xl rounded-3xl border-0 bg-white/95 backdrop-blur-lg" style={{ borderColor: 'hsl(var(--primary))', boxShadow: '0 8px 32px hsl(var(--primary-200) / 0.15)' }}>
             <CardHeader className="pb-2 text-center">

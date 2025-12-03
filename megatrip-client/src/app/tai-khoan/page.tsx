@@ -1070,7 +1070,7 @@ export default function TaiKhoan() {
 
                                     {/* Note ở đây */}
                                     <div className="text-sm w-full text-muted-foreground italic ">
-                                        <strong>Lưu ý:</strong> Nút "Hủy đơn" sẽ bị vô hiệu hóa nếu đã gửi yêu cầu hoàn. Nút "Đổi lịch" sẽ bị vô hiệu hóa nếu đã đổi lịch trước đó hoặc chuyến sắp khởi hành (trong 3 ngày).
+                                        <strong>Lưu ý:</strong> Nút &quot;Hủy đơn&quot; sẽ bị vô hiệu hóa nếu đã gửi yêu cầu hoàn. Nút &quot;Đổi lịch&quot; sẽ bị vô hiệu hóa nếu đã đổi lịch trước đó hoặc chuyến sắp khởi hành (trong 3 ngày).
                                     </div>
                                     {loadingBookings ? (
                                         <div className="text-center">Đang tải...</div>

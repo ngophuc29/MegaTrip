@@ -1089,7 +1089,7 @@ export default function FlightResults({
                                                 <TabsContent value="estimate" className="space-y-3 text-sm">
                                                   {travelerPricings.length === 0 ? (
                                                     <div className="text-[hsl(var(--muted-foreground))]">
-                                                      Chưa có dữ liệu giá. Bấm "Chọn chuyến bay" để kiểm giá.
+                                                      Chưa có dữ liệu giá. Bấm &quot;Chọn chuyến bay&quot; để kiểm giá.
                                                     </div>
                                                   ) : (
                                                     <div className="space-y-3">
@@ -1150,7 +1150,7 @@ export default function FlightResults({
                                                     <ol className="list-decimal pl-5 space-y-2 text-[hsl(var(--muted-foreground))]">
                                                       <li>Đăng nhập tài khoản hoặc mở email xác nhận.</li>
                                                       <li>Kiểm tra chính sách hoàn vé trong “Chi tiết vé”.</li>
-                                                      <li>Liên hệ tổng đài hoặc trang "Quản lý đặt chỗ".</li>
+                                                      <li>Liên hệ tổng đài hoặc trang &quot;Quản lý đặt chỗ&quot;.</li>
                                                       <li>
                                                         Gửi lý do & chứng từ cần thiết (giấy khám, xác nhận hủy...).
                                                       </li>
@@ -1227,7 +1227,7 @@ export default function FlightResults({
                                       if (!offer || travelerPricings.length === 0) {
                                         return (
                                           <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            Chưa có thông tin chi tiết giá. Vui lòng bấm "Chọn chuyến bay" để kiểm giá.
+                                            Chưa có thông tin chi tiết giá. Vui lòng bấm &quot;Chọn chuyến bay&quot; để kiểm giá.
                                           </div>
                                         );
                                       }
