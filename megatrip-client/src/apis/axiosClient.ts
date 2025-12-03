@@ -54,7 +54,7 @@ axiosClient.interceptors.response.use(
             if (toast && typeof toast === "function") {
               // sonner exposes toast as function and also has toast.error
               // prefer toast.error if available
-              // @ts-ignore
+              // Remove unused @ts-expect-error
               toast.error
                 ? toast.error(
                     "Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại."
