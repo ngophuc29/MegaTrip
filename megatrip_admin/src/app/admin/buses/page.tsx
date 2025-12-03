@@ -1530,7 +1530,7 @@ export default function Buses() {
                 console.log('Fetched bus-slots data:', data); // Giữ log
                 const slots = data?.dateBookings || [];
                 const hasAnyBookings = slots.some((slot: any) => {
-                    const userBookings = (slot.logSeatBooked || []).filter(log => {
+                    const userBookings = (slot.logSeatBooked || []).filter((log: any) => {
                         const isUser = log.reservationId; // Chỉ cần reservationId (bỏ customerId)
                         const isActive = log.status === 'confirm' || log.status === 'confirmed';
                         const notCancelled = !log.cancelledAt || log.cancelledAt == null || log.cancelledAt === undefined;
