@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '../components/ui/input';
@@ -11,7 +11,8 @@ import auth from '../../apis/auth';
 
 // Thêm import
 import { toast } from 'sonner';
-export default function DangNhap() {
+
+function DangNhap() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -21,18 +22,18 @@ export default function DangNhap() {
   const searchParams = useSearchParams();
   const redirect = searchParams?.get('redirect') || '/';
 
-
   // Check if already logged in and redirect without rendering
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       router.replace('/');
-    }
-    else {
+    } else {
       setChecked(true);
     }
   }, [router]);
+
   if (!checked) return null;
+
   const handleLogin = async (e: any) => {
     e.preventDefault();
     setError('');
@@ -42,7 +43,7 @@ export default function DangNhap() {
       return;
     }
     setIsLoading(true);
-    
+
     try {
       const res: any = await auth.login({ email: form.email, password: form.password });
       const token = res?.accessToken ?? res?.token ?? res?.data?.accessToken;
@@ -80,7 +81,6 @@ export default function DangNhap() {
     } finally {
       setIsLoading(false);
     }
-
   };
 
   return (
@@ -121,7 +121,6 @@ export default function DangNhap() {
                 </div>
                 {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                 {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-                {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng nhập</Button> */}
                 <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
                   {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
                 </Button>
@@ -129,39 +128,15 @@ export default function DangNhap() {
                   Chưa có tài khoản?{' '}
                   <Link href="/dang-ky" className="text-primary font-medium hover:underline">Đăng ký ngay</Link>
                 </div>
-              <div className="text-center text-sm mt-2">
-                <Link href="/quen-mat-khau" className="text-primary font-medium hover:underline">Quên mật khẩu?</Link>
-              </div>
+                <div className="text-center text-sm mt-2">
+                  <Link href="/quen-mat-khau" className="text-primary font-medium hover:underline">Quên mật khẩu?</Link>
+                </div>
               </form>
               <div className="my-4 w-full flex items-center">
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
                 <span className="px-3 text-xs text-muted-foreground">hoặc đăng nhập với</span>
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
               </div>
-
-              {/* <Button
-                type="button"
-                className="w-full flex items-center justify-center gap-2 rounded-full font-bold shadow transition px-4 py-3 border text-base"
-                style={{ background: 'hsl(var(--primary-50))', color: 'hsl(var(--primary-700))', borderColor: 'hsl(var(--primary))' }}
-                onClick={() => alert('Google login demo')}
-              >
-
-                <span className="flex-1 "
-                  style={{ marginLeft: '49px' }}
-
-                >Google</span>
-                <span className="flex items-center justify-center rounded-full bg-white w-8 h-8 ml-2">
-                  <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
-                    <g>
-                      <path d="M44.5 20H24V28.5H36.1C35.1 32.1 31.8 34.5 28 34.5C23.3 34.5 19.5 30.7 19.5 26C19.5 21.3 23.3 17.5 28 17.5C29.7 17.5 31.2 18.1 32.4 19.1L37.2 14.3C34.7 12.2 31.5 11 28 11C20.3 11 14 17.3 14 25C14 32.7 20.3 39 28 39C35.7 39 42 32.7 42 25C42 23.7 41.8 22.4 41.5 21.2L44.5 20Z" fill="#4285F4" />
-                      <path d="M6.3 14.7L12.1 18.7C13.7 15.7 16.6 13.5 20 13.5C22.1 13.5 24.1 14.3 25.7 15.7L31.1 10.3C28.2 7.8 24.3 6 20 6C13.2 6 7.3 10.7 6.3 14.7Z" fill="#34A853" />
-                      <path d="M20 41C24.3 41 28.2 39.2 31.1 36.7L25.7 31.3C24.1 32.7 22.1 33.5 20 33.5C16.6 33.5 13.7 31.3 12.1 28.3L6.3 32.3C7.3 36.3 13.2 41 20 41Z" fill="#FBBC05" />
-                      <path d="M41.5 21.2L44.5 20C43.7 17.2 42.1 14.7 39.9 12.9L34.7 17.7C35.7 18.7 36.5 19.9 37.2 21.2L41.5 21.2Z" fill="#EA4335" />
-                    </g>
-                  </svg>
-                </span>
-              </Button> */}
-
 
               <div className="text-xs text-muted-foreground text-center mt-6">
                 Bằng cách tiếp tục, bạn đồng ý với <Link href="/dieu-khoan" className="text-primary underline">Điều khoản</Link> và <Link href="/dieu-kien" className="text-primary underline">Điều kiện</Link> này và bạn đã được thông báo về <Link href="/chinh-sach-bao-mat" className="text-primary underline">Chính sách bảo vệ dữ liệu</Link> của chúng tôi.
@@ -171,5 +146,13 @@ export default function DangNhap() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DangNhapPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <DangNhap />
+    </Suspense>
   );
 }
