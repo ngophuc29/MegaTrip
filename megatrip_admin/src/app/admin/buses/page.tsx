@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bus, Plus, Edit, Eye, Trash2, Filter, Download, MapPin, Clock, Users, DollarSign, RefreshCw, Calendar, Ban, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -1299,7 +1299,7 @@ export default function Buses() {
             const j = Math.floor(Math.random() * (i + 1));
             [availableIndices[i], availableIndices[j]] = [availableIndices[j], availableIndices[i]];
         }
-        let toBook = Math.min(bookedCount, map.length);
+        const toBook = Math.min(bookedCount, map.length);
         for (let k = 0; k < toBook; k++) {
             map[availableIndices[k]].status = 'booked';
         }
