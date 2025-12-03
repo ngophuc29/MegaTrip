@@ -38,6 +38,7 @@ import {
 import FlightResults from './FlightResults';
 import { useSearchParams } from 'next/navigation';
 import cleanExpiredFlightCaches from '../../lib/cacheCleaner';
+import { withSuspense } from '../components/SuspenseWrapper';
 
 const airlines = [
     { code: 'VN', name: 'Vietnam Airlines', logo: '/placeholder.svg' },
@@ -169,7 +170,7 @@ const sampleFlights = [
 
 ];
 
-export default function VeMayBay() {
+function VeMayBay() {
     const router = useRouter();
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([1000000, 3000000]);
@@ -4780,3 +4781,4 @@ export default function VeMayBay() {
         </>
     );
 }
+export default withSuspense(VeMayBay);

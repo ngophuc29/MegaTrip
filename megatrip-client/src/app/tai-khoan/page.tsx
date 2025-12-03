@@ -42,6 +42,7 @@ import { me, updateProfile } from '@/apis/auth';
 import Protected from '../components/Protected';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
+import { withSuspense } from '../components/SuspenseWrapper';
 
 const FAKE_CUSTOMER_ID = '64e65e8d3d5e2b0c8a3e9f12';
 // Sample user data
@@ -493,7 +494,7 @@ function mapOrderToBooking(order: any) {
 
 
 
-export default function TaiKhoan() {
+function TaiKhoan() {
     const searchParams: any = useSearchParams();
     const [activeTab, setActiveTab] = useState<string>('overview');
     // Thêm state cho customerId
@@ -1661,3 +1662,5 @@ export default function TaiKhoan() {
         </Protected>
     );
 }
+
+export default withSuspense(TaiKhoan);

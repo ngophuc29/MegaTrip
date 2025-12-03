@@ -35,6 +35,7 @@ import {
     Torus,
 } from 'lucide-react';
 import TourResults from './TourResults';
+import { withSuspense } from '../components/SuspenseWrapper';
 
 const tourCategories = [
     { name: 'Biển đảo', icon: Waves, count: 45 },
@@ -259,7 +260,7 @@ function mapDbTourToList(db: any) {
 
 
 
-export default function Tour() {
+ function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
     const [priceRange, setPriceRange] = useState([200000, 10000000]);
@@ -1041,3 +1042,4 @@ export default function Tour() {
         </>
     );
 }
+export default withSuspense(Tour);

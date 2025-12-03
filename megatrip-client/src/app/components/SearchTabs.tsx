@@ -21,6 +21,7 @@ import {
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
+import { withSuspense } from './SuspenseWrapper';
 
 interface PassengerCount {
   adults: number;
@@ -33,7 +34,7 @@ interface SearchTabsProps {
   activeTab?: 'flight' | 'bus' | 'tour';
 }
 
-export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
+function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   const [flightType, setFlightType] = useState<'roundtrip' | 'oneway' | 'multicity'>('oneway');
   const [passengers, setPassengers] = useState<PassengerCount>({
     adults: 1,
@@ -797,3 +798,4 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     </div>
   );
 }
+export default withSuspense(SearchTabs);

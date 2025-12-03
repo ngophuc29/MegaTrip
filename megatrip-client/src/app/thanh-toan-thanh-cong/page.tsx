@@ -22,8 +22,9 @@ import VeDienTu from '../components/VeDienTu';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas-pro'; // FIX: Use html2canvas-pro
+import { withSuspense } from '../components/SuspenseWrapper';
 
-export default function ThanhToanThanhCong() {
+ function ThanhToanThanhCong() {
     const searchParams = useSearchParams() as ReadonlyURLSearchParams;
     const orderId: string | null = searchParams.get('orderId');
     const extraData = searchParams.get('extraData');
@@ -678,3 +679,4 @@ export default function ThanhToanThanhCong() {
         </div>
     );
 }
+export default withSuspense(ThanhToanThanhCong);

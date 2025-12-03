@@ -35,6 +35,7 @@ import {
 import { useRouter } from 'next/navigation';
 // Thêm import
 import { toast } from 'sonner';
+import { withSuspense } from '@/app/components/SuspenseWrapper';
 // Sample bus data
 const busDetails = {
     id: 1,
@@ -91,7 +92,7 @@ const sampleSeatLayout = [
     ]
 ];
 
-export default function ChiTietXeDuLich() {
+ function ChiTietXeDuLich() {
     const router = useRouter();
     const { id } = useParams() as { id: string };
     const searchParams = useSearchParams();
@@ -1384,3 +1385,4 @@ export default function ChiTietXeDuLich() {
         </>
     );
 }
+export default withSuspense(ChiTietXeDuLich);

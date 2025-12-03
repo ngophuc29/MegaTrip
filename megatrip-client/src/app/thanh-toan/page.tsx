@@ -51,6 +51,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
+import { withSuspense } from "../components/SuspenseWrapper";
 
 // Khai báo mảng phương thức thanh toán
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
@@ -371,7 +372,7 @@ const getInitialPassengers = (searchParams: URLSearchParams | null) => {
   return arr;
 };
 
-export default function ThanhToan() {
+function ThanhToan() {
   const router = useRouter();
   const searchParams = useSearchParams()!;
   // remember bookingKey param so we can re-save payload to sessionStorage if user edits data
@@ -4408,3 +4409,5 @@ export default function ThanhToan() {
     </>
   );
 }
+
+export default withSuspense(ThanhToan);
