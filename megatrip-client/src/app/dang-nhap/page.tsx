@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
@@ -9,12 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { LogIn } from 'lucide-react';
 import auth from '../../apis/auth';
 
+// Thêm import
+import { toast } from 'sonner';
 export default function DangNhap() {
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [checked, setChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams?.get('redirect') || '/';
+
 
   // Check if already logged in and redirect without rendering
   useEffect(() => {
@@ -35,6 +41,8 @@ export default function DangNhap() {
       setError('Vui lòng nhập đầy đủ thông tin');
       return;
     }
+    setIsLoading(true);
+    
     try {
       const res: any = await auth.login({ email: form.email, password: form.password });
       const token = res?.accessToken ?? res?.token ?? res?.data?.accessToken;
@@ -46,13 +54,33 @@ export default function DangNhap() {
           document.cookie = `accessToken=${token}; path=/; max-age=${maxAge}${secure}`;
         } catch (e) { }
         if (res.user) localStorage.setItem('user', JSON.stringify(res.user));
-        router.push('/');
+
+        // Check if user needs to complete profile
+        try {
+          const userProfile: any = await auth.me();
+          const needsProfileUpdate = !userProfile.name || !userProfile.address || !userProfile.phone;
+
+          if (needsProfileUpdate) {
+            // Chuyển đến cập nhật thông tin, và sau đó có thể redirect
+            router.push(`/cap-nhat-thong-tin?redirect=${encodeURIComponent(redirect)}`);
+          } else {
+            // Hiển thị toast và chuyển đến redirect
+            toast.success('Đăng nhập thành công! Đang chuyển về trang trước...');
+            router.push(redirect);
+          }
+        } catch (profileErr) {
+          // Nếu không lấy được profile, giả sử cần cập nhật
+          router.push(`/cap-nhat-thong-tin?redirect=${encodeURIComponent(redirect)}`);
+        }
       } else {
         setError('Đăng nhập thành công nhưng không nhận được token');
       }
     } catch (err: any) {
       setError(err?.message || 'Lỗi khi đăng nhập');
+    } finally {
+      setIsLoading(false);
     }
+
   };
 
   return (
@@ -93,18 +121,25 @@ export default function DangNhap() {
                 </div>
                 {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                 {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-                <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng nhập</Button>
+                {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng nhập</Button> */}
+                <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
+                  {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </Button>
                 <div className="text-center text-sm mt-2">
                   Chưa có tài khoản?{' '}
                   <Link href="/dang-ky" className="text-primary font-medium hover:underline">Đăng ký ngay</Link>
                 </div>
+              <div className="text-center text-sm mt-2">
+                <Link href="/quen-mat-khau" className="text-primary font-medium hover:underline">Quên mật khẩu?</Link>
+              </div>
               </form>
               <div className="my-4 w-full flex items-center">
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
                 <span className="px-3 text-xs text-muted-foreground">hoặc đăng nhập với</span>
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
               </div>
-              <Button
+
+              {/* <Button
                 type="button"
                 className="w-full flex items-center justify-center gap-2 rounded-full font-bold shadow transition px-4 py-3 border text-base"
                 style={{ background: 'hsl(var(--primary-50))', color: 'hsl(var(--primary-700))', borderColor: 'hsl(var(--primary))' }}
@@ -125,7 +160,9 @@ export default function DangNhap() {
                     </g>
                   </svg>
                 </span>
-              </Button>
+              </Button> */}
+
+
               <div className="text-xs text-muted-foreground text-center mt-6">
                 Bằng cách tiếp tục, bạn đồng ý với <Link href="/dieu-khoan" className="text-primary underline">Điều khoản</Link> và <Link href="/dieu-kien" className="text-primary underline">Điều kiện</Link> này và bạn đã được thông báo về <Link href="/chinh-sach-bao-mat" className="text-primary underline">Chính sách bảo vệ dữ liệu</Link> của chúng tôi.
               </div>

@@ -222,6 +222,8 @@ const validateForm = (data: BusFormData, fieldsToValidate?: string[]): Record<st
 
     const shouldValidate = (field: string) => !fieldsToValidate || fieldsToValidate.includes(field);
 
+
+
     // busCode: required, uppercase alnum/_- 3-12 chars
     if (shouldValidate('busCode')) {
         if (!data.busCode || !data.busCode.trim()) {
@@ -313,7 +315,7 @@ const validateForm = (data: BusFormData, fieldsToValidate?: string[]): Record<st
     }
     if (shouldValidate('seatsTotal')) {
         if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
-            errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+            errors.seatsTotal = "Chọn loại xe để hiện thị tổng số ghế nhé ";
         }
     }
     if (shouldValidate('seatsAvailable')) {
@@ -432,38 +434,58 @@ export default function Buses() {
         const [hh = 0, mm = 0] = (timePart || '').split(':').map(Number);
         return new Date(y, (m || 1) - 1, day || 1, hh || 0, mm || 0, 0, 0);
     };
-
-    // NEW helper: convert a local 'YYYY-MM-DDTHH:mm' value to ISO (Z) string if possible
-    const localToIso = (localStr: string) => {
-        if (!localStr) return "";
-        const d = parseLocalInput(localStr);
-        return d ? d.toISOString() : localStr;
+    // Hàm mới: Luôn convert theo múi giờ VN (+7 UTC)
+    const toVNLocalString = (d: Date) => {
+        if (!d || isNaN(d.getTime())) return "";
+        const vnTime = new Date(d.getTime() + 7 * 60 * 60 * 1000); // Thêm 7 giờ để chuyển sang múi giờ VN
+        const year = vnTime.getUTCFullYear();
+        const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(vnTime.getUTCDate()).padStart(2, '0');
+        const hour = String(vnTime.getUTCHours()).padStart(2, '0');
+        const minute = String(vnTime.getUTCMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hour}:${minute}`;
     };
 
-    // Generate consecutive days keeping time-of-day from start
+    const parseVNLocalString = (str: string) => {
+        if (!str) return null;
+        const [date, time] = str.split('T');
+        if (!date || !time) return null;
+        const [y, m, day] = date.split('-').map(Number);
+        const [hh = 0, mm = 0] = time.split(':').map(Number);
+        // Trừ 7 giờ để chuyển từ VN sang UTC
+        return new Date(Date.UTC(y, m - 1, day, hh - 7, mm));
+    };
+
+    // NEW helper: convert a local 'YYYY-MM-DDTHH:mm' value to ISO (Z) string if possible
+    // Cập nhật localToIso để dùng parseVNLocalString
+    const localToIso = (localStr: string) => {
+        return localStr; // Gửi chuỗi VN local trực tiếp
+    };
+
+    // Cập nhật generateConsecutiveDays để dùng toVNLocalString
     const generateConsecutiveDays = (startIsoLocal: string, daysCount: number) => {
-        const start = parseLocalInput(startIsoLocal);
+        const start = parseVNLocalString(startIsoLocal);
         if (!start) return [];
         const result: string[] = [];
         for (let i = 0; i < daysCount; i++) {
             const dd = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
-            result.push(toLocalInput(dd));
+            result.push(toVNLocalString(dd));
         }
         return result;
     };
 
     // Generate all occurrences of a given weekday within the same calendar month as start (>= start)
     const generateWeekdayInMonth = (startIsoLocal: string, weekday: number) => {
-        const start = parseLocalInput(startIsoLocal);
+        const start = parseVNLocalString(startIsoLocal);
         if (!start) return [];
         const year = start.getFullYear();
-        const month = start.getMonth(); // 0-based
+        const month = start.getMonth();
         const result: string[] = [];
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         for (let d = 1; d <= daysInMonth; d++) {
             const dt = new Date(year, month, d, start.getHours(), start.getMinutes());
             if (dt.getDay() === weekday && dt.getTime() >= start.getTime()) {
-                result.push(toLocalInput(dt));
+                result.push(toVNLocalString(dt));
             }
         }
         return result;
@@ -585,6 +607,8 @@ export default function Buses() {
     });
     const [originalBus, setOriginalBus] = useState<BusRoute | null>(null);
     const [originalDepartureDates, setOriginalDepartureDates] = useState<string[]>([]);
+    const [hasBookings, setHasBookings] = useState<boolean>(false);
+    const [loadingHasBookings, setLoadingHasBookings] = useState(false);
     // Fetch buses from server API
     const { data: busesData, isLoading, error, refetch } = useQuery({
         queryKey: ['buses', pagination.current, pagination.pageSize, searchQuery, filters],
@@ -596,6 +620,10 @@ export default function Buses() {
             if (filters.operator) params.set('operator', filters.operator);
             if (filters.status) params.set('status', filters.status);
             if (filters.route) params.set('route', filters.route);
+
+            // Thêm sorting để item mới nhất ở đầu
+            params.set('sortBy', 'createdAt');
+            params.set('sortOrder', 'desc');
 
             const res = await fetch(`${API_BASE}/api/buses?${params.toString()}`);
             if (!res.ok) throw new Error('Failed to fetch buses');
@@ -630,6 +658,10 @@ export default function Buses() {
             (globalThis as any).__PROVINCES_DATA = provincesData;
         }
     }, [provincesData]);
+    useEffect(() => {
+        const errors = validateForm(formData, modalMode, originalDepartureDates);
+        setFormErrors(errors);
+    }, [formData, modalMode, originalDepartureDates]);
 
     // --- New: fetch vehicle categories (loaixe) ---
     const { data: loaixeData, isLoading: loaixeLoading } = useQuery({
@@ -720,96 +752,96 @@ export default function Buses() {
     // Update bus mutation -> PUT /api/buses/:id
     const updateBusMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<BusFormData> }) => {
-        const payload: any = { ...data }; // Bắt đầu với tất cả data
+            const payload: any = { ...data }; // Bắt đầu với tất cả data
 
-        // So sánh và chỉ gửi các trường đã thay đổi
-        if (originalBus) {
-            const changedFields: string[] = [];
-            Object.keys(data).forEach(key => {
-                const originalValue = (originalBus as any)[key];
-                const newValue = (data as any)[key];
-                // So sánh sâu (bao gồm arrays/objects)
-                if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
-                    changedFields.push(key);
-                }
+            // So sánh và chỉ gửi các trường đã thay đổi
+            if (originalBus) {
+                const changedFields: string[] = [];
+                Object.keys(data).forEach(key => {
+                    const originalValue = (originalBus as any)[key];
+                    const newValue = (data as any)[key];
+                    // So sánh sâu (bao gồm arrays/objects)
+                    if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
+                        changedFields.push(key);
+                    }
+                });
+                console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
+                // Chỉ giữ lại các trường đã thay đổi
+                const partialPayload: any = {};
+                changedFields.forEach(key => partialPayload[key] = payload[key]);
+                // Ghi đè payload với partialPayload
+                Object.keys(payload).forEach(key => delete payload[key]); // Xóa tất cả
+                Object.assign(payload, partialPayload); // Chỉ thêm changed fields
+            }
+
+            // Xử lý payload như cũ (operator, route, dates, etc.) - nhưng chỉ cho các trường đã thay đổi
+            if ((data as any).operatorId && payload.operatorId) {  // Chỉ xử lý nếu trường này có trong payload
+                const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
+                if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
+            }
+            if ((data as any).routeFrom && payload.routeFrom) {
+                const parsedFromUp = parseRouteValue((data as any).routeFrom);
+                payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
+            }
+            if ((data as any).routeTo && payload.routeTo) {
+                const parsedToUp = parseRouteValue((data as any).routeTo);
+                payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
+            }
+
+            // Normalize departureDates/arrivalDates to ISO/Z - chỉ nếu chúng có trong payload
+            if ((data as any).departureDates && Array.isArray((data as any).departureDates) && payload.departureDates) {
+                payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
+            }
+            if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates) && payload.arrivalDates) {
+                payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
+            }
+            if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length) && payload.departureAt) {
+                payload.departureDates = [localToIso((data as any).departureAt)];
+            }
+            if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length) && payload.arrivalAt) {
+                payload.arrivalDates = [localToIso((data as any).arrivalAt)];
+            }
+
+            delete payload.departureAt;
+            delete payload.arrivalAt;
+
+            if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
+                payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
+            }
+            const allSubtypes = getAllSubtypes(loaixeData);
+            let subtypeUpd;
+            if (selectedSubtypeId) {
+                subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
+            } else {
+                const firstTypeName = payload.busType && payload.busType[0];
+                subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
+            }
+            if (subtypeUpd && payload.busType) {
+                payload.busType = [subtypeUpd.name];
+                if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
+            }
+            if (amenitiesSelected && amenitiesSelected.length && payload.amenities) {
+                payload.amenities = amenitiesSelected.join(', ');
+            }
+            payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
+
+            if (typeof payload.adultPrice !== 'undefined' && payload.adultPrice !== null) payload.adultPrice = Number(payload.adultPrice);
+            if (typeof payload.childPrice !== 'undefined' && payload.childPrice !== null) payload.childPrice = Number(payload.childPrice);
+            delete payload.price;
+
+            console.log('[Buses] updateBus payload (only changed fields):', JSON.stringify(payload, null, 2));
+
+            const res = await fetch(`${API_BASE}/api/buses/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             });
-            console.log('[Buses] Changed fields:', changedFields); // Log để kiểm tra
-            // Chỉ giữ lại các trường đã thay đổi
-            const partialPayload: any = {};
-            changedFields.forEach(key => partialPayload[key] = payload[key]);
-            // Ghi đè payload với partialPayload
-            Object.keys(payload).forEach(key => delete payload[key]); // Xóa tất cả
-            Object.assign(payload, partialPayload); // Chỉ thêm changed fields
-        }
-
-        // Xử lý payload như cũ (operator, route, dates, etc.) - nhưng chỉ cho các trường đã thay đổi
-        if ((data as any).operatorId && payload.operatorId) {  // Chỉ xử lý nếu trường này có trong payload
-            const op = (operatorsData || mockOperators).find((o: any) => o.id === (data as any).operatorId);
-            if (op) payload.operator = { id: op.id, name: op.name, logo: (op.logo || '/placeholder.svg'), code: (op.code || op.short_name || '') };
-        }
-        if ((data as any).routeFrom && payload.routeFrom) {
-            const parsedFromUp = parseRouteValue((data as any).routeFrom);
-            payload.routeFrom = parsedFromUp || mockStations.find(s => s.code === (data as any).routeFrom) || { code: (data as any).routeFrom };
-        }
-        if ((data as any).routeTo && payload.routeTo) {
-            const parsedToUp = parseRouteValue((data as any).routeTo);
-            payload.routeTo = parsedToUp || mockStations.find(s => s.code === (data as any).routeTo) || { code: (data as any).routeTo };
-        }
-
-        // Normalize departureDates/arrivalDates to ISO/Z - chỉ nếu chúng có trong payload
-        if ((data as any).departureDates && Array.isArray((data as any).departureDates) && payload.departureDates) {
-            payload.departureDates = (data as any).departureDates.map((s: string) => localToIso(s));
-        }
-        if ((data as any).arrivalDates && Array.isArray((data as any).arrivalDates) && payload.arrivalDates) {
-            payload.arrivalDates = (data as any).arrivalDates.map((s: string) => localToIso(s));
-        }
-        if ((data as any).departureAt && !(payload.departureDates && payload.departureDates.length) && payload.departureAt) {
-            payload.departureDates = [localToIso((data as any).departureAt)];
-        }
-        if ((data as any).arrivalAt && !(payload.arrivalDates && payload.arrivalDates.length) && payload.arrivalAt) {
-            payload.arrivalDates = [localToIso((data as any).arrivalAt)];
-        }
-
-        delete payload.departureAt;
-        delete payload.arrivalAt;
-
-        if (payload.departureDates && payload.departureDates.length && payload.arrivalDates && payload.arrivalDates.length) {
-            payload.duration = calculateDuration(payload.departureDates[0], payload.arrivalDates[0]);
-        }
-        const allSubtypes = getAllSubtypes(loaixeData);
-        let subtypeUpd;
-        if (selectedSubtypeId) {
-            subtypeUpd = allSubtypes.find((s: any) => s.id === selectedSubtypeId);
-        } else {
-            const firstTypeName = payload.busType && payload.busType[0];
-            subtypeUpd = firstTypeName ? allSubtypes.find((s: any) => s.name === firstTypeName) : undefined;
-        }
-        if (subtypeUpd && payload.busType) {
-            payload.busType = [subtypeUpd.name];
-            if (typeof subtypeUpd.seat_capacity === 'number') payload.seatsTotal = subtypeUpd.seat_capacity;
-        }
-        if (amenitiesSelected && amenitiesSelected.length && payload.amenities) {
-            payload.amenities = amenitiesSelected.join(', ');
-        }
-        payload.seatMap = seatMap && seatMap.length ? seatMap : undefined;
-
-        if (typeof payload.adultPrice !== 'undefined' && payload.adultPrice !== null) payload.adultPrice = Number(payload.adultPrice);
-        if (typeof payload.childPrice !== 'undefined' && payload.childPrice !== null) payload.childPrice = Number(payload.childPrice);
-        delete payload.price;
-
-        console.log('[Buses] updateBus payload (only changed fields):', JSON.stringify(payload, null, 2));
-
-        const res = await fetch(`${API_BASE}/api/buses/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            throw new Error(j.error || 'Failed to update');
-        }
-        return res.json();
-    },
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                throw new Error(j.error || 'Failed to update');
+            }
+            return res.json();
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['buses'] });
             setModalOpen(false);
@@ -881,64 +913,70 @@ export default function Buses() {
             // ensure routeFrom/routeTo always exist to avoid undefined errors in UI/delete flow
             routeFrom: b.routeFrom || (b.route && b.route.from) || { code: b.routeFrom?.code || '', name: b.routeFrom?.name || '', city: b.routeFrom?.city || '' },
             routeTo: b.routeTo || (b.route && b.route.to) || { code: b.routeTo?.code || '', name: b.routeTo?.name || '', city: b.routeTo?.city || '' },
+            // ensure operator always exist to avoid undefined errors in UI
+            operator: b.operator || { id: '', name: '', logo: '/placeholder.svg', code: '' },
         };
     }) : [];
     const total = busesData?.pagination?.total || 0;
+    // Thêm bộ lọc client-side để đảm bảo hoạt động
+    const filteredBuses = buses.filter((bus) => {
+        if (filters.operator !== "all" && bus.operator.id !== filters.operator) return false;
+        if (filters.status !== "all" && bus.status !== filters.status) return false;
+        if (searchQuery && !bus.busCode.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        return true;
+    });
 
     // Form validation
     const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = [], changedFields?: string[]): Record<string, string> => {
         const errors: Record<string, string> = {};
 
-        // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields
-        const shouldValidate = (field: string) => !changedFields || changedFields.includes(field);
+        // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields (chỉ cho edit)
+        const shouldValidate = (field: string) => modalMode === "edit" && (!changedFields || changedFields.includes(field));
 
-        // busCode: required, uppercase alnum/_- 3-12 chars
-        if (shouldValidate('busCode')) {
-            if (!data.busCode || !data.busCode.trim()) {
-                errors.busCode = "Bạn phải nhập mã tuyến xe";
-            } else {
-                const code = data.busCode.trim().toUpperCase();
-                const re = /^[A-Z0-9_-]{3,12}$/;
-                if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+        // Thêm check: Nếu edit, có bookings, và departureDates thay đổi -> block
+        if (modalMode === "edit" && hasBookings && originalDepartureDates.length > 0) {
+            const currentDeps = Array.isArray(data.departureDates) ? data.departureDates : (data.departureAt ? [data.departureAt] : []);
+            if (JSON.stringify(originalDepartureDates) !== JSON.stringify(currentDeps)) {
+                errors.departureAt = "Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ. ";
             }
         }
 
-        // operator: must exist in loaded operators (if available)
-        if (shouldValidate('operatorId')) {
+        // Cho create: luôn validate tất cả required fields, không dùng shouldValidate
+        if (modalMode === "create") {
+            // busCode: bỏ validate vì tự động tạo
+            // if (!data.busCode || !data.busCode.trim()) {
+            //     errors.busCode = "Bạn phải nhập mã tuyến xe";
+            // } else {
+            //     const code = data.busCode.trim().toUpperCase();
+            //     const re = /^[A-Z0-9_-]{3,12}$/;
+            //     if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+            // }
+
             if (!data.operatorId) {
                 errors.operatorId = "Bạn phải chọn nhà xe";
             } else if (operatorsData && Array.isArray(operatorsData)) {
                 const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
                 if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
             }
-        }
 
-        // routeFrom / routeTo: required and must map to a station
-        // Validate cả hai nếu một trong hai thay đổi (do check phụ thuộc)
-        const routeChanged = changedFields && (changedFields.includes('routeFrom') || changedFields.includes('routeTo'));
-        if (shouldValidate('routeFrom') || routeChanged) {
-            if (!data.routeFrom) {
+            if (!data.routeFrom || !data.routeFrom.trim()) {
                 errors.routeFrom = "Bạn phải chọn điểm đi";
             } else {
                 const parsedFrom = parseRouteValue(data.routeFrom);
-                if (!parsedFrom || !parsedFrom.name) errors.routeFrom = "Điểm đi không hợp lệ";
+                if (!parsedFrom || !parsedFrom.name || !parsedFrom.code) errors.routeFrom = "Điểm đi không hợp lệ";
             }
-        }
-        if (shouldValidate('routeTo') || routeChanged) {
-            if (!data.routeTo) {
+
+            if (!data.routeTo || !data.routeTo.trim()) {
                 errors.routeTo = "Bạn phải chọn điểm đến";
             } else {
                 const parsedTo = parseRouteValue(data.routeTo);
-                if (!parsedTo || !parsedTo.name) errors.routeTo = "Điểm đến không hợp lệ";
+                if (!parsedTo || !parsedTo.name || !parsedTo.code) errors.routeTo = "Điểm đến không hợp lệ";
             }
-            // Ensure they are different (chỉ check nếu cả hai được validate)
+
             if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
                 errors.routeTo = "Điểm đến phải khác điểm đi";
             }
-        }
 
-        // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
-        if (shouldValidate('departureDates')) {
             const now = new Date();
             if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
                 errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
@@ -946,13 +984,11 @@ export default function Buses() {
                 const seen = new Set<string>();
                 for (let i = 0; i < data.departureDates.length; i++) {
                     const d = data.departureDates[i];
-                    if (!d || isNaN(new Date(d).getTime())) {
+                    const dt = parseVNLocalString(d);
+                    if (!dt || isNaN(dt.getTime())) {
                         errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
                     } else {
-                        const dt = new Date(d);
-                        // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
-                        const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
-                        if (isChanged && dt < now) {
+                        if (dt < now) {
                             errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
                         }
                         const key = dt.toISOString();
@@ -963,67 +999,201 @@ export default function Buses() {
                     }
                 }
             }
-        }
 
-        // arrivalAt validation: must be valid and after earliest departure
-        if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
-            if (!data.arrivalAt) {
-                errors.arrivalAt = "Bạn phải chọn giờ đến";
-            } else if (isNaN(new Date(data.arrivalAt).getTime())) {
+            const arrDate = parseVNLocalString(data.arrivalAt);
+            if (!arrDate || isNaN(arrDate.getTime())) {
                 errors.arrivalAt = "Giờ đến không hợp lệ";
             } else {
-                const earliest = Array.isArray(data.departureDates) && data.departureDates.length ? new Date(data.departureDates.slice().sort()[0]) : (data.departureAt ? new Date(data.departureAt) : null);
-                if (earliest && new Date(data.arrivalAt) <= earliest) {
+                const earliestDep = Array.isArray(data.departureDates) && data.departureDates.length ? parseVNLocalString(data.departureDates.slice().sort()[0]) : (data.departureAt ? parseVNLocalString(data.departureAt) : null);
+                if (earliestDep && arrDate <= earliestDep) {
                     errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
                 }
             }
-        }
 
-        // numeric checks
-        if (shouldValidate('adultPrice')) {
             if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
-                errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
+                errors.adultPrice = "Giá vé người lớn không được để trống và phải là số lớn hơn 0";
             }
-        }
-        if (shouldValidate('childPrice')) {
-            if (typeof data.childPrice !== 'undefined' && (isNaN(Number(data.childPrice)) || Number(data.childPrice) < 0)) {
-                errors.childPrice = "Giá vé trẻ em phải là số >= 0";
+
+            if (typeof data.childPrice !== 'number' || isNaN(data.childPrice) || data.childPrice <= 0) {
+                errors.childPrice = "Giá vé trẻ em không được để trống và phải là số lớn hơn 0";
             }
             if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
                 errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
             }
-        }
-        if (shouldValidate('seatsTotal')) {
+
             if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
-                errors.seatsTotal = "Tổng số ghế phải là số nguyên dương";
+                errors.seatsTotal = "Chọn loại xe để hiện thị tổng số ghế nhé ";
             }
-        }
-        if (shouldValidate('seatsAvailable')) {
+
             if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
                 errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
-            } else if (data.seatsAvailable > data.seatsTotal) {
+            }
+
+            if (data.seatsAvailable > data.seatsTotal) {
                 errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
             }
-        }
 
-        // busType must have at least one entry
-        if (shouldValidate('busType')) {
             if (!Array.isArray(data.busType) || data.busType.length === 0) {
                 errors.busType = "Bạn phải chọn ít nhất một loại xe";
             }
-        }
 
-        // arrivalDates: if present, must pair with departures and be after each corresponding departure
-        if (shouldValidate('arrivalDates')) {
+            // arrivalDates: if present, must pair with departures and be after each corresponding departure
             if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
                 for (let i = 0; i < (data.departureDates || []).length; i++) {
                     const dep = data.departureDates?.[i];
                     const arr = data.arrivalDates?.[i];
-                    if (!arr || isNaN(new Date(arr).getTime())) {
+                    const depDate = parseVNLocalString(dep);
+                    const arrDate = parseVNLocalString(arr);
+                    if (!arrDate || isNaN(arrDate.getTime())) {
                         errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
-                    } else if (dep && !isNaN(new Date(dep).getTime())) {
-                        if (new Date(arr) <= new Date(dep)) {
+                    } else if (depDate && arrDate <= depDate) {
+                        errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                    }
+                }
+            }
+        } else {
+            // Cho edit: dùng shouldValidate (chỉ validate changed fields)
+            if (shouldValidate('busCode')) {
+                if (!data.busCode || !data.busCode.trim()) {
+                    errors.busCode = "Bạn phải nhập mã tuyến xe";
+                } else {
+                    const code = data.busCode.trim().toUpperCase();
+                    const re = /^[A-Z0-9_-]{3,12}$/;
+                    if (!re.test(code)) errors.busCode = "Mã tuyến không hợp lệ (3-12 ký tự A-Z, 0-9, _ hoặc -)";
+                }
+            }
+
+            if (shouldValidate('operatorId')) {
+                if (!data.operatorId) {
+                    errors.operatorId = "Bạn phải chọn nhà xe";
+                } else if (operatorsData && Array.isArray(operatorsData)) {
+                    const foundOp = operatorsData.find((o: any) => o.id === data.operatorId);
+                    if (!foundOp) errors.operatorId = "Nhà xe không tồn tại";
+                }
+            }
+
+            // routeFrom / routeTo: required and must map to a station
+            // Validate cả hai nếu một trong hai thay đổi (do check phụ thuộc)
+            const routeChanged = changedFields && (changedFields.includes('routeFrom') || changedFields.includes('routeTo'));
+            if (shouldValidate('routeFrom') || routeChanged) {
+                if (!data.routeFrom || !data.routeFrom.trim()) {
+                    errors.routeFrom = "Bạn phải chọn điểm đi";
+                } else {
+                    const parsedFrom = parseRouteValue(data.routeFrom);
+                    if (!parsedFrom || !parsedFrom.name || !parsedFrom.code) errors.routeFrom = "Điểm đi không hợp lệ";
+                }
+            }
+            if (shouldValidate('routeTo') || routeChanged) {
+                if (!data.routeTo || !data.routeTo.trim()) {
+                    errors.routeTo = "Bạn phải chọn điểm đến";
+                } else {
+                    const parsedTo = parseRouteValue(data.routeTo);
+                    if (!parsedTo || !parsedTo.name || !parsedTo.code) errors.routeTo = "Điểm đến không hợp lệ";
+                }
+                // Ensure they are different (chỉ check nếu cả hai được validate)
+                if (data.routeFrom && data.routeTo && data.routeFrom === data.routeTo) {
+                    errors.routeTo = "Điểm đến phải khác điểm đi";
+                }
+            }
+
+            // departureDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
+            if (shouldValidate('departureDates')) {
+                const now = new Date();
+                if (!Array.isArray(data.departureDates) || data.departureDates.length === 0) {
+                    errors.departureAt = "Bạn phải chọn ít nhất một ngày khởi hành";
+                } else {
+                    const seen = new Set<string>();
+                    for (let i = 0; i < data.departureDates.length; i++) {
+                        const d = data.departureDates[i];
+                        const dt = parseVNLocalString(d);
+                        if (!dt || isNaN(dt.getTime())) {
+                            errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không hợp lệ`;
+                        } else {
+                            // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
+                            const isChanged = modalMode === "create" || !originalDepartureDates[i] || originalDepartureDates[i] !== d;
+                            if (isChanged && dt < now) {
+                                errors[`departureDates_${i}`] = `Ngày khởi hành thứ ${i + 1} không được ở quá khứ`;
+                            }
+                            const key = dt.toISOString();
+                            if (seen.has(key)) {
+                                errors[`departureDates_${i}`] = `Ngày khởi hành trùng lặp`;
+                            }
+                            seen.add(key);
+                        }
+                    }
+                }
+            }
+
+            // arrivalAt validation: must be valid and after earliest departure
+            if (shouldValidate('arrivalAt') || shouldValidate('arrivalDates')) {
+                const arrDate = parseVNLocalString(data.arrivalAt);
+                if (!arrDate || isNaN(arrDate.getTime())) {
+                    errors.arrivalAt = "Giờ đến không hợp lệ";
+                } else {
+                    const earliestDep = Array.isArray(data.departureDates) && data.departureDates.length ? parseVNLocalString(data.departureDates.slice().sort()[0]) : (data.departureAt ? parseVNLocalString(data.departureAt) : null);
+                    if (earliestDep && arrDate <= earliestDep) {
+                        errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
+                    }
+                }
+            }
+
+            // numeric checks
+            if (shouldValidate('adultPrice')) {
+                if (typeof data.adultPrice !== 'number' || isNaN(data.adultPrice) || data.adultPrice <= 0) {
+                    errors.adultPrice = "Giá vé người lớn phải là số lớn hơn 0";
+                }
+            }
+            if (shouldValidate('childPrice')) {
+                if (typeof data.childPrice !== 'number' || isNaN(data.childPrice) || data.childPrice <= 0) {
+                    errors.childPrice = "Giá vé trẻ em phải là số lớn hơn 0";
+                }
+                if (typeof data.childPrice === 'number' && data.childPrice > data.adultPrice) {
+                    errors.childPrice = "Giá trẻ em không được lớn hơn giá người lớn";
+                }
+            }
+            if (shouldValidate('seatsTotal')) {
+                if (!Number.isInteger(data.seatsTotal) || data.seatsTotal <= 0) {
+                    errors.seatsTotal = "Chọn loại xe để hiện thị tổng số ghế nhé ";
+                }
+            }
+            if (shouldValidate('seatsAvailable')) {
+                if (!Number.isInteger(data.seatsAvailable) || data.seatsAvailable < 0) {
+                    errors.seatsAvailable = "Số ghế có sẵn phải là số nguyên không âm";
+                } else if (data.seatsAvailable > data.seatsTotal) {
+                    errors.seatsAvailable = "Số ghế có sẵn không được lớn hơn tổng số ghế";
+                }
+            }
+
+            // busType must have at least one entry
+            if (shouldValidate('busType')) {
+                if (!Array.isArray(data.busType) || data.busType.length === 0) {
+                    errors.busType = "Bạn phải chọn ít nhất một loại xe";
+                }
+            }
+
+            // arrivalDates: if present, must pair with departures and be after each corresponding departure
+            if (shouldValidate('arrivalDates') || shouldValidate('arrivalAt')) {
+                if (Array.isArray(data.arrivalDates) && data.arrivalDates.length > 0) {
+                    for (let i = 0; i < (data.departureDates || []).length; i++) {
+                        const dep = data.departureDates?.[i];
+                        const arr = data.arrivalDates?.[i];
+                        const depDate = parseVNLocalString(dep);
+                        const arrDate = parseVNLocalString(arr);
+                        if (!arrDate || isNaN(arrDate.getTime())) {
+                            errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} không hợp lệ`;
+                        } else if (depDate && arrDate <= depDate) {
                             errors[`arrivalDates_${i}`] = `Giờ đến thứ ${i + 1} phải sau giờ xuất phát tương ứng`;
+                        }
+                    }
+                } else {
+                    // fallback to single arrivalAt check (existing)
+                    const arrDate = parseVNLocalString(data.arrivalAt);
+                    if (!arrDate || isNaN(arrDate.getTime())) {
+                        errors.arrivalAt = "Giờ đến không hợp lệ";
+                    } else {
+                        const earliestDep = Array.isArray(data.departureDates) && data.departureDates.length ? parseVNLocalString(data.departureDates.slice().sort()[0]) : (data.departureAt ? parseVNLocalString(data.departureAt) : null);
+                        if (earliestDep && arrDate <= earliestDep) {
+                            errors.arrivalAt = "Giờ đến phải sau giờ xuất phát (với tất cả ngày khởi hành)";
                         }
                     }
                 }
@@ -1032,6 +1202,7 @@ export default function Buses() {
 
         return errors;
     };
+
 
     const resetForm = () => {
         setFormData({
@@ -1149,15 +1320,18 @@ export default function Buses() {
         {
             key: "operator",
             title: "Nhà xe",
-            render: (value, record: BusRoute) => (
-                <div className="flex items-center space-x-2">
-
-                    <div>
-                        <div className="font-medium">{value.name}</div>
-                        <div className="text-sm text-gray-500">{value.code}</div>
+            render: (value, record: BusRoute) => {
+                // Thêm kiểm tra an toàn để tránh lỗi nếu operator undefined
+                const op = value || { name: '', code: '' };
+                return (
+                    <div className="flex items-center space-x-2">
+                        <div>
+                            <div className="font-medium">{op.name}</div>
+                            <div className="text-sm text-gray-500">{op.code}</div>
+                        </div>
                     </div>
-                </div>
-            ),
+                );
+            },
         },
         {
             key: "route",
@@ -1259,18 +1433,41 @@ export default function Buses() {
             key: "status",
             title: "Trạng thái",
             sortable: true,
-            render: (value) => (
-                <Badge className={
-                    value === "scheduled" ? "bg-green-100 text-green-800 hover:bg-green-100" :
-                        value === "cancelled" ? "bg-red-100 text-red-800 hover:bg-red-100" :
-                            value === "delayed" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
-                                "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                }>
-                    {value === "scheduled" ? "Đã lên lịch" :
-                        value === "cancelled" ? "Đã hủy" :
-                            value === "delayed" ? "Hoãn" : "Hoàn thành"}
-                </Badge>
-            ),
+            render: (value, record: BusRoute) => {
+                const now = new Date();
+                const depDates = Array.isArray((record as any).departureDates) && (record as any).departureDates.length
+                    ? (record as any).departureDates.map(d => new Date(d))
+                    : (record.departureAt ? [new Date(record.departureAt)] : []);
+                const allPast = depDates.every(d => d < now);
+
+                return (
+                    <div className="flex items-center space-x-2">
+                        <Badge className={
+                            value === "scheduled" ? "bg-green-100 text-green-800 hover:bg-green-100" :
+                                value === "cancelled" ? "bg-red-100 text-red-800 hover:bg-red-100" :
+                                    value === "delayed" ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-100" :
+                                        "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                        }>
+                            {value === "scheduled" ? "Đã lên lịch" :
+                                value === "cancelled" ? "Đã hủy" :
+                                    value === "delayed" ? "Hoãn" : "Hoàn thành"}
+                        </Badge>
+                        {allPast && value === "scheduled" && (
+                            <>
+                                <Badge className="bg-red-600 text-white font-bold animate-pulse shadow-lg">Chuyến xe đã qua</Badge>  {/* Thêm animate-pulse và shadow để nổi bật */}
+                                <Button
+                                    size="sm"
+                                    onClick={() => bulkActionMutation.mutate({ action: 'update_status_by_dates', ids: [record.id] })}
+                                    disabled={bulkActionMutation.isPending}
+                                    className="bg-red-500 hover:bg-red-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"  // Màu đỏ nổi bật, thêm shadow và transition
+                                >
+                                    {bulkActionMutation.isPending ? "Đang cập nhật..." : "Cập nhật"}
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                );
+            },
         },
     ];
 
@@ -1284,21 +1481,21 @@ export default function Buses() {
         setSelectedBus(bus);
         setOriginalBus(bus); // Lưu giá trị ban đầu để so sánh
         setOriginalDepartureDates(Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
-            ? (bus as any).departureDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput để đồng nhất
-            : (bus.departureAt ? [toLocalInput(new Date(bus.departureAt))] : []));
+            ? (bus as any).departureDates.map((d: string) => toVNLocalString(new Date(d))) // Thay toLocalInput bằng toVNLocalString
+            : (bus.departureAt ? [toVNLocalString(new Date(bus.departureAt))] : [])); // Thay toLocalInput
         setFormData({
             busCode: bus.busCode,
             operatorId: bus.operator.id,
             routeFrom: formatRouteSelectValue(bus.routeFrom),
             routeTo: formatRouteSelectValue(bus.routeTo),
-            departureAt: bus.departureAt ? toLocalInput(new Date(bus.departureAt)) : "",  // Sử dụng toLocalInput
+            departureAt: bus.departureAt ? toVNLocalString(new Date(bus.departureAt)) : "", // Thay toLocalInput
             departureDates: Array.isArray((bus as any).departureDates) && (bus as any).departureDates.length
-                ? (bus as any).departureDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput cho mỗi phần tử
-                : (bus.departureAt ? [toLocalInput(new Date(bus.departureAt))] : []),  // Sử dụng toLocalInput
+                ? (bus as any).departureDates.map((d: string) => toVNLocalString(new Date(d))) // Thay toLocalInput
+                : (bus.departureAt ? [toVNLocalString(new Date(bus.departureAt))] : []), // Thay toLocalInput
             arrivalDates: Array.isArray((bus as any).arrivalDates) && (bus as any).arrivalDates.length
-                ? (bus as any).arrivalDates.map((d: string) => toLocalInput(new Date(d)))  // Sử dụng toLocalInput cho mỗi phần tử
-                : (bus.arrivalAt ? [toLocalInput(new Date(bus.arrivalAt))] : []),  // Sử dụng toLocalInput
-            arrivalAt: bus.arrivalAt ? toLocalInput(new Date(bus.arrivalAt)) : "",  // Sử dụng toLocalInput
+                ? (bus as any).arrivalDates.map((d: string) => toVNLocalString(new Date(d))) // Thay toLocalInput
+                : (bus.arrivalAt ? [toVNLocalString(new Date(bus.arrivalAt))] : []), // Thay toLocalInput
+            arrivalAt: bus.arrivalAt ? toVNLocalString(new Date(bus.arrivalAt)) : "", // Thay toLocalInput
             duration: bus.duration,
             busType: bus.busType,
             adultPrice: (bus as any).adultPrice ?? (bus as any).price ?? 0,
@@ -1321,6 +1518,35 @@ export default function Buses() {
                 ? bus.amenities.map(s => String(s).trim()).filter(Boolean)
                 : (bus.amenities || "").split(',').map(s => s.trim()).filter(Boolean)
         );
+
+        setLoadingHasBookings(true); // Thêm: bắt đầu loading
+        // Fetch slots để check bookings
+        fetch(`${API_BASE}/api/buses/bus-slots/${bus.id}`)
+            .then(res => res.json())
+            .then(data => {
+                console.log('Fetched bus-slots data:', data); // Giữ log
+                const slots = data?.dateBookings || [];
+                const hasAnyBookings = slots.some((slot: any) => {
+                    const userBookings = (slot.logSeatBooked || []).filter(log => {
+                        const isUser = log.reservationId; // Chỉ cần reservationId (bỏ customerId)
+                        const isActive = log.status === 'confirm' || log.status === 'confirmed';
+                        const notCancelled = !log.cancelledAt || log.cancelledAt == null || log.cancelledAt === undefined;
+                        console.log('Log entry:', log, 'isUser:', isUser, 'isActive:', isActive, 'notCancelled:', notCancelled); // Giữ debug
+                        return isUser && isActive && notCancelled;
+                    });
+                    console.log('slot dateIso:', slot.dateIso, 'userBookings length:', userBookings.length); // Giữ log
+                    return userBookings.length > 0;
+                });
+                console.log('hasAnyBookings:', hasAnyBookings); // Giữ log
+                setHasBookings(hasAnyBookings);
+            })
+            .catch(err => {
+                console.error('Error fetching slots:', err); // Đã có
+                setHasBookings(false);
+            })
+            .finally(() => {
+                setLoadingHasBookings(false); // Thêm: kết thúc loading
+            });
     };
 
     const handleDelete = (bus: BusRoute) => {
@@ -1354,15 +1580,23 @@ export default function Buses() {
         resetForm();
         setModalMode("create");
         setModalOpen(true);
+        
+
+        // Tự động tạo busCode ngẫu nhiên dựa trên thời gian hiện tại
+        const generateBusCode = () => {
+            const timestamp = Date.now().toString().slice(-6); // Lấy 6 số cuối của timestamp để giảm trùng lặp
+            return 'BUS' + timestamp;
+        };
+        setFormData(prev => ({ ...prev, busCode: generateBusCode() }));
     };
 
     const handleSubmit = () => {
         let fieldsToValidate: string[] | undefined;
-        if (modalMode === "edit" && selectedBus) {
-            // Calculate changed fields
-            const changedFields: string[] = [];
+        let changedFields: string[] = [];
+        if (modalMode === "edit" && originalBus) {
+            // Calculate changed fields based on originalBus
             Object.keys(formData).forEach(key => {
-                const originalValue = (selectedBus as any)[key];
+                const originalValue = (originalBus as any)[key];
                 const newValue = (formData as any)[key];
                 if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
                     changedFields.push(key);
@@ -1370,15 +1604,22 @@ export default function Buses() {
             });
             fieldsToValidate = changedFields;
             console.log('[handleSubmit] Changed fields:', changedFields);
+
+            // If no changes, do not proceed with validation or submission
+            if (changedFields.length === 0) {
+                toast({ title: "Không có thay đổi", description: "Không có trường nào được thay đổi để cập nhật." });
+                return;
+            }
         }
 
-        const errors = validateForm(formData, modalMode, originalDepartureDates, operatorsData, fieldsToValidate);
+        const errors = validateForm(formData, modalMode, originalDepartureDates, fieldsToValidate);
         setFormErrors(errors);
 
         if (Object.keys(errors).length > 0) {
+            const errorMessages = Object.values(errors).filter(Boolean);
             toast({
                 title: "Lỗi validation",
-                description: "Vui lòng kiểm tra lại thông tin nhập vào",
+                description: errorMessages.length > 0 ? errorMessages.join('; ') : "Vui lòng kiểm tra lại thông tin nhập vào",
                 variant: "destructive",
             });
             return;
@@ -1635,19 +1876,30 @@ export default function Buses() {
                                             const arrDate = arr ? new Date(arr) : null;
                                             const duration = (dep && arr) ? calculateDuration(dep, arr) : (selectedBus.duration || "");
 
-                                            // Tìm slot cho ngày này
-                                            const dateIso = depDate ? depDate.toISOString().split('T')[0] : null;
+                                            // Trong renderBusForm, ngoài loop
+                                            console.log('selectedBus.id:', selectedBus.id, 'busSlotsData:', busSlotsData);
+
+                                            // Trong loop của depArray.map
+                                            const dateIso = dep ? dep.split('T')[0] : null; // Thay đổi: dùng dep.split thay vì new Date().toISOString()
                                             const slotEntry = busSlotsData?.dateBookings?.find((d: any) => d.dateIso === dateIso);
 
-                                            // Debug log để kiểm tra
-                                            console.log('slotEntry:', slotEntry, 'dateIso:', dateIso, 'busSlotsData:', busSlotsData, 'dep:', dep, 'depDate:', depDate);
+                                            console.log(`Chuyến ${i + 1}, dep: ${dep}, dateIso: ${dateIso}, slotEntry found: ${!!slotEntry}`);
 
-                                            // Ưu tiên dùng slotEntry nếu có và seatsAvailable hợp lệ
                                             let slotsAvailable = selectedBus.seatsAvailable;
                                             let slotsTotal = selectedBus.seatsTotal;
-                                            if (slotEntry && typeof slotEntry.seatsAvailable === 'number') {
-                                                slotsAvailable = slotEntry.seatsAvailable;
-                                                slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                            if (slotEntry) {
+                                                if (Array.isArray(slotEntry.seatmapFill)) {
+                                                    const bookedCount = slotEntry.seatmapFill.filter((s: any) => s.status === 'booked').length;
+                                                    slotsAvailable = (slotEntry.seatsTotal || selectedBus.seatsTotal) - bookedCount;
+                                                    slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                                    console.log(`Chuyến ${i + 1}, bookedCount: ${bookedCount}, slotsAvailable calculated: ${slotsAvailable}`);
+                                                } else if (typeof slotEntry.seatsAvailable === 'number') {
+                                                    slotsAvailable = slotEntry.seatsAvailable;
+                                                    slotsTotal = slotEntry.seatsTotal || selectedBus.seatsTotal;
+                                                    console.log(`Chuyến ${i + 1}, slotsAvailable from slotEntry: ${slotsAvailable}`);
+                                                }
+                                            } else {
+                                                console.log(`Chuyến ${i + 1}, no slotEntry, using selectedBus.seatsAvailable: ${slotsAvailable}`);
                                             }
 
                                             return (
@@ -1698,9 +1950,13 @@ export default function Buses() {
                             id="busCode"
                             value={formData.busCode}
                             onChange={(e) => handleFormChange('busCode', e.target.value.toUpperCase())}
-                            placeholder="PT001"
+                            placeholder="BUS123456"
                             className={`font-mono ${formErrors.busCode ? "border-red-500" : ""}`}
+                            disabled={true} // Disabled luôn để không sửa
                         />
+                        {modalMode === "create" && (
+                            <p className="text-sm text-gray-500 mt-1">Mã tuyến xe được tự động tạo</p>
+                        )}
                         {formErrors.busCode && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.busCode}</p>
                         )}
@@ -1827,13 +2083,20 @@ export default function Buses() {
 
                 {/* Replace single departureAt input with multi-date UI */}
                 <div className="grid grid-cols-3 gap-4">
-                    
+
                     <div className="col-span-2">
                         <Label>Lịch khởi hành *</Label>
 
+                        {/* Thêm thông báo nếu disabled */}
+                        {hasBookings && modalMode === "edit" && (
+                            <div className="text-sm text-red-500 mt-1">
+                                Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ.
+                            </div>
+                        )}
+
                         {/* Recurrence controls */}
                         <div className="flex items-center space-x-2 mb-2">
-                            <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} >
+                            <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} disabled={hasBookings && modalMode === "edit"}>
                                 <SelectTrigger className="flex-1">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -1846,7 +2109,7 @@ export default function Buses() {
                             </Select>
 
                             {recurrenceMode === "weekday_of_month" && (
-                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}>
+                                <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))} disabled={hasBookings && modalMode === "edit"}>
                                     <SelectTrigger className="w-40">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -1863,13 +2126,15 @@ export default function Buses() {
                             )}
 
                             <div className="flex items-center space-x-2">
-                                <Button onClick={applyRecurrence}>Áp dụng</Button>
+                                <Button onClick={applyRecurrence} disabled={hasBookings && modalMode === "edit"}>
+                                    Áp dụng
+                                </Button>
 
-                                {/* Clear button only visible after apply produced departures with arrivals */}
                                 {recurrenceApplied && (
                                     <Button
                                         onClick={handleResetSchedule}
                                         className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-sm"
+                                        disabled={hasBookings && modalMode === "edit"}
                                     >
                                         <svg
                                             xmlns="http://www.w3.org/2000/svg"
@@ -1918,18 +2183,18 @@ export default function Buses() {
                                                         const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
                                                         let defaultArr = "";
                                                         if (firstDep && firstArr) {
-                                                            const baseDep = parseLocalInput(firstDep);
-                                                            const baseArr = parseLocalInput(firstArr);
+                                                            const baseDep = parseVNLocalString(firstDep); // Thay parseLocalInput
+                                                            const baseArr = parseVNLocalString(firstArr); // Thay parseLocalInput
                                                             if (baseDep && baseArr) {
                                                                 const delta = baseArr.getTime() - baseDep.getTime();
-                                                                const thisDep = parseLocalInput(val) || parseLocalInput(firstDep);
-                                                                if (thisDep) defaultArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                                                const thisDep = parseVNLocalString(val) || parseVNLocalString(firstDep); // Thay parseLocalInput
+                                                                if (thisDep) defaultArr = toVNLocalString(new Date(thisDep.getTime() + delta)); // Thay toLocalInput
                                                             }
                                                         }
                                                         if (!defaultArr) {
                                                             // fallback: +6 hours
-                                                            const thisDep = parseLocalInput(val);
-                                                            defaultArr = thisDep ? toLocalInput(new Date(thisDep.getTime() + 6 * 3600000)) : "";
+                                                            const thisDep = parseVNLocalString(val); // Thay parseLocalInput
+                                                            defaultArr = thisDep ? toVNLocalString(new Date(thisDep.getTime() + 6 * 3600000)) : ""; // Thay toLocalInput
                                                         }
                                                         arrs[idx] = defaultArr;
                                                         handleFormChange('arrivalDates' as any, arrs);
@@ -1938,6 +2203,7 @@ export default function Buses() {
                                                 }}
                                                 min={getTomorrowLocal()}
                                                 className={formErrors[`departureDates_${idx}`] ? "border-red-500" : ""}
+                                                disabled={hasBookings || loadingHasBookings}
                                             />
                                         </div>
 
@@ -1963,6 +2229,7 @@ export default function Buses() {
                                                 }}
                                                 min={(formData.departureDates && formData.departureDates.length && formData.departureDates[idx]) ? formData.departureDates[idx] : getTomorrowLocal()}
                                                 className={formErrors[`arrivalDates_${idx}`] ? "border-red-500" : ""}
+                                                disabled={hasBookings && modalMode === "edit"}
                                             />
                                         </div>
 
@@ -1979,12 +2246,16 @@ export default function Buses() {
                                                 // ensure canonical fields sync
                                                 handleFormChange('departureAt', (deps[0] || ""));
                                                 handleFormChange('arrivalAt', (arrs[0] || ""));
-                                            }}>Xóa</Button>
+                                            }}
+                                                disabled={hasBookings && modalMode === "edit"}
+                                            >
+                                                Xóa
+                                            </Button>
                                         </div>
                                     </div>
                                 );
                             })}
-                            <div>
+                            {/* <div>
                                 <Button variant="ghost" onClick={() => {
                                     // add an empty row — user will fill datetime themselves
                                     const deps = Array.isArray(formData.departureDates) ? formData.departureDates.slice() : [];
@@ -1997,12 +2268,12 @@ export default function Buses() {
                                     const firstDep = (formData.departureDates && formData.departureDates[0]) || formData.departureAt;
                                     const firstArr = (formData.arrivalDates && formData.arrivalDates[0]) || formData.arrivalAt;
                                     if (newDep && firstDep && firstArr) {
-                                        const baseDep = parseLocalInput(firstDep);
-                                        const baseArr = parseLocalInput(firstArr);
+                                        const baseDep = parseVNLocalString(firstDep); // Thay parseLocalInput
+                                        const baseArr = parseVNLocalString(firstArr); // Thay parseLocalInput
                                         if (baseDep && baseArr) {
                                             const delta = baseArr.getTime() - baseDep.getTime();
-                                            const thisDep = parseLocalInput(newDep);
-                                            if (thisDep) newArr = toLocalInput(new Date(thisDep.getTime() + delta));
+                                            const thisDep = parseVNLocalString(newDep); // Thay parseLocalInput
+                                            if (thisDep) newArr = toVNLocalString(new Date(thisDep.getTime() + delta)); // Thay toLocalInput
                                         }
                                     }
                                     // if still empty, leave newArr = "" (no auto-fill)
@@ -2012,8 +2283,11 @@ export default function Buses() {
                                     // set canonical only when first entries are non-empty
                                     if (deps.length === 1 && deps[0]) handleFormChange('departureAt', deps[0]);
                                     if (arrs.length === 1 && arrs[0]) handleFormChange('arrivalAt', arrs[0]);
-                                }}>Thêm ngày khởi hành</Button>
-                            </div>
+                                }}
+                                    disabled={hasBookings && modalMode === "edit"}>
+                                    Thêm ngày khởi hành
+                                </Button>
+                            </div> */}
                         </div>
                     </div>
 
@@ -2070,7 +2344,11 @@ export default function Buses() {
                             onChange={(e) => handleFormChange('adultPrice', parseInt(e.target.value) || 0)}
                             placeholder="350000"
                             className={formErrors.adultPrice ? "border-red-500" : ""}
+                            disabled={hasBookings && modalMode === "edit"}
                         />
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                        )}
                         {formErrors.adultPrice && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
                         )}
@@ -2084,7 +2362,11 @@ export default function Buses() {
                             onChange={(e) => handleFormChange('childPrice', parseInt(e.target.value) || 0)}
                             placeholder="200000"
                             className={formErrors.childPrice ? "border-red-500" : ""}
+                            disabled={hasBookings && modalMode === "edit"}
                         />
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                        )}
                         {formErrors.childPrice && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
                         )}
@@ -2128,7 +2410,8 @@ export default function Buses() {
                 <div>
                     <Label>Loại xe *</Label>
                     <div className="mt-2">
-                        <Select value={selectedSubtypeId} onValueChange={(val) => {
+                        <Select value={selectedSubtypeId}
+                            onValueChange={(val) => {
                             setSelectedSubtypeId(val);
                             // find subtype by id to set formData.busType and seatsTotal
                             const subtypeSel = getAllSubtypes(loaixeData).find((s: any) => s.id === val);
@@ -2156,7 +2439,9 @@ export default function Buses() {
                                 handleFormChange('seatsTotal', 0);
                             }
                             setIsFormDirty(true);
-                        }}>
+                            }}
+                            disabled={hasBookings && modalMode === "edit"}
+                        >
                             <SelectTrigger>
                                 <SelectValue placeholder="Chọn loại xe (chọn 1 loại con)" />
                             </SelectTrigger>
@@ -2198,6 +2483,9 @@ export default function Buses() {
                         {formErrors.busType && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.busType}</p>
                         )}
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi loại xe vì đã có người đặt chỗ.</p>
+                        )}
                         <p className="text-sm text-gray-500 mt-2">Chọn 1 loại con; Tổng số ghế sẽ được đặt từ seat_capacity (nếu có). Ghế có sẵn giữ nguyên.</p>
                     </div>
                 </div>
@@ -2213,13 +2501,12 @@ export default function Buses() {
                                     <Checkbox
                                         id={opt.value}
                                         checked={checked}
+                                        // Trong onCheckedChange của Checkbox amenities
                                         onCheckedChange={(c) => {
+                                            const newAmenities = c ? [...amenitiesSelected, opt.value] : amenitiesSelected.filter(a => a !== opt.value);
+                                            setAmenitiesSelected(newAmenities);
+                                            handleFormChange('amenities', newAmenities.join(', ')); // Sync formData.amenities
                                             setIsFormDirty(true);
-                                            if (c) {
-                                                setAmenitiesSelected(prev => [...prev, opt.value]);
-                                            } else {
-                                                setAmenitiesSelected(prev => prev.filter(a => a !== opt.value));
-                                            }
                                             // clear errors if any
                                             if (formErrors['amenities']) {
                                                 setFormErrors(prev => ({ ...prev, amenities: "" }));
@@ -2263,14 +2550,14 @@ export default function Buses() {
                     <p className="text-gray-600 mt-1">Quản lý tuyến xe, lịch trình và thông tin vé xe</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Thêm tuyến xe
@@ -2278,7 +2565,7 @@ export default function Buses() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -2301,7 +2588,7 @@ export default function Buses() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -2314,8 +2601,8 @@ export default function Buses() {
                             <Users className="w-8 h-8 text-orange-500" />
                         </div>
                     </CardContent>
-                </Card>
-                <Card>
+                </Card> */}
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -2325,7 +2612,7 @@ export default function Buses() {
                             <DollarSign className="w-8 h-8 text-blue-500" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
             </div>
 
             <Card>
@@ -2342,9 +2629,11 @@ export default function Buses() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">Tất cả nhà xe</SelectItem>
-                                    {mockOperators.map((operator) => (
+                                    {(operatorsData && Array.isArray(operatorsData) ? operatorsData : mockOperators).map((operator: any) => (
                                         <SelectItem key={operator.id} value={operator.id}>
-                                            {operator.name}
+                                            <div className="flex items-center space-x-2">
+                                                <span>{operator.name} {operator.code ? `(${operator.code})` : ''}</span>
+                                            </div>
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -2365,7 +2654,7 @@ export default function Buses() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <DataTable
+                    {/* <DataTable
                         columns={columns}
                         data={buses}
                         pagination={{
@@ -2381,7 +2670,29 @@ export default function Buses() {
                             selectedRowKeys: selectedBuses,
                             onChange: setSelectedBuses,
                         }}
-                        bulkActions={bulkActions}
+                        // bulkActions={bulkActions}
+                        actions={actions}
+                        exportable
+                        onExport={() => toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })}
+                        loading={isLoading}
+                    /> */}
+                    <DataTable
+                        columns={columns}
+                        data={buses}  // Sử dụng buses trực tiếp từ API
+                        pagination={{
+                            current: pagination.current,
+                            pageSize: pagination.pageSize,
+                            total: total,  // Sử dụng total từ API
+                        }}
+                        onPaginationChange={(page, pageSize) =>
+                            setPagination({ current: page, pageSize })
+                        }
+                        onSearch={setSearchQuery}
+                        rowSelection={{
+                            selectedRowKeys: selectedBuses,
+                            onChange: setSelectedBuses,
+                        }}
+                        // bulkActions={bulkActions}
                         actions={actions}
                         exportable
                         onExport={() => toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })}

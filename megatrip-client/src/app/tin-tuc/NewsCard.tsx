@@ -35,7 +35,10 @@ export default function NewsCard({ article, featured = false }: { article: Artic
             <Card className="mb-6 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="md:flex">
                     <div className="md:w-1/2">
-                        <img src={article.image} alt={article.title} className="w-full h-64 md:h-full object-cover" />
+                        <Link prefetch={false} href={`/tin-tuc/${article.id}`}>
+
+                            <img src={article.image} alt={article.title} className="w-full h-64 md:h-full object-cover" />
+                        </Link>
                     </div>
                     <div className="md:w-1/2 p-6 flex flex-col justify-between">
                         <div>
@@ -52,7 +55,7 @@ export default function NewsCard({ article, featured = false }: { article: Artic
                             <div className="flex items-center gap-4">
                                 <span className="flex items-center"><User className="h-3 w-3 mr-1" />{article.author}</span>
                                 <span className="flex items-center"><Calendar className="h-3 w-3 mr-1" />{article.publishDate}</span>
-                                <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span>
+                                {/* <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span> */}
                             </div>
                             <div className="flex items-center gap-3">
                                 <span className="text-sm text-muted-foreground flex items-center"><Eye className="h-3 w-3 mr-1" />{(article.views || 0).toLocaleString()}</span>
@@ -70,7 +73,10 @@ export default function NewsCard({ article, featured = false }: { article: Artic
         <Card className="hover:shadow-md transition-shadow">
             <div className="md:flex">
                 <div className="md:w-1/3">
-                    <img src={article.image} alt={article.title} className="w-full h-48 md:h-full object-cover" />
+                    <Link prefetch={false} href={`/tin-tuc/${article.id}`}>
+
+                        <img src={article.image} alt={article.title} className="w-full h-48 md:h-full object-cover" />
+                    </Link>
                 </div>
                 <div className="md:w-2/3 p-4">
                     <div className="flex items-center gap-2 mb-2">
@@ -84,7 +90,7 @@ export default function NewsCard({ article, featured = false }: { article: Artic
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center"><User className="h-3 w-3 mr-1" />{article.author}</span>
                             <span className="flex items-center"><Calendar className="h-3 w-3 mr-1" />{article.publishDate}</span>
-                            <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span>
+                            {/* <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{article.readTime}</span> */}
                         </div>
                         <div className="flex items-center gap-3">
                             <span className="text-sm text-muted-foreground flex items-center"><Eye className="h-3 w-3 mr-1" />{(article.views || 0).toLocaleString()}</span>

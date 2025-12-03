@@ -698,7 +698,7 @@ function mapApiTicketToSupportTicket(t: any): SupportTicket {
         isInternal: (m.authorType === 'agent' || m.authorType === 'admin') ? true : false,
         authorId: m.authorId || null,
         authorName: m.authorName || (m.authorId ? (mockAdmins.find(a => a.id === m.authorId)?.name) : customerName) || "",
-        authorType: m.authorType === 'agent' ? 'admin' : (m.authorType === 'customer' ? 'customer' : (m.authorType || 'customer')),
+        authorType: m.authorType === 'admin' ? 'admin' : 'customer',
         createdAt: m.createdAt || m.ts || new Date().toISOString(),
         attachments: Array.isArray(m.attachments) ? m.attachments : []
     })) : [];
@@ -954,7 +954,8 @@ const Support: React.FC = () => {
                 const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ text: content, authorType: isInternal ? "agent" : "customer", authorId: "admin_001" }),
+                    // body: JSON.stringify({ text: content, authorType: isInternal ? "agent" : "customer", authorId: "admin_001" }),
+                    body: JSON.stringify({ text: content, authorType: "admin", authorId: "admin_001" }),
                 });
                 if (!res.ok) throw new Error(`status ${res.status}`);
                 const json = await res.json();
@@ -1104,7 +1105,27 @@ const Support: React.FC = () => {
     //         isInternal,
     //     });
     // };
+
+    // Send support email mutation
+    const sendSupportEmailMutation = useMutation({
+        mutationFn: async ({ ticketId, email, responseDetails }: { ticketId: string; email: string; responseDetails: any }) => {
+            const res = await fetch(`${API_BASE}/api/support/send-response-email`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ticketId, email, responseDetails }),
+            });
+            if (!res.ok) throw new Error(`status ${res.status}`);
+            return res.json();
+        },
+        onSuccess: () => {
+            toast({ title: "Mail hỗ trợ đã gửi", description: "Email phản hồi đã được gửi cho khách hàng" });
+        },
+        onError: (err: any) => {
+            toast({ title: "Lỗi gửi mail", description: String(err?.message || 'error'), variant: "destructive" });
+        }
+    });
     const handleAddResponse = async () => {
+        console.log("handleAddResponse started");
         if (!selectedTicket || !responseContent.trim()) return;
         setIsProcessingResponse(true);
         const ticketId = selectedTicket.id;
@@ -1162,7 +1183,7 @@ const Support: React.FC = () => {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                             text: `Xử lý hoàn tiền:\n${responseContent.trim()}\n\nKết quả refund: ${JSON.stringify(refundResult)}`,
-                            authorType: "agent",
+                            authorType: "admin",
                             authorId: "admin_001",
                         }),
                     }),
@@ -1213,17 +1234,35 @@ const Support: React.FC = () => {
                 toast({ title: "Hoàn tiền đã xử lý", description: `Kết quả: ${refundResult?.message || "OK"}` });
                 queryClient.invalidateQueries({ queryKey: ["tickets"] });
             } else {
+                // Thêm response
                 await addResponseMutation.mutateAsync({
                     ticketId,
                     content: responseContent.trim(),
                     isInternal,
                 });
+
+                // Gửi mail hỗ trợ nếu không internal
+                if (!isInternal) {
+                    await sendSupportEmailMutation.mutateAsync({
+                        ticketId,
+                        email: selectedTicket.customerEmail,
+                        responseDetails: {
+                            ticketId: selectedTicket.id,
+                            title: selectedTicket.title,
+                            response: responseContent.trim(),
+                        }
+                    });
+                }
             }
 
+
+            console.log("About to close modal");
+            // Đóng modal và reset state sau khi thành công
             setViewModalOpen(false);
             setSelectedTicket(null);
             setResponseContent("");
             setIsInternal(false);
+            console.log("Modal closed and state reset");
         } catch (err: any) {
             console.error("handleAddResponse error", err);
             toast({ title: "Lỗi khi xử lý", description: String(err?.message || err), variant: "destructive" });
@@ -1795,22 +1834,26 @@ const Support: React.FC = () => {
                                                                     />
                                                                     <Label htmlFor="isInternal">Ghi chú nội bộ (không gửi cho khách hàng)</Label>
                                                                 </div>
-                                                                <Button
-                                                                    onClick={handleAddResponse}
-                                                                    disabled={
-                                                                        !responseContent.trim() ||
-                                                                        addResponseMutation.isPending ||
-                                                                        isProcessingResponse ||
-                                                                        selectedTicket?.status === "open" ||
-                                                                        selectedTicket?.status === "resolved"
-                                                                    }
-                                                                    loading={addResponseMutation.isPending || isProcessingResponse}
-                                                                >
-                                                                    {isCancel ? <CheckCircle className="h-4 w-4 mr-2" /> : <Send className="h-4 w-4 mr-2" />}
-                                                                    {(addResponseMutation.isPending || isProcessingResponse)
-                                                                        ? "Đang xử lý"
-                                                                        : (isCancel ? "Xử lý yêu cầu" : "Gửi phản hồi")}
-                                                                </Button>
+                                                                <div className="flex gap-2">
+                                                                    {!isCancel && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
+                                                                        <Button
+                                                                            onClick={handleAddResponse}
+                                                                            disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
+                                                                            variant="outline"
+                                                                        >
+                                                                            {addResponseMutation.isPending ? "Đang gửi..." : "Gửi phản hồi (gửi mail)"}
+                                                                        </Button>
+                                                                    )}
+                                                                    {isCancel && selectedTicket.status !== "resolved" && selectedTicket.status !== "closed" && (
+                                                                        <Button
+                                                                            onClick={handleAddResponse}
+                                                                            disabled={!responseContent.trim() || addResponseMutation.isPending || isProcessingResponse}
+                                                                            variant="destructive"
+                                                                        >
+                                                                            {isProcessingResponse ? "Đang xử lý hoàn tiền..." : "Xử lý hoàn tiền (gửi mail)"}
+                                                                        </Button>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </>

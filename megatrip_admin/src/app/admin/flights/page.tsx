@@ -1230,7 +1230,7 @@ export default function Flights() {
                     <p className="text-gray-600 mt-1">Quản lý lịch bay, giá vé và thông tin chuyến bay</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
@@ -1238,7 +1238,7 @@ export default function Flights() {
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Thêm chuyến bay

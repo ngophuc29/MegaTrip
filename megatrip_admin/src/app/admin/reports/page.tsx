@@ -50,6 +50,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+
 import { DateRange } from "react-day-picker";
 
 export default function Reports() {
@@ -190,8 +191,9 @@ export default function Reports() {
     fetchData();
   }, [reportType, dateParams, granularityParam]);
 
+  // Sửa hàm formatCurrency
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("vi-VN").format(value / 1000000) + " triệu ₫";
+    return new Intl.NumberFormat("vi-VN").format(value) + " ₫";
   };
 
   const handleExport = (format: "csv" | "excel" | "pdf") => {
@@ -361,6 +363,22 @@ export default function Reports() {
 
     switch (reportType) {
       case "products":
+        // Group products by name and type to avoid duplicates
+        const groupedProducts = productsData.reduce((acc: any, product: any) => {
+          const key = `${product.name}-${product.type}`;
+          if (!acc[key]) {
+            acc[key] = { ...product };
+          } else {
+            acc[key].totalBookings += product.totalBookings ?? 0;
+            acc[key].totalConfirmedOrders += product.totalConfirmedOrders ?? 0;
+            acc[key].totalCancelledOrders += product.totalCancelledOrders ?? 0;
+            acc[key].totalRevenue += product.totalRevenue ?? 0;
+          }
+          return acc;
+        }, {});
+
+        const groupedArray = Object.values(groupedProducts);
+
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -370,7 +388,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Tour</p>
                       <p className="text-2xl font-bold">
-                        {productsData.filter((p) => p.type === "tour").length}
+                        {groupedArray.filter((p) => p.type === "tour").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-100">
@@ -385,7 +403,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Xe</p>
                       <p className="text-2xl font-bold">
-                        {productsData.filter((p) => p.type === "bus").length}
+                        {groupedArray.filter((p) => p.type === "bus").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-green-100">
@@ -400,7 +418,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Vé Máy Bay</p>
                       <p className="text-2xl font-bold">
-                        {productsData.filter((p) => p.type === "flight").length}
+                        {groupedArray.filter((p) => p.type === "flight").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-100">
@@ -415,7 +433,7 @@ export default function Reports() {
               Biểu đồ tổng quan sản phẩm trong đơn đặt{" "}
             </h1>
             <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={productsData}>
+              <BarChart data={groupedArray}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
                 <YAxis />
@@ -426,6 +444,14 @@ export default function Reports() {
             </ResponsiveContainer>
 
             <div className="overflow-x-auto">
+              {/* Thêm note cho tab products */}
+              {reportType === "products" && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được duyệt và hoàn thành thành công (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+                  </p>
+                </div>
+              )}
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
@@ -438,7 +464,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {productsData.map((product, index) => (
+                  {groupedArray.map((product, index) => (
                     <tr key={index} className="border-b">
                       <td className="py-2">{product.name}</td>
                       <td className="text-right py-2">
@@ -467,23 +493,24 @@ export default function Reports() {
             </div>
           </div>
         );
-      
-      
+
+
       case "revenue":
         return (
-          <ResponsiveContainer width="100%" height={500}>
-            <BarChart data={revenueData} style={{ margin: 10 }}>
+          <ResponsiveContainer width="99%" height={600}>
+            <BarChart
+              data={revenueData}
+              margin={{ top: 20, right: 10, left: 40, bottom: 10 }} // 👈 THÊM DÒNG NÀY
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="period" />
               <YAxis tickFormatter={(value) => formatCurrency(value)} />
               <Tooltip
-                formatter={(value: number) => [
-                  formatCurrency(value * 1000000),
-                  "",
-                ]}
+                formatter={(value: number) => [formatCurrency(value), ""]}
                 labelFormatter={(label) => `${granularity === 'day' ? 'Ngày' : 'Tháng'} ${label}`}
               />
               <Legend />
+
               <Bar
                 dataKey="flight"
                 stackId="a"
@@ -499,11 +526,12 @@ export default function Reports() {
               <Bar dataKey="bus" stackId="a" fill="#4CAF50" name="Vé xe" />
             </BarChart>
           </ResponsiveContainer>
+
         );
 
       case "orders":
         return (
-          <ResponsiveContainer width="100%" height={500} style={{ margin: 40 }}>
+          <ResponsiveContainer width="100%" height={500} style={{ margin: 10 }}>
             <LineChart data={orderStats}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
@@ -944,8 +972,8 @@ export default function Reports() {
                 <SelectContent>
                   <SelectItem value="revenue">Doanh thu</SelectItem>
                   <SelectItem value="orders">Đơn hàng</SelectItem>
-                  <SelectItem value="customers">Khách hàng</SelectItem>
-                  <SelectItem value="promo">Khuyến mãi</SelectItem>
+                  {/* <SelectItem value="customers">Khách hàng</SelectItem>
+                  <SelectItem value="promo">Khuyến mãi</SelectItem> */}
                   <SelectItem value="products">Sản phẩm</SelectItem>
                 </SelectContent>
               </Select>
@@ -1056,154 +1084,164 @@ export default function Reports() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>{renderChart()}</CardContent>
+        <CardContent
+        style={{margin:'0 10px'}}
+        >{renderChart()}</CardContent>
       </Card>
 
-      {/* Summary Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Bảng tóm tắt</CardTitle>
-          <CardDescription>Chi tiết dữ liệu theo từng mục</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  {reportType === "revenue" && (
-                    <>
-                      <th className="text-left py-2">Thời gian</th>
-                      <th className="text-left py-2">Vé máy bay</th>
-                      <th className="text-left py-2">Tour du lịch</th>
-                      <th className="text-left py-2">Vé xe</th>
-                      <th className="text-left py-2">Tổng cộng</th>
-                    </>
-                  )}
-                  {reportType === "orders" && (
-                    <>
-                      <th className="text-left py-2">Thời gian</th>
-                      <th className="text-left py-2">Tổng đơn</th>
-                      <th className="text-left py-2">Hoàn thành</th>
-                      <th className="text-left py-2">Hủy</th>
-                      <th className="text-left py-2">Tỷ lệ hoàn thành</th>
-                    </>
-                  )}
-                  {reportType === "customers" && (
-                    <>
-                      <th className="text-left py-2">Thời gian</th>
-                      <th className="text-left py-2">Khách mới</th>
-                      <th className="text-left py-2">Khách quay lại</th>
-                      <th className="text-left py-2">Tổng</th>
-                      <th className="text-left py-2">Tỷ lệ giữ chân</th>
-                    </>
-                  )}
-                  {reportType === "products" && (
-                    <>
-                      <th className="text-left py-2">Tên sản phẩm</th>
-                      <th className="text-right py-2">Loại</th>
-                      <th className="text-right py-2">Tổng đặt</th>
-                      <th className="text-right py-2">Đơn duyệt</th>
-                      <th className="text-right py-2">Đơn hủy</th>
-                      <th className="text-right py-2">Doanh thu</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {reportType === "revenue" &&
-                  revenueData.map((row, index) => (
-                    <tr key={index} className="border-b">
-                      <td className="py-2">{row.period}</td>
-                      <td className="text-left py-2">
-                        {formatCurrency(row.flight)}
-                      </td>
-                      <td className="text-left py-2">
-                        {formatCurrency(row.tour)}
-                      </td>
-                      <td className="text-left py-2">
-                        {formatCurrency(row.bus)}
-                      </td>
-                      <td className="text-left py-2 font-bold">
-                        {formatCurrency(row.total)}
-                      </td>
-                    </tr>
-                  ))}
-                {reportType === "orders" &&
-                  orderStats.map((row, index) => (
-                    <tr key={index} className="border-b">
-                      <td className="text-left py-2">{row.date}</td>
-                      <td className="text-left py-2">
-                        {row.total.toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {row.confirmed.toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {row.cancelled.toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {row.total
-                          ? ((row.confirmed / row.total) * 100).toFixed(1)
-                          : 0}
-                        %
-                      </td>
-                    </tr>
-                  ))}
-                {reportType === "customers" &&
-                  customerStats.map((row, index) => (
-                    <tr key={index} className="border-b">
-                      <td className="py-2">Tháng {row.month}</td>
-                      <td className="text-left py-2">
-                        {row.newUsers.toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {row.returningUsers.toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {(row.newUsers + row.returningUsers).toLocaleString()}
-                      </td>
-                      <td className="text-left py-2">
-                        {row.newUsers + row.returningUsers
-                          ? (
-                            (row.returningUsers /
-                              (row.newUsers + row.returningUsers)) *
-                            100
-                          ).toFixed(1)
-                          : 0}
-                        %
-                      </td>
-                    </tr>
-                  ))}
-                {reportType === "products" &&
-                  productsData.map((product, index) => (
-                    <tr key={index} className="border-b">
-                      <td className="py-2">{product.name}</td>
-                      <td className="text-right py-2">
-                        {product.type === "tour"
-                          ? "Tour"
-                          : product.type === "bus"
-                            ? "Xe"
-                            : "Máy bay"}
-                      </td>
-                      <td className="text-right py-2">
-                        {product.totalBookings ?? 0}
-                      </td>
-                      <td className="text-right py-2">
-                        {product.totalConfirmedOrders ?? 0}
-                      </td>
-                      <td className="text-right py-2">
-                        {product.totalCancelledOrders ?? 0}
-                      </td>
-                      <td className="text-right py-2">
-                        {formatCurrency(product.totalRevenue ?? 0)}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {reportType !== "products" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Bảng tóm tắt</CardTitle>
+            <CardDescription>Chi tiết dữ liệu theo từng mục</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {reportType === "products" && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được thanh toán (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+                </p>
+              </div>
+            )}
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    {reportType === "revenue" && (
+                      <>
+                        <th className="text-left py-2">Thời gian</th>
+                        <th className="text-left py-2">Vé máy bay</th>
+                        <th className="text-left py-2">Tour du lịch</th>
+                        <th className="text-left py-2">Vé xe</th>
+                        <th className="text-left py-2">Tổng cộng</th>
+                      </>
+                    )}
+                    {reportType === "orders" && (
+                      <>
+                        <th className="text-left py-2">Thời gian</th>
+                        <th className="text-left py-2">Tổng đơn</th>
+                        <th className="text-left py-2">Hoàn thành</th>
+                        <th className="text-left py-2">Hủy</th>
+                        <th className="text-left py-2">Tỷ lệ hoàn thành</th>
+                      </>
+                    )}
+                    {reportType === "customers" && (
+                      <>
+                        <th className="text-left py-2">Thời gian</th>
+                        <th className="text-left py-2">Khách mới</th>
+                        <th className="text-left py-2">Khách quay lại</th>
+                        <th className="text-left py-2">Tổng</th>
+                        <th className="text-left py-2">Tỷ lệ giữ chân</th>
+                      </>
+                    )}
+                    {reportType === "products" && (
+                      <>
+                        <th className="text-left py-2">Tên sản phẩm</th>
+                        <th className="text-right py-2">Loại</th>
+                        <th className="text-right py-2">Tổng đặt</th>
+                        <th className="text-right py-2">Đơn duyệt</th>
+                        <th className="text-right py-2">Đơn hủy</th>
+                        <th className="text-right py-2">Doanh thu</th>
+                      </>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportType === "revenue" &&
+                    revenueData.map((row, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="py-2">{row.period}</td>
+                        <td className="text-left py-2">
+                          {formatCurrency(row.flight)}
+                        </td>
+                        <td className="text-left py-2">
+                          {formatCurrency(row.tour)}
+                        </td>
+                        <td className="text-left py-2">
+                          {formatCurrency(row.bus)}
+                        </td>
+                        <td className="text-left py-2 font-bold">
+                          {formatCurrency(row.total)}
+                        </td>
+                      </tr>
+                    ))}
+                  {reportType === "orders" &&
+                    orderStats.map((row, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="text-left py-2">{row.date}</td>
+                        <td className="text-left py-2">
+                          {row.total.toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {row.confirmed.toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {row.cancelled.toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {row.total
+                            ? ((row.confirmed / row.total) * 100).toFixed(1)
+                            : 0}
+                          %
+                        </td>
+                      </tr>
+                    ))}
+                  {reportType === "customers" &&
+                    customerStats.map((row, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="py-2">Tháng {row.month}</td>
+                        <td className="text-left py-2">
+                          {row.newUsers.toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {row.returningUsers.toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {(row.newUsers + row.returningUsers).toLocaleString()}
+                        </td>
+                        <td className="text-left py-2">
+                          {row.newUsers + row.returningUsers
+                            ? (
+                              (row.returningUsers /
+                                (row.newUsers + row.returningUsers)) *
+                              100
+                            ).toFixed(1)
+                            : 0}
+                          %
+                        </td>
+                      </tr>
+                    ))}
+                  {reportType === "products" &&
+                    productsData.map((product, index) => (
+                      <tr key={index} className="border-b">
+                        <td className="py-2">{product.name}</td>
+                        <td className="text-right py-2">
+                          {product.type === "tour"
+                            ? "Tour"
+                            : product.type === "bus"
+                              ? "Xe"
+                              : "Máy bay"}
+                        </td>
+                        <td className="text-right py-2">
+                          {product.totalBookings ?? 0}
+                        </td>
+                        <td className="text-right py-2">
+                          {product.totalConfirmedOrders ?? 0}
+                        </td>
+                        <td className="text-right py-2">
+                          {product.totalCancelledOrders ?? 0}
+                        </td>
+                        <td className="text-right py-2">
+                          {formatCurrency(product.totalRevenue ?? 0)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* Schedule Report Modal */}
       <ModalForm
         open={scheduleModalOpen}

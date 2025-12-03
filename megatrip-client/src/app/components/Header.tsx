@@ -176,7 +176,7 @@ export default function Header() {
           </NavigationMenu>
 
           {/* Search Bar - Desktop */}
-          <div className="hidden md:flex items-center space-x-2 flex-1 max-w-md mx-6">
+          {/* <div className="hidden md:flex items-center space-x-2 flex-1 max-w-xl mx-6">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -185,7 +185,7 @@ export default function Header() {
                 onClick={() => setIsSearchOpen(true)}
               />
             </div>
-          </div>
+          </div> */}
 
           {/* Right side icons */}
           <div className="flex items-center space-x-2">
@@ -201,17 +201,17 @@ export default function Header() {
 
             {/* Cart */}
             <Button variant="ghost" size="sm" asChild>
-              <Link href="/gio-hang">
+              <Link href="/tai-khoan?tab=bookings">
                 <ShoppingCart className="h-5 w-5" />
                 <span className="sr-only">Giỏ hàng</span>
               </Link>
             </Button>
 
             {/* Notifications */}
-            <Button variant="ghost" size="sm">
+            {/* <Button variant="ghost" size="sm">
               <Bell className="h-5 w-5" />
               <span className="sr-only">Thông báo</span>
-            </Button>
+            </Button> */}
 
             {/* User Account */}
             <DropdownMenu>

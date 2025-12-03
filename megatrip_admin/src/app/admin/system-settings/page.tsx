@@ -278,7 +278,7 @@ const SystemSettings: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     {hasChanges && <Badge variant="secondary">Có thay đổi chưa lưu</Badge>}
-                    <Button
+                    {/* <Button
                         onClick={() => {
                             setHasChanges(false);
                             window.location.reload();
@@ -287,7 +287,7 @@ const SystemSettings: React.FC = () => {
                     >
                         <RefreshCw className="h-4 w-4 mr-2" />
                         Làm mới
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 

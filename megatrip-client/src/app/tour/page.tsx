@@ -262,7 +262,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([200000, 100000000]); 
+    const [priceRange, setPriceRange] = useState([200000, 10000000]); 
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
@@ -527,7 +527,7 @@ export default function Tour() {
             </div>
 
             {/* Categories */}
-            <section className="py-6 border-b mt-9">
+            {/* <section className="py-6 border-b mt-9">
                 <div className="container">
                     <div className="flex items-center gap-4 overflow-x-auto">
                         <span className="text-sm font-medium whitespace-nowrap">Danh mục:</span>
@@ -551,10 +551,10 @@ export default function Tour() {
                         ))}
                     </div>
                 </div>
-            </section>
+            </section> */}
 
             {/* Vouchers & Promotions Section */}
-            <section className={`py - 8 bg - gray - 50 ${hasSearched && !showPromotions ? 'hidden' : ''} `}>
+            <section className={`py-8 bg-gray - 50 ${hasSearched && !showPromotions ? 'hidden' : ''} `}>
                 <div className="container">
                     {/* Vouchers */}
                     <div className="mb-8">
@@ -642,16 +642,24 @@ export default function Tour() {
                                             <CardContent className="p-4">
                                                 <div className="flex justify-between items-start">
                                                     <div>
-                                                        <div className="text-lg font-bold">{p.code ?? `PROMO-${String(p._id || '').slice(0, 6)}`}</div>
-                                                        <div className="text-sm opacity-90">{p.title ?? p.description}</div>
-                                                        <div className="text-xs opacity-75 mt-1">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                        <div className="text-lg font-bold text-white"><span>Code : </span> {p.code ?? `PROMO-${String(p._id || '').slice(0, 6)}`}</div>
+                                                        <div className="text-sm opacity-90 text-white"><span>Tên : </span>{p.title}</div>
+                                                        {p.code && <div className="text-xs opacity-75 text-white">Áp dụng từ {formatPrice(p.minSpend || 0)} VND</div>}
+
+                                                    <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
                                                     </div>
-                                                    <Button size="sm" variant="secondary" className={idx === 2 ? 'text-teal-600' : 'text-orange-600'} onClick={() => {
-                                                        const code = p.code || '';
-                                                        if (code) handleCopy(code);
-                                                    }}>
-                                                        {copied[p.code] ? 'Đã copy!' : 'Copy mã'}
-                                                    </Button>
+                                                    {p.code ? (
+                                                        <Button size="sm" variant="secondary" className="text-red-600" onClick={() => {
+                                                            const code = p.code || '';
+                                                            if (code) handleCopy(code);
+                                                        }}>
+                                                            {copied[p.code] ? 'Đã copy!' : 'Copy mã'}
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="text-xs opacity-75 mt-1 text-white">
+                                                            Tự động áp dụng khi thanh toán từ {formatPrice(p.minSpend || 0)} VND
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </CardContent>
                                         </Card>
@@ -864,10 +872,11 @@ export default function Tour() {
                                             <div className="px-2">
                                                 <Slider
                                                     value={priceRange}
-                                                    onValueChange={setPriceRange}
-                                                    max={100000000}
-                                                    min={1000000}
-                                                    step={200000}
+                                                    onValueChange={setPriceRange} // Remove để không cho thay đổi
+                                                    max={1000000}
+                                                    min={200000}
+                                                    step={10000}
+                                                    // disabled // Thêm disabled để khóa Slider
                                                     className="mb-3"
                                                 />
                                                 <div className="flex justify-between text-sm text-[hsl(var(--muted-foreground))]">
@@ -875,7 +884,6 @@ export default function Tour() {
                                                     <span>{formatPrice(priceRange[1])}</span>
                                                 </div>
                                             </div>
-                                            
                                         </div>
 
                                         <Separator />

@@ -1,9 +1,7 @@
-"use client"
-import { redirect } from "next/navigation";
+import { redirect } from 'next/navigation';
 
-export default function AdminRootRedirect() {
-  redirect("/admin/dashboard");
-  return null;
+export default function Home() {
+  redirect('/admin/dashboard');
 }
 
 // import { useState } from "react";

@@ -202,14 +202,14 @@ export default function Reviews() {
             render: (_, record: Review) => (
                 <div className="flex items-center space-x-3">
                     <Avatar className="w-10 h-10">
-                        <AvatarImage src={record.customerId?.avatar} />
                         <AvatarFallback className="bg-primary/10 text-primary">
-                            {record.customerId?.name?.charAt(0) || 'U'}
+                            {record.orderId?.customerName?.charAt(0) || 'U'}
                         </AvatarFallback>
                     </Avatar>
                     <div>
-                        <div className="font-medium">{record.customerId?.name || 'Unknown'}</div>
-                        <div className="text-sm text-gray-500">ID: {record.customerId?._id}</div>
+                        <div className="font-medium">{record.orderId?.customerName || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{record.orderId?.customerEmail}</div>
+                        <div className="text-sm text-gray-500">{record.orderId?.customerPhone}</div>
                     </div>
                 </div>
             ),
@@ -360,13 +360,14 @@ export default function Reviews() {
                 <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-4">
                         <Avatar className="w-12 h-12">
-                            <AvatarImage src={selectedReview.customerId?.avatar} />
                             <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                                {selectedReview.customerId?.name?.charAt(0) || 'U'}
+                                {selectedReview.orderId?.customerName?.charAt(0) || 'U'}
                             </AvatarFallback>
                         </Avatar>
                         <div>
-                            <h3 className="text-lg font-semibold">{selectedReview.customerId?.name || 'Unknown'}</h3>
+                            <h3 className="text-lg font-semibold">{selectedReview.orderId?.customerName || 'Unknown'}</h3>
+                            <p className="text-gray-500">{selectedReview.orderId?.customerEmail}</p>
+                            <p className="text-gray-500">{selectedReview.orderId?.customerPhone}</p>
                             <p className="text-gray-500">Dịch vụ: {serviceName}</p>
                             <Badge variant="outline" className="text-xs mt-1">
                                 {type === 'tour' ? 'Tour' : type === 'bus' ? 'Bus' : 'N/A'}
@@ -407,10 +408,10 @@ export default function Reviews() {
                     <p className="text-gray-600 mt-1">Quản lý đánh giá, bình luận của khách hàng</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                    {/* <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { me } from '@/apis/auth';
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Layout from "../components/Layout";
@@ -49,42 +50,27 @@ import {
   SeparatorVertical, // added icon for collapse
   Loader2,
 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/dialog';
 
 // Khai báo mảng phương thức thanh toán
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
 const paymentMethods = [
-  {
-    id: "credit_card",
-    name: "Thẻ tín dụng/ghi nợ",
-    description: "Visa, Mastercard, JCB",
-    icon: CreditCard,
-    fee: 0,
-    instant: true,
-  },
-  {
-    id: "atm",
-    name: "ATM nội địa",
-    description: "Internet Banking",
-    icon: Building,
-    fee: 0,
-    instant: true,
-  },
-  {
-    id: "vnpay",
-    name: "VNPay",
-    description: "Ví điện tử VNPay",
-    icon: Smartphone,
-    fee: 0,
-    instant: true,
-  },
-  {
-    id: "momo",
-    name: "MoMo",
-    description: "Ví điện tử MoMo",
-    icon: Smartphone,
-    fee: 0,
-    instant: true,
-  },
+  // {
+  //   id: "credit_card",
+  //   name: "Thẻ tín dụng/ghi nợ",
+  //   description: "Visa, Mastercard, JCB",
+  //   icon: CreditCard,
+  //   fee: 0,
+  //   instant: true,
+  // },
+  // {
+  //   id: "atm",
+  //   name: "ATM nội địa",
+  //   description: "Internet Banking",
+  //   icon: Building,
+  //   fee: 0,
+  //   instant: true,
+  // },
   {
     id: "zalopay",
     name: "ZaloPay",
@@ -93,14 +79,31 @@ const paymentMethods = [
     fee: 0,
     instant: true,
   },
+  // {
+  //   id: "vnpay",
+  //   name: "VNPay",
+  //   description: "Ví điện tử VNPay",
+  //   icon: Smartphone,
+  //   fee: 0,
+  //   instant: true,
+  // },
   {
-    id: "bank_transfer",
-    name: "Chuyển khoản ngân hàng",
-    description: "Xác nhận trong 15 phút",
-    icon: Building,
+    id: "momo",
+    name: "MoMo",
+    description: "Ví điện tử MoMo",
+    icon: Smartphone,
     fee: 0,
-    instant: false,
+    instant: true,
   },
+
+  // {
+  //   id: "bank_transfer",
+  //   name: "Chuyển khoản ngân hàng",
+  //   description: "Xác nhận trong 15 phút",
+  //   icon: Building,
+  //   fee: 0,
+  //   instant: false,
+  // },
 ];
 
 // Lấy bookingData: ưu tiên bookingKey từ query (sessionStorage), sau đó fallback sang params/localStorage hoặc demo
@@ -378,6 +381,9 @@ export default function ThanhToan() {
   const [bookingKey, setBookingKey] = useState<string | null>(
     initialBookingKey ?? null
   );
+
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
+
   // don't compute bookingData from storage during render — load on client after mount to avoid SSR/CSR mismatch
   const [bookingData, setBookingData] = useState<any>(null);
   // bookingType default; will be adjusted after bookingData is loaded
@@ -593,6 +599,34 @@ export default function ThanhToan() {
     };
   })();
 
+  const derivedOutbound = (() => {
+    const pricing = bookingData?.pricingOutbound || bookingData?.pricing || {};  // Ưu tiên pricingOutbound
+    const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+    return {
+      adultsUnit: Number(pricing.adultsUnit || 0),
+      childrenUnit: Number(pricing.childrenUnit || 0),
+      infantsUnit: Number(pricing.infantsUnit || 0),
+      adultsTotal: Number(pricing.adultsTotal) || (Number(pricing.adultsUnit || 0) * Number(counts.adults || 0)),
+      childrenTotal: Number(pricing.childrenTotal) || (Number(pricing.childrenUnit || 0) * Number(counts.children || 0)),
+      infantsTotal: Number(pricing.infantsTotal) || (Number(pricing.infantsUnit || 0) * Number(counts.infants || 0)),
+      offerTotal: Number(pricing.offerTotal || 0),
+    };
+  })();
+
+  const derivedInbound = (() => {
+    const pricing = bookingData?.pricingInbound || bookingData?.pricing?.inboundPricing || {};  // Ưu tiên pricingInbound
+    const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+    return {
+      adultsUnit: Number(pricing.adultsUnit || 0),
+      childrenUnit: Number(pricing.childrenUnit || 0),
+      infantsUnit: Number(pricing.infantsUnit || 0),
+      adultsTotal: Number(pricing.adultsTotal) || (Number(pricing.adultsUnit || 0) * Number(counts.adults || 0)),
+      childrenTotal: Number(pricing.childrenTotal) || (Number(pricing.childrenUnit || 0) * Number(counts.children || 0)),
+      infantsTotal: Number(pricing.infantsTotal) || (Number(pricing.infantsUnit || 0) * Number(counts.infants || 0)),
+      offerTotal: Number(pricing.offerTotal || 0),
+    };
+  })();
+  const isRoundtrip = !!(bookingData?.flights?.inbound);
   // keep bookingType in sync if bookingData changes (e.g. loaded from sessionStorage)
   useEffect(() => {
     setBookingType(
@@ -617,7 +651,7 @@ export default function ThanhToan() {
   }, [searchParams]);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedPayment, setSelectedPayment] = useState("credit_card");
+  const [selectedPayment, setSelectedPayment] = useState("zalopay");
   const [needInvoice, setNeedInvoice] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
 
@@ -829,7 +863,37 @@ export default function ThanhToan() {
     email: "",
     phone: "",
     fullName: "",
+    // customerId của user nếu đã đăng nhập (sẽ gửi kèm trong order)
+    customerId: null as string | null,
   });
+
+  // If user is logged in, prefill contact info from their profile
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("accessToken");
+    if (!token) return;
+
+    (async () => {
+      try {
+        const payload = await me();
+        if (!payload) return;
+        // payload may be typed as AxiosResponse by TS; cast to any to safely access fields
+        const user = payload as any;
+        const resolvedUserId =
+          user?._id ?? user?.id ?? user?.userId ?? user?._id?.$oid ?? null;
+        setContactInfo((prev) => ({
+          ...prev,
+          fullName: (user && (user.name ?? user.fullName)) ?? prev.fullName,
+          email: (user && (user.email ?? user.username)) ?? prev.email,
+          phone: (user && (user.phone ?? user.mobile)) ?? prev.phone,
+          customerId: prev.customerId ?? resolvedUserId ?? null,
+        }));
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to prefill contact from profile', err);
+      }
+    })();
+  }, []);
   // shuttle pickup for bus flow (điểm đón trung chuyển nếu ko lấy từ bến)
   const [shuttlePickup, setShuttlePickup] = useState<string>("");
 
@@ -863,7 +927,7 @@ export default function ThanhToan() {
           if (p.type === "child" && (age <= 4 || age >= 12))
             next[`passenger.${i}.dateOfBirth`] = "Trẻ em từ 5 đến 11 tuổi";
           if (p.type === "adult" && age < 12)
-            next[`passenger.${i}.dateOfBirth`] = "Người lớn từ 12 tuổi trở lên";
+            next[`passenger.${i}.dateOfBirth`] = "Người lớn từ 18 tuổi trở lên";
         }
         // Kiểm tra định dạng firstName và lastName: chỉ cho phép chữ cái, dấu cách, và một số ký tự đặc biệt
         const nameRegex = /^[a-zA-ZÀ-ỹ\s'-]+$/;
@@ -1477,6 +1541,7 @@ export default function ThanhToan() {
         customerName: contactInfo.fullName || "Khách hàng",
         customerEmail: contactInfo.email || "",
         customerPhone: contactInfo.phone || "",
+        customerId: contactInfo.customerId || null,
         customerAddress: "",
         items,
         subtotal: Math.round(
@@ -1727,6 +1792,7 @@ export default function ThanhToan() {
           fullName: prev.fullName || pi.name || "",
           email: pi.email || prev.email,
           phone: pi.phone || prev.phone,
+          customerId: prev.customerId || pi.customerId || null,
         }));
         if (
           Array.isArray(details.passengers) &&
@@ -1765,6 +1831,7 @@ export default function ThanhToan() {
               }`.trim(),
           email: contactFromBooking.email ?? prev.email,
           phone: contactFromBooking.phone ?? prev.phone,
+          customerId: prev.customerId || (contactFromBooking as any).customerId || null,
         }));
         // bookingData.contactFromBooking may contain shuttle pickup (legacy)
         if ((contactFromBooking as any).shuttlePickup)
@@ -2658,29 +2725,19 @@ export default function ThanhToan() {
                           }
                         />
                         <div className="flex-1">
-                          <Label
-                            htmlFor="agreeTerms"
-                            className="text-sm cursor-pointer"
-                          >
-                            Tôi đồng ý với{" "}
-                            <Link
-                              prefetch={false}
-                              href="/dieu-khoan"
-                              className="text-primary hover:underline"
+                          <Label htmlFor="agreeTerms" className="text-sm">
+                            Tôi đã đọc và đồng ý với{" "}
+                            <button
+                              type="button"
+                              className="text-primary underline hover:text-primary/80 transition-colors p-0 m-0 inline"
+                              onClick={() => setTermsModalOpen(true)}
                             >
-                              Điều khoản sử dụng
-                            </Link>{" "}
-                            và{" "}
-                            <Link
-                              prefetch={false}
-                              href="/chinh-sach-bao-mat"
-                              className="text-primary hover:underline"
-                            >
-                              Chính sách bảo mật
-                            </Link>{" "}
-                            của MegaTrip
+                              Điều khoản sử dụng và Chính sách bảo mật
+                            </button>
                           </Label>
                         </div>
+
+
                       </div>
 
                       <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
@@ -2703,11 +2760,15 @@ export default function ThanhToan() {
                                 • Mọi thay đổi sau khi đặt vé có thể phát sinh
                                 phí
                               </li>
+                              
+                                <strong>Lưu ý: Vui lòng thanh toán bằng tài khoản cá nhân bạn sử dụng cố định, để thuận tiện cho việc hoàn tiền, hủy tour và thanh toán bổ sung khi đổi lịch.</strong>
                             </ul>
                           </div>
                         </div>
                       </div>
                     </div>
+
+
                   </CardContent>
                 </Card>
               </div>
@@ -3308,6 +3369,8 @@ export default function ThanhToan() {
                         </>
                       );
                     }
+
+                    
                     const flights = bookingData?.flights ?? {};
                     const outbound = flights.outbound ?? null;
                     const inbound = flights.inbound ?? null;
@@ -3335,46 +3398,26 @@ export default function ThanhToan() {
                           0
                         );
 
-                    const renderLeg = (
-                      label: string,
-                      flight: any,
-                      legKey: "outbound" | "inbound"
-                    ) => {
-                      const seg =
-                        flight?.itineraries?.[0]?.segments?.[0] ?? null;
-                      // prefer structured segment info; fallback to flight.route string
-                      const depCode =
-                        seg?.departure?.iataCode ??
-                        (typeof flight?.route === "string"
-                          ? (flight.route.split("→")[0] || "").trim()
-                          : "");
-                      const arrCode =
-                        seg?.arrival?.iataCode ??
-                        (typeof flight?.route === "string"
-                          ? (flight.route.split("→")[1] || "").trim()
-                          : "");
-                      const depLabel = getAirportLabel(
-                        depCode || undefined,
-                        seg?.departure?.city ?? undefined
-                      );
-                      const arrLabel = getAirportLabel(
-                        arrCode || undefined,
-                        seg?.arrival?.city ?? undefined
-                      );
+                    const renderLeg = (label: string, flight: any, legKey: "outbound" | "inbound") => {
+                      const seg = flight?.itineraries?.[0]?.segments?.[0] ?? null;
+                      const depCode = seg?.departure?.iataCode ?? "";
+                      const arrCode = seg?.arrival?.iataCode ?? "";
+                      const depLabel = getAirportLabel(depCode, seg?.departure?.city ?? "");
+                      const arrLabel = getAirportLabel(arrCode, seg?.arrival?.city ?? "");
 
                       const addOnTotal = sumAddonsForLeg(legKey);
                       const seatsTotal = sumSeatsForLeg(legKey);
-                      const counts = bookingData?.passengers?.counts || {
-                        adults: 0,
-                        children: 0,
-                        infants: 0,
-                      };
-                      const base = p.perPax
-                        ? Number(p.perPax.adultUnit ?? 0) * counts.adults +
-                        Number(p.perPax.childUnit ?? 0) * counts.children +
-                        Number(p.perPax.infantUnit ?? 0) * counts.infants
-                        : Number(p.passengerBaseTotal ?? 0);
-                      const taxes = taxesPerLeg;
+                      const counts = bookingData?.passengers?.counts || { adults: 0, children: 0, infants: 0 };
+
+                      // Sử dụng derived cho leg cụ thể
+                      const legDerived = legKey === "outbound" ? derivedOutbound : derivedInbound;
+                      const base = legDerived.adultsTotal + legDerived.childrenTotal + legDerived.infantsTotal;
+
+                      // Thuế: Dùng taxesEstimate từ bookingData.pricing (870,000 tổng, chia đều cho 2 chuyến nếu roundtrip)
+                      const totalTaxes = Number(bookingData?.pricing?.taxesEstimate ?? 0);
+                      const taxesPerLeg = isRoundtrip ? totalTaxes / 2 : totalTaxes;
+                      const taxes = Math.round(taxesPerLeg);
+
                       const total = base + taxes + addOnTotal + seatsTotal;
 
                       return (
@@ -3418,74 +3461,36 @@ export default function ThanhToan() {
                           </div>
 
                           <div className="space-y-2 mt-2">
-                            {/* Giá vé with ChevronDown */}
-                            <div
-                              className="flex items-center justify-between text-sm cursor-pointer"
-                              onClick={() =>
-                                setShowFareDetails((prev) => ({
-                                  ...prev,
-                                  [legKey]: !prev[legKey],
-                                }))
-                              }
-                            >
+                             
+                            {/* Giá vé với breakdown đúng */}
+                            <div className="flex items-center justify-between text-sm cursor-pointer" onClick={() => setShowFareDetails((prev) => ({ ...prev, [legKey]: !prev[legKey] }))}>
                               <div className="flex items-center gap-2">
                                 <span>Giá vé</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {counts.adults +
-                                    counts.children +
-                                    counts.infants}{" "}
-                                  người
-                                </span>
+                                <span className="text-xs text-muted-foreground">{counts.adults + counts.children + counts.infants} người</span>
                               </div>
                               <div className="flex items-center gap-4">
                                 <span>{formatPrice(base)}</span>
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? "rotate-180" : ""
-                                    }`}
-                                />
+                                <ChevronDown className={`h-4 w-4 transition-transform ${showFareDetails[legKey] ? "rotate-180" : ""}`} />
                               </div>
                             </div>
                             {showFareDetails[legKey] && (
                               <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
-                                {p.perPax ? (
-                                  <div className="space-y-2">
-                                    {counts.adults > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Người lớn ({counts.adults})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.adultUnit ?? 0) *
-                                            counts.adults
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {counts.children > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Trẻ em ({counts.children})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.childUnit ?? 0) *
-                                            counts.children
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-                                    {counts.infants > 0 && (
-                                      <div className="flex justify-between">
-                                        <div>Em bé ({counts.infants})</div>
-                                        <div>
-                                          {formatPrice(
-                                            Number(p.perPax.infantUnit ?? 0) *
-                                            counts.infants
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
+                                {counts.adults > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Người lớn ({counts.adults})</div>
+                                    <div>{formatPrice(legDerived.adultsTotal)}</div>
                                   </div>
-                                ) : (
-                                  <div className="text-muted-foreground">
-                                    Không có dữ liệu chi tiết hành khách
+                                )}
+                                {counts.children > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Trẻ em ({counts.children})</div>
+                                    <div>{formatPrice(legDerived.childrenTotal)}</div>
+                                  </div>
+                                )}
+                                {counts.infants > 0 && (
+                                  <div className="flex justify-between">
+                                    <div>Em bé ({counts.infants})</div>
+                                    <div>{formatPrice(legDerived.infantsTotal)}</div>
                                   </div>
                                 )}
                               </div>
@@ -3617,9 +3622,7 @@ export default function ThanhToan() {
                             )}
                             <div className="flex justify-between font-semibold text-base mt-2">
                               <span>Tổng {label.toLowerCase()}</span>
-                              <span className="text-[hsl(var(--primary))]">
-                                {formatPrice(total)}
-                              </span>
+                              <span className="text-[hsl(var(--primary))]">{formatPrice(total)}</span>
                             </div>
                           </div>
                         </div>
@@ -4239,6 +4242,171 @@ export default function ThanhToan() {
           </div>
         </div>
       </div>
+
+      <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto z-[70] bg-white dark:bg-slate-900 rounded-md shadow-lg">
+          <DialogHeader>
+            <DialogTitle>Điều khoản sử dụng và Chính sách bảo mật</DialogTitle>
+            <DialogDescription>
+              Vui lòng đọc kỹ các điều khoản và chính sách trước khi đồng ý.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 text-sm">
+            {/* Điều khoản chung */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">1. Điều khoản chung</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Bằng việc sử dụng dịch vụ của MegaTrip, bạn đồng ý tuân thủ các điều khoản này.</li>
+                <li>MegaTrip có quyền thay đổi điều khoản bất cứ lúc nào mà không cần thông báo trước.</li>
+                <li>Người dùng phải từ 18 tuổi trở lên hoặc có sự đồng ý của phụ huynh.</li>
+              </ul>
+            </div>
+
+            {/* Chính sách hủy đơn (từ huy-don, cập nhật theo noterules.txt) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">2. Chính sách hủy đơn</h3>
+              <div className="space-y-4">
+                <div>
+                  <strong>Máy bay:</strong> Phạt theo hãng (VN Airlines: ≥7 ngày 5%, 3-7 ngày 20%, &lt;3 ngày 50%). Thuế không hoàn. Không hủy trong 3 ngày trước giờ bay.
+                </div>
+                <div>
+                  <strong>Xe bus:</strong>
+                  <table className="w-full text-sm border-collapse border border-gray-300 mt-2">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-2 py-1 text-left">Điều kiện</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Phạt</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Hoàn tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">≥ 72 giờ trước giờ khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">10%</td>
+                        <td className="border border-gray-300 px-2 py-1">90%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">24 – 72 giờ trước</td>
+                        <td className="border border-gray-300 px-2 py-1">25%</td>
+                        <td className="border border-gray-300 px-2 py-1">75%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">12 – &lt;24 giờ trước</td>
+                        <td className="border border-gray-300 px-2 py-1">50%</td>
+                        <td className="border border-gray-300 px-2 py-1">50%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">&lt;12 giờ hoặc sau khi xe chạy</td>
+                        <td className="border border-gray-300 px-2 py-1">100%</td>
+                        <td className="border border-gray-300 px-2 py-1">Không hoàn tiền</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <strong>Tour:</strong>
+                  <table className="w-full text-sm border-collapse border border-gray-300 mt-2">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border border-gray-300 px-2 py-1 text-left">Điều kiện</th>
+                        <th className="border border-gray-300 px-2 py-1 text-left">Phạt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">Trước 15 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">20% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">7-14 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">50% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">3-6 ngày khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">75% tổng tiền tour</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-gray-300 px-2 py-1">Trong 3 ngày trước khởi hành</td>
+                        <td className="border border-gray-300 px-2 py-1">100% tổng tiền tour (không hoàn)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Chính sách đổi lịch (từ doi-lich, cập nhật theo noterules.txt) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">3. Chính sách đổi lịch</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Máy bay: Chỉ đổi nếu còn chỗ trống, phạt theo hãng + phí đổi 100.000 VND/khách. Không đổi trong 3 ngày trước giờ bay.</li>
+                <li>
+                  <strong>Xe bus:</strong>
+                  <ul className="list-disc ml-5 mt-1">
+                    <li>Đổi ≥ 72 giờ trước giờ khởi hành: phí 50.000đ / khách</li>
+                    <li>Đổi 24 – 72 giờ trước: phí 50.000đ / khách + 25% giá vé</li>
+                    <li>Đổi &lt; 24 giờ: không cho đổi</li>
+                  </ul>
+                </li>
+                <li>
+                  <strong>Tour:</strong>
+                  <ul className="list-disc ml-5 mt-1">
+                    <li>Trên 5 ngày: 30% giá trị tour</li>
+                    <li>Từ 5 ngày trước: 50% giá trị tour</li>
+                    <li>3 ngày trước: 100% giá trị tour</li>
+                  </ul>
+                </li>
+                <li>Đổi lịch chỉ được thực hiện 1 lần cho mỗi đơn hàng, không hoàn tiền sau khi đổi.</li>
+              </ul>
+            </div>
+
+            {/* Chính sách bảo mật (từ tai-khoan) */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">4. Chính sách bảo mật</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Thông tin cá nhân được bảo mật theo luật Việt Nam.</li>
+                <li>Chúng tôi không chia sẻ dữ liệu với bên thứ ba trừ khi có yêu cầu pháp lý.</li>
+                <li>Vui lòng thanh toán bằng tài khoản cá nhân cố định để thuận tiện hoàn tiền, hủy tour và thanh toán bổ sung khi đổi lịch.</li>
+              </ul>
+            </div>
+
+            {/* Quyền và nghĩa vụ */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">5. Quyền và nghĩa vụ của người dùng</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Cung cấp thông tin chính xác khi đặt chỗ.</li>
+                <li>Thanh toán đúng hạn, không gian lận.</li>
+                <li>Tuân thủ quy định của hãng vận chuyển và luật pháp.</li>
+                <li>MegaTrip có quyền hủy đơn nếu phát hiện vi phạm.</li>
+              </ul>
+            </div>
+
+            {/* Trách nhiệm của MegaTrip */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">6. Trách nhiệm của MegaTrip</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Cung cấp dịch vụ đúng như mô tả.</li>
+                <li>Hỗ trợ khách hàng 24/7 qua hotline.</li>
+                <li>Hoàn tiền theo chính sách nếu lỗi từ phía chúng tôi.</li>
+                <li>Không chịu trách nhiệm cho sự chậm trễ do hãng vận chuyển hoặc thiên tai.</li>
+              </ul>
+            </div>
+
+            {/* Điều khoản thanh toán */}
+            <div>
+              <h3 className="font-semibold text-base mb-2">7. Điều khoản thanh toán</h3>
+              <ul className="list-disc ml-5 space-y-1">
+                <li>Thanh toán qua VNPay, MoMo, ZaloPay được bảo mật.</li>
+                <li>Hoàn tiền trong 7-14 ngày qua tài khoản gốc.</li>
+                <li>Không hoàn tiền cho đơn đã sử dụng.</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setTermsModalOpen(false)}>Đóng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

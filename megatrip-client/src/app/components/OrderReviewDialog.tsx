@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Star } from 'lucide-react';
+import { toast } from 'sonner';
 // import { DialogOverlay } from '@radix-ui/react-dialog'; // nếu không dùng thì nên bỏ
 
 type BookingLite = {
@@ -17,10 +18,11 @@ interface OrderReviewDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     booking: BookingLite | null;
+    customerId: string | null;
     onSubmit: (data: { rating: number; comment: string }) => void;
 }
 
-export default function OrderReviewDialog({ open, onOpenChange, booking, onSubmit }: OrderReviewDialogProps) {
+export default function OrderReviewDialog({ open, onOpenChange, booking, customerId, onSubmit }: OrderReviewDialogProps) {
     const [rating, setRating] = useState<number>(5);
     const [hover, setHover] = useState<number | null>(null);
     const [comment, setComment] = useState('');
@@ -44,9 +46,9 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, onSubmi
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    orderId: booking.orderObjectId, // ✅ Dùng _id thực của order (ObjectId)
-                    productId: booking.productId, // ✅ Dùng productId từ item
-                    customerId: '64e65e8d3d5e2b0c8a3e9f12',
+                    orderId: booking.orderObjectId,
+                    productId: booking.productId,
+                    customerId: customerId || '64e65e8d3d5e2b0c8a3e9f12', // Fallback nếu null
                     rating,
                     comment
                 })
@@ -57,14 +59,14 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, onSubmi
                 onOpenChange(false);
                 setRating(5);
                 setComment('');
-                // toast('Cảm ơn bạn đã chia sẻ trải nghiệm.'); // Nếu có toast
+                toast.success('Cảm ơn bạn đã chia sẻ trải nghiệm.'); // Sử dụng Sonner toast
             } else {
                 // Lỗi từ server
-                // toast('Có lỗi xảy ra khi gửi đánh giá.');
+                toast.error('Có lỗi xảy ra khi gửi đánh giá.'); // Sử dụng Sonner toast
             }
         } catch (error) {
             // Lỗi network
-            // toast('Có lỗi xảy ra khi gửi đánh giá.');
+            toast.error('Có lỗi xảy ra khi gửi đánh giá.'); // Sử dụng Sonner toast
         } finally {
             setLoading(false);
         }

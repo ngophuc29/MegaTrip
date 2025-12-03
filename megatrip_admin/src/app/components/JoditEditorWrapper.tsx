@@ -68,41 +68,45 @@ const JoditEditorWrapper: React.FC<JoditEditorWrapperProps> = ({
         },
         allowDragAndDropFiles: true,
         convertToXhtml: false,
-        events: {
-            beforePaste: function (pasteEvent: ClipboardEvent) {
-                const self = this;
-                pasteEvent.preventDefault();
-                pasteEvent.stopPropagation();
-                const clipboardData = pasteEvent.clipboardData;
-                if (!clipboardData) return;
-                const files = Array.from(clipboardData.files || []);
-                if (files.length) {
-                    files.forEach((file: File) => {
-                        if (/^image\//.test(file.type)) {
-                            const reader = new FileReader();
-                            reader.onload = (loadEvent: ProgressEvent<FileReader>) => {
-                                const img = self.createInside.element('img') as HTMLImageElement;
-                                img.src = loadEvent.target?.result as string;
-                                self.s.insertImage(img);
-                            };
-                            reader.readAsDataURL(file);
-                        }
-                    });
-                } else {
-                    let html = clipboardData.getData('text/html');
-                    if (html) {
-                        const doc = new DOMParser().parseFromString(html, 'text/html');
-                        html = doc.body.innerHTML;
-                        self.s.insertHTML(html);
-                    } else {
-                        const text = clipboardData.getData('text/plain');
-                        if (text) {
-                            self.s.insertHTML(text.replace(/\n/g, '<br>'));
-                        }
-                    }
-                }
-            },
-        },
+        // ...existing code...
+
+        // events: {
+        //     beforePaste: function (pasteEvent: ClipboardEvent) {
+        //         const self = this;
+        //         pasteEvent.preventDefault();
+        //         pasteEvent.stopPropagation();
+        //         const clipboardData = pasteEvent.clipboardData;
+        //         if (!clipboardData) return;
+        //         const files = Array.from(clipboardData.files || []);
+        //         if (files.length) {
+        //             files.forEach((file: File) => {
+        //                 if (/^image\//.test(file.type)) {
+        //                     const reader = new FileReader();
+        //                     reader.onload = (loadEvent: ProgressEvent<FileReader>) => {
+        //                         const img = self.createInside.element('img') as HTMLImageElement;
+        //                         img.src = loadEvent.target?.result as string;
+        //                         self.selection.insertImage(img);
+        //                     };
+        //                     reader.readAsDataURL(file);
+        //                 }
+        //             });
+        //         } else {
+        //             let html = clipboardData.getData('text/html');
+        //             if (html) {
+        //                 const doc = new DOMParser().parseFromString(html, 'text/html');
+        //                 html = doc.body.innerHTML;
+        //                 self.selection.insertHTML(html);
+        //             } else {
+        //                 const text = clipboardData.getData('text/plain');
+        //                 if (text) {
+        //                     self.selection.insertHTML(text.replace(/\n/g, '<br>'));
+        //                 }
+        //             }
+        //         }
+        //     },
+        // },
+
+        // ...existing code...
     }), [placeholder]);
 
     const handleChange = useCallback((newContent: string) => {

@@ -45,7 +45,7 @@ interface AdminLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Thống kê & Báo cáo', href: '/reports', icon: BarChart3 },
-  { name: 'Quản lý khách hàng', href: '/customers', icon: Users },
+  { name: 'Quản lý người dùng', href: '/customers', icon: Users },
   { name: 'Quản lý tour', href: '/tours', icon: MapPin },
   { name: 'Quản lý chuyến bay', href: '/flights', icon: Plane },
   { name: 'Quản lý vé xe', href: '/buses', icon: Bus },
@@ -276,14 +276,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  {/* <DropdownMenuItem>
                     <UserCheck className="mr-2 h-4 w-4" />
                     <span>Hồ sơ cá nhân</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Cog className="mr-2 h-4 w-4" />
                     <span>Cài đặt</span>
-                  </DropdownMenuItem>
+                  </DropdownMenuItem> */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <LogOut className="mr-2 h-4 w-4" />

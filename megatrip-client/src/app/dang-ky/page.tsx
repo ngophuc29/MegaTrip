@@ -17,6 +17,7 @@ export default function DangKy() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [checked, setChecked] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   // Check if already logged in and redirect without rendering
@@ -29,7 +30,7 @@ export default function DangKy() {
     }
   }, [router]);
   if (!checked) return null;
-  // Giả lập gửi mail OTP
+  // Đăng ký tài khoản
   const handleRegister = async (e: any) => {
     e.preventDefault();
     setError('');
@@ -42,20 +43,52 @@ export default function DangKy() {
       setError('Mật khẩu xác nhận không khớp');
       return;
     }
-    setStep('otp');
-    setSuccess('Mã OTP đã được gửi tới email của bạn.');
+    setIsLoading(true);
+    try {
+      await auth.register({ email: form.email, password: form.password });
+      setStep('otp');
+      setSuccess('Mã OTP đã được gửi tới email của bạn.');
+    } catch (err: any) {
+      setError(err?.message || 'Đăng ký thất bại. Vui lòng thử lại.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Giả lập xác thực OTP
-  const handleVerifyOtp = (e: any) => {
+  // Gửi lại mã OTP
+  const handleResendOtp = async () => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    try {
+      await auth.resendOtp({ email: form.email });
+      setSuccess('Mã OTP mới đã được gửi tới email của bạn.');
+    } catch (err: any) {
+      setError(err?.message || 'Không thể gửi lại mã OTP. Vui lòng thử lại.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Xác thực OTP
+  const handleVerifyOtp = async (e: any) => {
     e.preventDefault();
     setError('');
-    if (otp !== '123456') {
-      setError('Mã OTP không đúng. Vui lòng kiểm tra lại.');
+    setSuccess('');
+    if (!otp) {
+      setError('Vui lòng nhập mã OTP');
       return;
     }
-    setSuccess('Đăng ký thành công!');
-    setStep('done');
+    setIsLoading(true);
+    try {
+      const res = await auth.verifyOtp({ email: form.email, code: otp });
+      setSuccess('Đăng ký thành công!');
+      setStep('done');
+    } catch (err: any) {
+      setError(err?.message || 'Mã OTP không đúng. Vui lòng kiểm tra lại.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -99,7 +132,10 @@ export default function DangKy() {
                     <Input id="confirm" type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required />
                   </div>
                   {error && <div className="text-red-600 text-sm text-center">{error}</div>}
-                  <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng ký</Button>
+                  {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng ký</Button> */}
+                  <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
+                    {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
+                  </Button>
                   <div className="text-center text-sm mt-2">
                     Đã có tài khoản?{' '}
                     <Link href="/dang-nhap" className="text-primary font-medium hover:underline">Đăng nhập</Link>
@@ -115,7 +151,17 @@ export default function DangKy() {
                   <Input id="otp" value={otp} onChange={e => setOtp(e.target.value)} placeholder="Nhập mã OTP" required autoFocus className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" />
                   {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                   {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-                  <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Xác nhận OTP</Button>
+                  {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Xác nhận OTP</Button> */}
+
+                  <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
+                    {isLoading ? 'Đang xác nhận...' : 'Xác nhận OTP'}
+                  </Button>
+
+                  <div className="text-center mt-4">
+                    <Button type="button" variant="link" onClick={handleResendOtp} disabled={isLoading} className="text-primary font-medium hover:underline">
+                      {isLoading ? 'Đang gửi...' : 'Gửi lại mã OTP'}
+                    </Button>
+                  </div>
                 </form>
               )}
               {step === 'done' && (

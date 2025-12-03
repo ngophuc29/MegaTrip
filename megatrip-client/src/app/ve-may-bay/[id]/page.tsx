@@ -34,6 +34,7 @@ import {
     Minus,
     Plus,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 
 // same cache key used in FlightResults
@@ -47,7 +48,9 @@ const loadCacheFromStorage = () => {
     } catch {
         return {};
     }
+
 };
+
 
 // Sample flight data - normally would come from API based on ID
 const flightDetails = {
@@ -113,6 +116,8 @@ export default function ChiTietVeMayBay() {
     const params = useParams();
     const id = params?.id ?? null;
 
+    const [isLoadingSeatmap, setIsLoadingSeatmap] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     // --- ADDED: mapped state for easier UI ---
     const [bookedSeatsByLeg, setBookedSeatsByLeg] = useState<{
         outbound: string[];
@@ -134,19 +139,50 @@ export default function ChiTietVeMayBay() {
     const [parsedAmenitiesByLeg, setParsedAmenitiesByLeg] = useState<Record<string, any>>({});
     const [markedSeatRows, setMarkedSeatRows] = useState<Array<{ row: string; seats: any[] }>>([]);
     // --- NEW: small helper to extract a usable flight-offer object from pricing payloads ---
+    // --- NEW: helper to extract a usable flight-offer object from pricing payloads (improved) ---
     const extractOfferFromPricing = (pricing: any) => {
         if (!pricing) return null;
-        // Common shapes: pricing.data.flightOffers?.[0], pricing.data[0], or pricing.data itself
         try {
-            const offer =
-                pricing?.data?.flightOffers?.[0] ??
-                (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing);
+            let offer = null;
+            console.log('pricing in extractOfferFromPricing:', pricing);
+            console.log('pricing.type:', pricing?.type);
+            console.log('pricing.data:', pricing?.data);
+
+            // Check if pricing is already an offer
+            if (pricing?.type === 'flight-offer') {
+                offer = pricing;
+            }
+            // Standard Amadeus response
+            else if (pricing?.data?.flightOffers?.[0]) {
+                offer = pricing.data.flightOffers[0];
+            }
+            // Fallback: pricing.data as array
+            else if (Array.isArray(pricing?.data) && pricing.data.length > 0) {
+                offer = pricing.data[0];
+            }
+            // Fallback: pricing.data as object
+            else if (pricing?.data && typeof pricing.data === 'object' && !Array.isArray(pricing.data)) {
+                offer = pricing.data;
+            }
+            // Fallback: pricing itself
+            else if (pricing && typeof pricing === 'object' && !pricing.data) {
+                offer = pricing;
+            }
+
+            console.log('offer:', offer);
+            console.log('offer.itineraries:', offer?.itineraries);
+            console.log('offer.itineraries[0]:', offer?.itineraries?.[0]);
+            console.log('segments:', offer?.itineraries?.[0]?.segments);
             return offer ?? null;
-        } catch {
+        } catch (e) {
+            console.warn('extractOfferFromPricing error:', e);
             return null;
         }
     };
 
+    const isLoggedIn = () => {
+        return !!localStorage.getItem('accessToken');
+    };
     // --- NEW: helper to parse a seatmap payload into rows/summary/amenities and suggest free seats ---
     const parseSeatmap = (raw: any) => {
         try {
@@ -264,15 +300,56 @@ export default function ChiTietVeMayBay() {
     });
 
     // Hàm helper để mark occupied seats (chỉ cho leg cụ thể)
+    // Hàm helper để mark occupied seats (chỉ cho leg cụ thể)
     const markOccupiedSeats = (rows: any[], leg: 'outbound' | 'inbound') => {
-        return rows.map(row => ({
+        console.log(`🔍 [ChiTietMayBay] Mark OCCUPIED cho leg: ${leg}`);
+        console.log(`🔍 [ChiTietMayBay] bookedSeatsByLeg[${leg}]:`, bookedSeatsByLeg[leg]); // Bây giờ có thể có dữ liệu từ vé
+
+
+        // Sửa: Log tất cả ghế có price > 0 (bỏ 'CH' để debug)
+        const paidSeats = rows.flatMap(r => r.seats.filter(s => s.price > 0));
+        console.log(`🔍 [${leg}] Ghế trả phí (price > 0):`, paidSeats.map(s => ({ number: s.number, price: s.price, availability: s.availability, characteristics: s.characteristics })));
+        console.log(`🔍 [${leg}] Ghế trả phí có trong bookedSeatsByLeg[${leg}]:`, paidSeats.filter(s => bookedSeatsByLeg[leg].includes(s.number)).map(s => s.number));
+
+        // Thêm log tổng availability
+        const allSeats = rows.flatMap(r => r.seats);
+        const availableCount = allSeats.filter(s => s.availability === 'AVAILABLE').length;
+        const occupiedCount = allSeats.filter(s => s.availability === 'OCCUPIED').length;
+        const blockedCount = allSeats.filter(s => s.availability === 'BLOCKED').length;
+        console.log(`📊 [${leg}] Tổng ghế: ${allSeats.length}, AVAILABLE: ${availableCount}, OCCUPIED: ${occupiedCount}, BLOCKED: ${blockedCount}`);
+
+
+        const markedRows = rows.map(row => ({
             ...row,
-            seats: row.seats.map((seat: any) => ({
-                ...seat,
-                availability: bookedSeatsByLeg[leg].includes(seat.number) ? 'OCCUPIED' : seat.availability,
-            })),
+            seats: row.seats.map((seat: any) => {
+                const isOccupiedFromBooking = bookedSeatsByLeg[leg].includes(seat.number); // Có thể true nếu có vé match
+                if (isOccupiedFromBooking) {
+                    console.log(`✅ [ChiTietMayBay] Ghế ${seat.number} được mark OCCUPIED (từ bookedSeatsByLeg - vé đã đặt)`);
+                }
+                return {
+                    ...seat,
+                    availability: isOccupiedFromBooking ? 'OCCUPIED' : seat.availability, // Thêm OCCUPIED từ vé nếu match
+                };
+            }),
         }));
+        const occupiedFromAmadeus = markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED' && !bookedSeatsByLeg[leg].includes(s.number)).map(s => s.number));
+        const occupiedFromBooking = bookedSeatsByLeg[leg];
+        console.log(`🔍 [ChiTietMayBay] Ghế OCCUPIED từ Amadeus:`, occupiedFromAmadeus);
+        console.log(`🔍 [ChiTietMayBay] Ghế OCCUPIED từ vé đã đặt:`, occupiedFromBooking);
+        console.log(`🔍 [ChiTietMayBay] Tổng ghế OCCUPIED sau mark:`, markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED').map(s => s.number))); // Từ Amadeus + vé nếu có
+
+        // Thêm log tổng hợp cho từng chuyến
+        const totalOccupiedFromAmadeus = occupiedFromAmadeus.length;
+        const totalOccupiedFromBooking = occupiedFromBooking.length;
+        const totalOccupiedFinal = markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED')).length;
+        console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED từ Amadeus: ${totalOccupiedFromAmadeus}`);
+        console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED từ vé đã đặt: ${totalOccupiedFromBooking}`);
+        console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED cuối cùng: ${totalOccupiedFinal}`);
+
+        return markedRows;
     };
+
+
 
     // add: validation state for lead passenger + contact
     const [passengerErrors, setPassengerErrors] = useState<Record<string, string>>({});
@@ -310,6 +387,23 @@ export default function ChiTietVeMayBay() {
             const stored = loadCacheFromStorage();
             console.log('[Flight detail] id=', lookupId, 'cache present:', Boolean(stored));
 
+
+            // Thêm kiểm tra lỗi trong pricing
+            const checkPricingForErrors = (pricing: any) => {
+                if (pricing && pricing.errors && Array.isArray(pricing.errors)) {
+                    const hasSystemError = pricing.errors.some((err: any) =>
+                        err.code === 141 &&
+                        err.title === "SYSTEM ERROR HAS OCCURRED" &&
+                        err.detail === "Unknown error" &&
+                        err.status === 500
+                    );
+                    if (hasSystemError) {
+                        return "Rất tiếc, hệ thống đối tác đang gặp sự cố tạm thời nên chuyến bay này không thể hiển thị. Bạn vui lòng chọn chuyến bay khác hoặc thử lại sau ít phút. Chúng tôi xin lỗi vì sự bất tiện này.";
+                    }
+                }
+                return null;
+            };
+
             let derivedParticipants = { adults: 1, children: 0, infants: 0 };
 
             // Hàm helper để lấy số lượng hành khách từ pricing
@@ -330,6 +424,15 @@ export default function ChiTietVeMayBay() {
                 const outPricing = stored?.pricing?.[outKey] ?? null;
                 const inPricing = stored?.pricing?.[inKey] ?? null;
                 console.log('[Flight detail] roundtrip wrapper detected, outKey=', outKey, 'inKey=', inKey);
+
+
+                // Kiểm tra lỗi cho outbound và inbound
+                const outError = checkPricingForErrors(outPricing);
+                const inError = checkPricingForErrors(inPricing);
+                if (outError || inError) {
+                    setError(outError || inError);
+                    return; // Ngăn xử lý tiếp
+                }
 
                 setIsRoundtrip(true);
                 setOutboundCachedPricing(outPricing);
@@ -381,6 +484,12 @@ export default function ChiTietVeMayBay() {
                     setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), inbound: parsedIn.amenities }));
                 }
             } else {
+                const pricing = stored?.pricing?.[lookupId];
+                const pricingError = checkPricingForErrors(pricing);
+                if (pricingError) {
+                    setError(pricingError);
+                    return; // Ngăn xử lý tiếp
+                }
                 if (stored?.pricing?.[lookupId]) {
                     setCachedPricing(stored.pricing[lookupId]);
                     const offer = extractOfferFromPricing(stored.pricing[lookupId]);
@@ -495,12 +604,22 @@ export default function ChiTietVeMayBay() {
             setDynamicAddOnServices([...addOnServices, ...includedAddOns.filter(ia => !addOnServices.some(s => s.id === ia.id))]);
         } catch (e) {
             console.warn('Error loading cached pricing/seatmap', e);
+            setError("Có lỗi xảy ra khi tải dữ liệu chuyến bay. Vui lòng thử lại.");
         }
     }, [id]);
+    // ...existing code...
+
     useEffect(() => {
         if (!id) return;
         const fetchAndMatchTickets = async () => {
             try {
+                setIsLoadingSeatmap(true);
+                // Log ngày của flight hiện tại từ pricing
+                console.log(`🔍 [ChiTietMayBay] Ngày flight outbound:`, outboundCachedPricing ? extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] : cachedPricing ? extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] : 'Không có');
+                if (isRoundtrip && inboundCachedPricing) {
+                    console.log(`🔍 [ChiTietMayBay] Ngày flight inbound:`, extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] || 'Không có');
+                }
+
                 // Fetch tickets: chỉ lấy flight tickets với status paid/changed
                 const response = await fetch('http://localhost:7700/api/tickets?type=flight&status=paid&status=changed');
                 if (!response.ok) return;
@@ -509,15 +628,28 @@ export default function ChiTietVeMayBay() {
                 const outboundBooked: string[] = [];
                 const inboundBooked: string[] = [];
 
-                // Hàm helper để so khớp flight info
-                const matchFlight = (segment: any, ticketFlight: any) => {
+                // Hàm helper để so khớp flight info (sửa: bỏ segTime để match linh hoạt hơn)
+                function matchFlight(segment: any, ticketFlight: any) {
+                    const segCarrier = segment?.carrierCode;
+                    const tickCarrier = ticketFlight?.airline;
+                    const segFlightNum = segment?.carrierCode + segment?.number;
+                    const tickFlightNum = ticketFlight?.flightNumber;
+                    const segDepIata = segment?.departure?.iataCode;
+                    const tickDepIata = ticketFlight?.depIata;
+                    const segArrIata = segment?.arrival?.iataCode;
+                    const tickArrIata = ticketFlight?.arrIata;
+                    const segDate = segment?.departure?.at?.split('T')?.[0];
+                    const tickDate = ticketFlight?.date;
+                    // Bỏ segTime check để tránh bỏ sót match
+                    // const segTime = segment?.departure?.at?.includes(ticketFlight?.time?.split(' - ')?.[0]?.trim());
+
                     const match = (
-                        segment?.carrierCode === ticketFlight?.airline &&
-                        segment?.carrierCode + segment?.number === ticketFlight?.flightNumber &&  // Sửa: so khớp 'VN206' với 'VN' + '206'
-                        segment?.departure?.iataCode === ticketFlight?.route?.split(' → ')?.[0] &&
-                        segment?.arrival?.iataCode === ticketFlight?.route?.split(' → ')?.[1] &&
-                        segment?.departure?.at?.split('T')?.[0] === ticketFlight?.date &&
-                        segment?.departure?.at?.includes(ticketFlight?.time?.split(' - ')?.[0]?.trim())
+                        segCarrier === tickCarrier &&
+                        segFlightNum === tickFlightNum &&
+                        segDepIata === tickDepIata &&
+                        segArrIata === tickArrIata &&
+                        segDate === tickDate
+                        // && segTime  // Bỏ này
                     );
                     if (match) {
                         console.log('✅ Matched flight segment:', segment, 'with ticket flight:', ticketFlight);
@@ -525,47 +657,174 @@ export default function ChiTietVeMayBay() {
                         console.log('❌ No match for segment:', segment, 'and ticket flight:', ticketFlight);
                     }
                     return match;
-                };
+                }
 
-                // Duyệt tickets và so khớp với outbound/inbound
+                // Duyệt tickets và match
                 tickets.forEach((ticket: any) => {
-                    console.log('🔍 Checking ticket:', ticket.ticketNumber, 'status:', ticket.status, 'seats:', ticket.seats);
+                    console.log('🔍 Checking ticket:', ticket.ticketNumber, 'status:', ticket.status, 'uniq:', ticket.uniq);
                     const resInfo = ticket.reservationInfo || {};
+                    console.log('🔍 reservationInfo:', resInfo); // Log đầy đủ reservationInfo
                     const outboundFlight = resInfo.flights?.outbound;
                     const inboundFlight = resInfo.flights?.inbound;
+                    console.log('🔍 outboundFlight:', outboundFlight); // Log outboundFlight
+                    console.log('🔍 inboundFlight:', inboundFlight); // Log inboundFlight
 
-                    // Lấy leg từ uniq (ví dụ: ORD_...::flight::VN1464::outbound::paxIndex:0)
+                    // Lấy leg từ uniq hoặc pricing.seats
                     const uniqParts = (ticket.uniq || '').split('::');
-                    const ticketLeg = uniqParts.includes('outbound') ? 'outbound' : uniqParts.includes('inbound') ? 'inbound' : null;
+                    const legFromUniq = uniqParts.includes('outbound') ? 'outbound' : uniqParts.includes('inbound') ? 'inbound' : null;
+                    const legFromPricing = ticket.pricing?.seats?.[0]?.leg || null;
+                    let hasMatch = false;
 
-                    // So khớp outbound
-                    if (outboundFlight && (outboundCachedPricing || cachedPricing) && ticketLeg === 'outbound') {
-                        const pricingToUse = outboundCachedPricing || cachedPricing;  // Sử dụng cachedPricing cho one-way
+                    // const legsToCheck: Array<'outbound' | 'inbound'> = [];
+                    // if (legFromPricing) legsToCheck.push(legFromPricing);
+                    // if (legFromUniq && !legsToCheck.includes(legFromUniq as any)) legsToCheck.push(legFromUniq as any);
+                    // if (outboundFlight && !legsToCheck.includes('outbound')) legsToCheck.push('outbound');
+                    // if (inboundFlight && !legsToCheck.includes('inbound')) legsToCheck.push('inbound');
+
+                    // // Nếu không có legsToCheck, thử match với tất cả legs có thể
+                    // if (legsToCheck.length === 0) {
+                    //     legsToCheck.push('outbound');
+                    //     if (isRoundtrip) legsToCheck.push('inbound');
+                    // }
+
+                    // legsToCheck.forEach((leg) => {
+                    //     const ticketFlight = leg === 'outbound' ? outboundFlight : (inboundFlight || outboundFlight);
+                    //     if (!ticketFlight) return;
+
+                    //     ticketFlight.airline = ticketFlight.flightNumber.slice(0, 2).toUpperCase();
+                    //     // Thêm set depIata và arrIata từ itineraries
+                    //     ticketFlight.depIata = ticketFlight.itineraries?.[0]?.segments?.[0]?.departure?.iataCode;
+                    //     ticketFlight.arrIata = ticketFlight.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode;
+
+                    //     console.log(`🔍 [${leg}] ticketFlight fields: carrier=${ticketFlight.airline}, flightNum=${ticketFlight.flightNumber}, depIata=${ticketFlight.depIata}, arrIata=${ticketFlight.arrIata}, date=${ticketFlight.date}, time=${ticketFlight.time}`); // Log các trường match từ ticketFlight
+
+                    //     const pricingToUse = leg === 'outbound' ? (outboundCachedPricing || cachedPricing) : (inboundCachedPricing || cachedPricing);
+                    //     console.log(`🔍 [${leg}] pricingToUse:`, pricingToUse); // Log debug pricingToUse
+                    //     const offer = extractOfferFromPricing(pricingToUse);
+                    //     console.log(`🔍 [${leg}] offer:`, offer); // Log debug offer
+
+                    //     const itineraryIndex = leg === 'outbound' ? 0 : (offer?.itineraries?.length > 1 ? 1 : 0);
+                    //     const segment = offer?.itineraries?.[itineraryIndex]?.segments?.[0];
+                    //     console.log(`🔍 [${leg}] segment:`, segment); // Log debug segment
+                    //     console.log(`🔍 [${leg}] segment fields: carrier=${segment?.carrierCode}, flightNum=${segment?.carrierCode + segment?.number}, depIata=${segment?.departure?.iataCode}, arrIata=${segment?.arrival?.iataCode}, date=${segment?.departure?.at?.split('T')?.[0]}, time=${segment?.departure?.at}`); // Log các trường match từ segment
+
+                    //     const didMatch = segment ? matchFlight(segment, ticketFlight) : false;
+
+                    //     // if (didMatch && (ticket.status === 'paid' || ticket.status === 'changed')) {
+                    //     //     hasMatch = true;
+                    //     //     // Nếu match, lấy tất cả ghế từ ticket (không phụ thuộc leg cụ thể)
+                    //     //     const ticketSeats = ticket.seats ?? [];
+                    //     //     if (Array.isArray(ticketSeats) && ticketSeats.length > 0) {
+                    //     //         // Sửa: Thêm vào leg cụ thể đang match, không phải selectedLeg
+                    //     //         if (leg === 'outbound') {
+                    //     //             outboundBooked.push(...ticketSeats);
+                    //     //         } else {
+                    //     //             inboundBooked.push(...ticketSeats);
+                    //     //         }
+                    //     //         console.log(`➕ [MATCHED - ${leg}] Added all seats from ticket ${ticket.ticketNumber} for leg ${leg}:`, ticketSeats);
+                    //     //     } else {
+                    //     //         // Fallback: pricing.seats
+                    //     //         const pricingSeats = ticket.pricing?.seats ?? [];
+                    //     //         const allSeats = pricingSeats.map((s: any) => s.number);
+                    //     //         if (leg === 'outbound') {
+                    //     //             outboundBooked.push(...allSeats);
+                    //     //         } else {
+                    //     //             inboundBooked.push(...allSeats);
+                    //     //         }
+                    //     //         console.log(`➕ [MATCHED - ${leg}] Added all seats from ticket ${ticket.ticketNumber} pricing for leg ${leg}:`, allSeats);
+                    //     //     }
+                    //     // }
+                    //     if (didMatch && (ticket.status === 'paid' || ticket.status === 'changed')) {
+                    //         hasMatch = true;
+                    //         const ticketSeats = ticket.seats ?? [];
+                    //         if (Array.isArray(ticketSeats) && ticketSeats.length > 0) {
+                    //             // Sửa: Nếu !isRoundtrip, luôn dùng 'outbound'
+                    //             const legToUse = !isRoundtrip ? 'outbound' : leg;  // leg là từ ticket
+                    //             if (legToUse === 'outbound') {
+                    //                 outboundBooked.push(...ticketSeats);
+                    //             } else {
+                    //                 inboundBooked.push(...ticketSeats);
+                    //             }
+                    //             console.log(`➕ [MATCHED - ${legToUse}] Added all seats from ticket ${ticket.ticketNumber} for leg ${legToUse}:`, ticketSeats);
+                    //         } else {
+                    //             // Sửa: Filter pricingSeats theo legToUse nếu có field leg
+                    //             const pricingSeats = ticket.pricing?.seats ?? [];
+                    //             const filteredSeats = pricingSeats.filter((s: any) => !s.leg || s.leg === legToUse);  // Nếu không có leg, giữ nguyên
+                    //             const allSeats = filteredSeats.map((s: any) => s.number);
+                    //             const legToUse = !isRoundtrip ? 'outbound' : leg;
+                    //             if (legToUse === 'outbound') {
+                    //                 outboundBooked.push(...allSeats);
+                    //             } else {
+                    //                 inboundBooked.push(...allSeats);
+                    //             }
+                    //             console.log(`➕ [MATCHED - ${legToUse}] Added all seats from ticket ${ticket.ticketNumber} pricing for leg ${legToUse}:`, allSeats);
+                    //         }
+                    //     }
+                    // });
+
+                    // const legsToCheck = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
+                    const legsToCheck = ['outbound', 'inbound'];
+
+
+                    // Bỏ logic legFromUniq, legFromPricing, outboundFlight, inboundFlight check
+                    // Chỉ dựa trên match với pricing của chuyến hiện tại
+
+                    // Sau đó, trong loop:
+                    for (const leg of legsToCheck) {
+                        const ticketFlight = leg === 'outbound' ? outboundFlight : (inboundFlight || outboundFlight);
+                        if (!ticketFlight) continue;
+
+                        ticketFlight.airline = ticketFlight.flightNumber.slice(0, 2).toUpperCase();
+                        // Thêm set depIata và arrIata từ itineraries
+                        ticketFlight.depIata = ticketFlight.itineraries?.[0]?.segments?.[0]?.departure?.iataCode;
+                        ticketFlight.arrIata = ticketFlight.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode;
+
+                        console.log(`🔍 [${leg}] ticketFlight fields: carrier=${ticketFlight.airline}, flightNum=${ticketFlight.flightNumber}, depIata=${ticketFlight.depIata}, arrIata=${ticketFlight.arrIata}, date=${ticketFlight.date}, time=${ticketFlight.time}`); // Log các trường match từ ticketFlight
+
+                        const pricingToUse = leg === 'outbound' ? (outboundCachedPricing || cachedPricing) : (inboundCachedPricing || cachedPricing);
+                        console.log(`🔍 [${leg}] pricingToUse:`, pricingToUse); // Log debug pricingToUse
                         const offer = extractOfferFromPricing(pricingToUse);
-                        const segment = offer?.itineraries?.[0]?.segments?.[0];
-                        if (segment && matchFlight(segment, outboundFlight, false)) {
-                            const outboundSeats = (ticket.seats || []).map((s: any) => typeof s === 'string' ? s : s.number);
-                            outboundBooked.push(...outboundSeats);
-                            console.log('➕ Added outbound seats from ticket:', ticket.ticketNumber, outboundSeats);
+                        console.log(`🔍 [${leg}] offer:`, offer); // Log debug offer
+
+                        const itineraryIndex = leg === 'outbound' ? 0 : (offer?.itineraries?.length > 1 ? 1 : 0);
+                        const segment = offer?.itineraries?.[itineraryIndex]?.segments?.[0];
+                        console.log(`🔍 [${leg}] segment:`, segment); // Log debug segment
+                        console.log(`🔍 [${leg}] segment fields: carrier=${segment?.carrierCode}, flightNum=${segment?.carrierCode + segment?.number}, depIata=${segment?.departure?.iataCode}, arrIata=${segment?.arrival?.iataCode}, date=${segment?.departure?.at?.split('T')?.[0]}, time=${segment?.departure?.at}`); // Log các trường match từ segment
+
+                        const didMatch = segment ? matchFlight(segment, ticketFlight) : false;
+
+                        if (didMatch && (ticket.status === 'paid' || ticket.status === 'changed')) {
+                            hasMatch = true;
+                            const ticketSeats = ticket.seats ?? [];
+                            if (Array.isArray(ticketSeats) && ticketSeats.length > 0) {
+                                // Sửa: Nếu !isRoundtrip, luôn dùng 'outbound'
+                                const legToUse = !isRoundtrip ? 'outbound' : leg;  // leg là từ ticket
+                                if (legToUse === 'outbound') {
+                                    outboundBooked.push(...ticketSeats);
+                                } else {
+                                    inboundBooked.push(...ticketSeats);
+                                }
+                                console.log(`➕ [MATCHED - ${legToUse}] Added all seats from ticket ${ticket.ticketNumber} for leg ${legToUse}:`, ticketSeats);
+                            } else {
+                                // Sửa: Filter pricingSeats theo legToUse nếu có field leg
+                                const pricingSeats = ticket.pricing?.seats ?? [];
+                                const filteredSeats = pricingSeats.filter((s: any) => !s.leg || s.leg === legToUse);  // Nếu không có leg, giữ nguyên
+                                const allSeats = filteredSeats.map((s: any) => s.number);
+                                const legToUse = !isRoundtrip ? 'outbound' : leg;
+                                if (legToUse === 'outbound') {
+                                    outboundBooked.push(...allSeats);
+                                } else {
+                                    inboundBooked.push(...allSeats);
+                                }
+                                console.log(`➕ [MATCHED - ${legToUse}] Added all seats from ticket ${ticket.ticketNumber} pricing for leg ${legToUse}:`, allSeats);
+                            }
                         }
                     }
-
-                    // So khớp inbound (nếu roundtrip)
-                    if (inboundFlight && (inboundCachedPricing || cachedPricing) && ticketLeg === 'inbound') {
-                        const pricingToUse = inboundCachedPricing || cachedPricing;  // Sử dụng cachedPricing nếu cần
-                        const offer = extractOfferFromPricing(pricingToUse);
-                        const segment = offer?.itineraries?.[0]?.segments?.[0];
-                        if (segment && matchFlight(segment, inboundFlight, true)) {
-                            const inboundSeats = (ticket.seats || []).map((s: any) => typeof s === 'string' ? s : s.number);
-                            inboundBooked.push(...inboundSeats);
-                            console.log('➕ Added inbound seats from ticket:', ticket.ticketNumber, inboundSeats);
-                        }
+                    if (!hasMatch) {
+                        console.log(`➖ No match for ticket ${ticket.ticketNumber}`);
                     }
                 });
 
-                // Loại bỏ duplicate seats
-                console.log('📋 Final outbound booked seats (before dedupe):', outboundBooked);
-                console.log('📋 Final inbound booked seats (before dedupe):', inboundBooked);
                 setBookedSeatsByLeg({
                     outbound: [...new Set(outboundBooked)],
                     inbound: [...new Set(inboundBooked)],
@@ -573,16 +832,26 @@ export default function ChiTietVeMayBay() {
                 if (seatRows.length > 0) {
                     const markedRows = markOccupiedSeats(seatRows, selectedLeg);
                     setSeatRows(markedRows);
-                    setMarkedSeatRows(markedRows);  // Thêm dòng này để update markedSeatRows ngay lập tức
+                    setMarkedSeatRows(markedRows);
                 }
-                console.log('✅ Final bookedSeatsByLeg:', { outbound: [...new Set(outboundBooked)], inbound: [...new Set(inboundBooked)] });
+
+                // Thêm log tổng cho cả hai chuyến
+                console.log('📊 Tổng bookedSeatsByLeg (ghế từ vé đã đặt):', bookedSeatsByLeg);
+                console.log('📊 Tổng ghế booked outbound:', bookedSeatsByLeg.outbound.length);
+                console.log('📊 Tổng ghế booked inbound:', bookedSeatsByLeg.inbound.length);
+
+                console.log('✅ Final bookedSeatsByLeg (including paid and changed):', { outbound: [...new Set(outboundBooked)], inbound: [...new Set(inboundBooked)] });
+                setIsLoadingSeatmap(false);
             } catch (e) {
                 console.warn('Error fetching/matching tickets', e);
+                setIsLoadingSeatmap(false);
             }
         };
 
         fetchAndMatchTickets();
-    }, [id, cachedPricing, inboundCachedPricing]);
+    }, [id, cachedPricing, inboundCachedPricing, selectedLeg]);
+    // ...existing code...
+
 
     // const markedSeatRows = useMemo(() => markOccupiedSeats(seatRows, selectedLeg), [seatRows, selectedLeg]);
 
@@ -792,7 +1061,7 @@ export default function ChiTietVeMayBay() {
 
     //     return outboundTotal + inboundTotal;
     // };
-    
+
 
 
     // compute only extras (add-ons + seat fees) to be added on top of derived.offerTotal when present
@@ -993,7 +1262,7 @@ export default function ChiTietVeMayBay() {
             });
     };
 
-  
+
 
     // useEffect(() => {
     //     const max = participants.adults + participants.children;
@@ -1034,18 +1303,20 @@ export default function ChiTietVeMayBay() {
     // }, [participants.adults, participants.children, parsedSeatmaps, isRoundtrip, bookedSeatsByLeg]);
 
     // --- NEW: safe number parser + derive traveler-level pricing when available ---
-   
+
     useEffect(() => {
         setSelectedSeatsByLeg((prev) => ({
             outbound: prev.outbound.filter(s => !bookedSeatsByLeg.outbound.includes(s.number)),
             inbound: prev.inbound.filter(s => !bookedSeatsByLeg.inbound.includes(s.number)),
         }));
     }, [bookedSeatsByLeg]);
+
+
     useEffect(() => {
         const max = participants.adults + participants.children;
         const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
         legs.forEach((leg) => {
-            // Remove ghế đã booked khỏi selectedSeatsByLeg
+            // Remove ghế đã booked khỏi selectedSeatsByLeg - nhưng bookedSeatsByLeg luôn rỗng
             const currentSeats = selectedSeatsByLeg[leg].filter(s => !bookedSeatsByLeg[leg].includes(s.number));
             setSelectedSeatsByLeg((prev) => ({
                 ...prev,
@@ -1066,7 +1337,7 @@ export default function ChiTietVeMayBay() {
                     const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
                     const hasCH = chars.includes('CH');
                     const priceIsZero = Number(s.price || 0) === 0;
-                    // Thêm check: loại bỏ ghế đã booked
+                    // Thêm check: loại bỏ ghế đã booked - nhưng luôn false
                     const isBooked = bookedSeatsByLeg[leg].includes(s.number);
                     return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id) && !isBooked;
                 });
@@ -1086,7 +1357,8 @@ export default function ChiTietVeMayBay() {
             }
         });
     }, [participants.adults, participants.children, parsedSeatmaps, isRoundtrip, bookedSeatsByLeg]);
-   
+
+
     const parseNumberSafe = (v: any) => {
         if (v == null) return 0;
         const n = Number(String(v).replace(/[^\d.-]/g, ''));
@@ -1294,44 +1566,66 @@ export default function ChiTietVeMayBay() {
     };
     const totalCombined = calculateTotal();
     // --- NEW: when user switches selectedLeg show parsed seatmap/amenities/pricing for that leg if available ---
-   
-    useEffect(() => {
-        if (seatRows.length > 0) {
-            const markedRows = markOccupiedSeats(seatRows, selectedLeg);
-            setMarkedSeatRows(markedRows);
-            console.log('🔄 Updated markedSeatRows for leg:', selectedLeg, 'seats:', markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED').map(s => s.number)));
-        }
-    }, [bookedSeatsByLeg, selectedLeg, seatRows]);
+
+    // useEffect(() => {
+    //     if (seatRows.length > 0) {
+    //         const markedRows = markOccupiedSeats(seatRows, selectedLeg);
+    //         setMarkedSeatRows(markedRows);
+    //         console.log('🔄 Updated markedSeatRows for leg:', selectedLeg, 'seats:', markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED').map(s => s.number)));
+    //     }
+    // }, [bookedSeatsByLeg, selectedLeg, seatRows]);
+
+    // ...existing code...
+
 
     useEffect(() => {
         if (!isRoundtrip) return;
+        setIsLoadingSeatmap(true);
         const leg = selectedLeg;
+        console.log('🔄 Switching to leg:', leg); // Thêm log debug selectedLeg
         // Reset seatRows trước khi load mới
         setSeatRows([]);
         const parsed = parsedSeatmaps[leg] || [];
-        if (parsed.length > 0) {
-            // Chỉ sử dụng ghế đã chọn và đã đặt của chặng hiện tại
-            const markedRows = markOccupiedSeats(parsed, leg);
+
+        if (parsed.length === 0 && cachedSeatmap && cachedSeatmap[leg]) {
+            // Parse on the fly nếu có cachedSeatmap[leg]
+            const raw = cachedSeatmap[leg];
+            const parsedOnFly = parseSeatmap(raw);
+            const markedRows = markOccupiedSeats(parsedOnFly.rows, leg);
             setSeatRows(markedRows);
             setMarkedSeatRows(markedRows);
-        } else if (cachedSeatmap && cachedSeatmap[leg]) {
-            const parsedOnTheFly = parseSeatmap(cachedSeatmap[leg]);
-            const markedRows = markOccupiedSeats(parsedOnTheFly.rows || [], leg);
+            setAircraftAmenities(parsedOnFly.amenities);
+        } else if (parsed.length === 0 && cachedSeatmap) {
+            // Backup: Nếu không có cachedSeatmap[leg], thử dùng cachedSeatmap của leg kia
+            const otherLeg = leg === 'outbound' ? 'inbound' : 'outbound';
+            if (cachedSeatmap[otherLeg]) {
+                console.warn(`⚠️ Backup: Dùng seatmap của ${otherLeg} cho ${leg} (có thể không chính xác)`);
+                const raw = cachedSeatmap[otherLeg];
+                const parsedOnFly = parseSeatmap(raw);
+                const markedRows = markOccupiedSeats(parsedOnFly.rows, leg); // Vẫn mark theo leg hiện tại
+                setSeatRows(markedRows);
+                setMarkedSeatRows(markedRows);
+                setAircraftAmenities(parsedOnFly.amenities);
+            } else {
+                // Không có data nào, set rỗng
+                const markedRows = [];
+                setSeatRows(markedRows);
+                setMarkedSeatRows(markedRows);
+            }
+        } else {
+            // Luôn mark, ngay cả nếu parsed rỗng (để log đúng leg và set seatRows = [])
+            const markedRows = parsed.length > 0 ? markOccupiedSeats(parsed, leg) : [];
             setSeatRows(markedRows);
             setMarkedSeatRows(markedRows);
-            setParsedSeatmaps((prev) => ({ ...prev, [leg]: parsedOnTheFly.rows }));
-            setParsedAmenitiesByLeg((prev) => ({ ...prev, [leg]: parsedOnTheFly.amenities }));
         }
 
         const amen = parsedAmenitiesByLeg[leg] ?? cachedSeatmap?.[leg]?.aircraftCabinAmenities ?? null;
         if (amen) setAircraftAmenities(amen);
 
-        if (leg === "outbound" && outboundCachedPricing) {
-            setCachedPricing(outboundCachedPricing);
-        } else if (leg === "inbound" && inboundCachedPricing) {
-            setCachedPricing(inboundCachedPricing);
-        }
-    }, [selectedLeg, parsedSeatmaps, parsedAmenitiesByLeg, cachedSeatmap, outboundCachedPricing, inboundCachedPricing, isRoundtrip, bookedSeatsByLeg]);
+        // Fix: Luôn set cachedPricing dựa trên leg, kể cả null (để tránh giữ giá trị cũ)
+        setCachedPricing(leg === "outbound" ? outboundCachedPricing : inboundCachedPricing);
+        setIsLoadingSeatmap(false);
+    }, [selectedLeg, cachedSeatmap, outboundCachedPricing, inboundCachedPricing, isRoundtrip, bookedSeatsByLeg]);
 
     // airport lookup map loaded from public/airport.json (client-side)
     const [airportsMap, setAirportsMap] = useState<Record<string, any> | null>(null);
@@ -1376,702 +1670,627 @@ export default function ChiTietVeMayBay() {
     };
 
     // Thêm: Tính derived riêng cho outbound và inbound
-  
+
     return (
         <>
-            {/* Breadcrumb */}
-            <div className="border-b">
-                <div className="container py-4">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Link prefetch={false} href="/" className="hover:text-primary">Trang chủ</Link>
-                        <span>/</span>
-                        <Link prefetch={false} href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
-                        <span>/</span>
-                        <span>Chi tiết chuyến bay</span>
+            {error && (
+                <div className="container py-6">
+                    <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
+                        <AlertCircle className="h-5 w-5 inline mr-2" />
+                        {error}
                     </div>
+                    <Button variant="outline" asChild className="mt-4">
+                        <Link prefetch={false} href="/ve-may-bay">
+                            Quay lại tìm kiếm chuyến bay
+                        </Link>
+                    </Button>
                 </div>
-            </div>
+            )}
+            {!error && (
 
-            <div className="container py-6">
-                {/* --- NEW: Roundtrip leg tabs (minimal, only affects leg selection/display) --- */}
-                {isRoundtrip && (
-                    <div className="mb-4 flex items-center gap-3">
-                        <div className="inline-flex rounded-md bg-[hsl(var(--muted))]/5 p-1">
-                            <button
-                                onClick={() => setSelectedLeg('outbound')}
-                                className={`px-4 py-1 rounded-md ${selectedLeg === 'outbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}
-                            >
-                                Chuyến đi
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                    {(() => {
-                                        const o = extractOfferFromPricing(outboundCachedPricing) ?? mappedOffer?.rawOffer ?? null;
-                                        const p = o?.price?.total ?? cachedPricing?.price?.total ?? null;
-                                        if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
-                                        return null;
-                                    })()}
-                                </div>
-                            </button>
-                            <button
-                                onClick={() => setSelectedLeg('inbound')}
-                                disabled={!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound}
-                                className={`px-4 py-1 rounded-md ${selectedLeg === 'inbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'} ${(!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                            >
-                                Chuyến về
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                    {(() => {
-                                        const i = extractOfferFromPricing(inboundCachedPricing) ?? null;
-                                        const p = i?.price?.total ?? null;
-                                        if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
-                                        return null;
-                                    })()}
-                                </div>
-                            </button>
-                        </div>
+                <>
 
-                        {/* quick indicator which leg is shown */}
-                        <div className="text-sm text-[hsl(var(--muted-foreground))] ml-2">
-                            Hiển thị: {selectedLeg === 'outbound' ? 'Chuyến đi' : 'Chuyến về'}
+                    {/* Breadcrumb */}
+                    <div className="border-b">
+                        <div className="container py-4">
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Link prefetch={false} href="/" className="hover:text-primary">Trang chủ</Link>
+                                <span>/</span>
+                                <Link prefetch={false} href="/ve-may-bay" className="hover:text-primary">Vé máy bay</Link>
+                                <span>/</span>
+                                <span>Chi tiết chuyến bay</span>
+                            </div>
                         </div>
                     </div>
-                )}
 
-                <div className="flex flex-col lg:flex-row gap-8">
-                    {/* Main Content */}
-                    <div className="flex-1 space-y-6">
-                        {/* Back Button */}
-                        <Button variant="outline" asChild className="w-fit">
-                            <Link prefetch={false} href="/ve-may-bay">
-                                <ChevronLeft className="h-4 w-4 mr-2" />
-                                Quay lại kết quả tìm kiếm
-                            </Link>
-                        </Button>
+                    <div className="container py-6">
+                        {/* --- NEW: Roundtrip leg tabs (minimal, only affects leg selection/display) --- */}
+                        {isRoundtrip && (
+                            <div className="mb-4 flex items-center gap-3">
+                                <div className="inline-flex rounded-md bg-[hsl(var(--muted))]/5 p-1">
+                                    <button
+                                        onClick={() => setSelectedLeg('outbound')}
+                                        className={`px-4 py-1 rounded-md ${selectedLeg === 'outbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}
+                                    >
+                                        Chuyến đi
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                            {(() => {
+                                                const o = extractOfferFromPricing(outboundCachedPricing) ?? mappedOffer?.rawOffer ?? null;
+                                                const p = o?.price?.total ?? cachedPricing?.price?.total ?? null;
+                                                if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
+                                                return null;
+                                            })()}
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setSelectedLeg('inbound')}
+                                        disabled={!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound}
+                                        className={`px-4 py-1 rounded-md ${selectedLeg === 'inbound' ? 'bg-white shadow-sm text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'} ${(!inboundCachedPricing && !cachedSeatmap?.inbound && !parsedSeatmaps?.inbound) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                                    >
+                                        Chuyến về
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                            {(() => {
+                                                const i = extractOfferFromPricing(inboundCachedPricing) ?? null;
+                                                const p = i?.price?.total ?? null;
+                                                if (p) return (currency === 'VND' ? formatPrice(Number(String(p).replace(/[^\d.-]/g, ''))) : `${p} ${currency}`);
+                                                return null;
+                                            })()}
+                                        </div>
+                                    </button>
+                                </div>
 
-                        {/* Flight Details */}
-                        <Card>
-                            <CardHeader>
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded bg-[hsl(var(--primary))/0.1] flex items-center justify-center">
-                                            <Plane className="h-5 w-5 text-[hsl(var(--primary))]" />
-                                        </div>
-                                        <div>
-                                            <div className="text-xl">
-                                                {isRoundtrip
-                                                    ? (selectedLeg === 'outbound'
-                                                        ? extractOfferFromPricing(outboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline
-                                                        : extractOfferFromPricing(inboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline)
-                                                    : extractOfferFromPricing(cachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline}
-                                            </div>
-                                            <div className="text-sm text-[hsl(var(--muted-foreground))] font-normal">
-                                                {isRoundtrip
-                                                    ? (selectedLeg === 'outbound'
-                                                        ? `${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`
-                                                        : `${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`)
-                                                    : `${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`}
-                                            </div>
-                                        </div>
-                                    </CardTitle>
-                                    {/* {flightDetails.discount && (
+                                {/* quick indicator which leg is shown */}
+                                <div className="text-sm text-[hsl(var(--muted-foreground))] ml-2">
+                                    Hiển thị: {selectedLeg === 'outbound' ? 'Chuyến đi' : 'Chuyến về'}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col lg:flex-row gap-8">
+                            {/* Main Content */}
+                            <div className="flex-1 space-y-6">
+                                {/* Back Button */}
+                                <Button variant="outline" asChild className="w-fit">
+                                    <Link prefetch={false} href="/ve-may-bay">
+                                        <ChevronLeft className="h-4 w-4 mr-2" />
+                                        Quay lại kết quả tìm kiếm
+                                    </Link>
+                                </Button>
+
+                                {/* Flight Details */}
+                                <Card>
+                                    <CardHeader>
+                                        <div className="flex items-center justify-between">
+                                            <CardTitle className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded bg-[hsl(var(--primary))/0.1] flex items-center justify-center">
+                                                    <Plane className="h-5 w-5 text-[hsl(var(--primary))]" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-xl">
+                                                        {isRoundtrip
+                                                            ? (selectedLeg === 'outbound'
+                                                                ? extractOfferFromPricing(outboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline
+                                                                : extractOfferFromPricing(inboundCachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline)
+                                                            : extractOfferFromPricing(cachedPricing)?.validatingAirlineCodes?.[0] ?? flightDetails.airline}
+                                                    </div>
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))] font-normal">
+                                                        {isRoundtrip
+                                                            ? (selectedLeg === 'outbound'
+                                                                ? `${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(outboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`
+                                                                : `${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`)
+                                                            : `${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} • ${extractOfferFromPricing(cachedPricing)?.itineraries?.[0]?.segments?.[0]?.aircraft?.code ?? flightDetails.aircraft}`}
+                                                    </div>
+                                                </div>
+                                            </CardTitle>
+                                            {/* {flightDetails.discount && (
                                         <Badge variant="destructive" className="text-lg">-{flightDetails.discount}%</Badge>
                                     )} */}
-                                </div>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                {/* Flight Route */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div className="text-center">
-                                        { /* prefer times from pricing itineraries if present */}
-                                        <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time}</div>
-                                        <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport}</div>
-                                        {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.departure.city}</div> */}
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* departure terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.terminal ?? flightDetails.departure.terminal}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date}</div>
-                                    </div>
-
-                                    <div className="flex flex-col items-center justify-center">
-                                        <div className="text-sm text-[hsl(var(--muted))] mb-2">{normalizedOffer?.itineraries?.[0]?.duration ?? flightDetails.duration}</div>
-                                        <div className="flex items-center w-full">
-                                            <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
-                                            <ArrowRight className="h-5 w-5 mx-2 text-[hsl(var(--muted-foreground))]" />
-                                            <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
                                         </div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Bay thẳng</div>
-                                    </div>
-
-                                    <div className="text-center">
-                                        <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}</div>
-                                        <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport}</div>
-                                        {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.city}</div> */}
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* arrival terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.slice(-1)[0]?.arrival?.terminal ?? flightDetails.arrival.terminal}</div>
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[0] ?? flightDetails.date}</div>
-
-                                    </div>
-                                </div>
-
-                                <Separator />
-
-                                {/* Flight Info */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    <div>
-                                        <h4 className="font-medium mb-2">Hành lý</h4>
-                                        <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-                                            <div className="flex items-center gap-2">
-                                                <Luggage className="h-4 w-4" />
-                                                {/*                                                Xách tay: {flightDetails.baggage.handbag} */}
-                                                {/* -                                                Xách tay: {displayCabin} */}
-                                                Xách tay: {displayCabin}
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        {/* Flight Route */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div className="text-center">
+                                                { /* prefer times from pricing itineraries if present */}
+                                                <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time}</div>
+                                                <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport}</div>
+                                                {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.departure.city}</div> */}
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* departure terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.terminal ?? flightDetails.departure.terminal}</div>
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date}</div>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <Luggage className="h-4 w-4" />
-                                                {/*                                                Ký gửi: {flightDetails.baggage.checkin} */}
-                                                {/* -                                                Ký gửi: {displayChecked} */}
-                                                Ký gửi: {displayChecked}
+
+                                            <div className="flex flex-col items-center justify-center">
+                                                <div className="text-sm text-[hsl(var(--muted))] mb-2">{normalizedOffer?.itineraries?.[0]?.duration ?? flightDetails.duration}</div>
+                                                <div className="flex items-center w-full">
+                                                    <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
+                                                    <ArrowRight className="h-5 w-5 mx-2 text-[hsl(var(--muted-foreground))]" />
+                                                    <div className="flex-1 h-px bg-[hsl(var(--muted))]"></div>
+                                                </div>
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Bay thẳng</div>
+                                            </div>
+
+                                            <div className="text-center">
+                                                <div className="text-2xl font-bold">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}</div>
+                                                <div className="text-lg font-medium">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport}</div>
+                                                {/* <div className="text-sm text-[hsl(var(--muted-foreground))]">{flightDetails.arrival.city}</div> */}
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">{/* arrival terminal */} Terminal {normalizedOffer?.itineraries?.[0]?.segments?.slice(-1)[0]?.arrival?.terminal ?? flightDetails.arrival.terminal}</div>
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{normalizedOffer?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[0] ?? flightDetails.date}</div>
+
                                             </div>
                                         </div>
-                                    </div>
 
-                                    <div>
-                                        <h4 className="font-medium mb-2">Tiện ích</h4>
-                                        <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            {/* load from aircraftAmenities if present */}
-                                            {aircraftAmenities?.seat && (
-                                                <div>Khoảng cách ghế: {aircraftAmenities.seat.legSpace}{aircraftAmenities.seat.spaceUnit ? ` ${aircraftAmenities.seat.spaceUnit}` : ''}</div>
-                                            )}
-                                            {aircraftAmenities?.food && (
-                                                <div>Suất ăn: {aircraftAmenities.food.isChargeable ? 'Có tính phí' : 'Miễn phí'}</div>
-                                            )}
-                                            {aircraftAmenities?.beverage && (
-                                                <div>Đồ uống: {aircraftAmenities.beverage.isChargeable ? 'Có tính phí' : 'Miễn phí'}</div>
-                                            )}
-                                        </div>
-                                    </div>
+                                        <Separator />
 
-                                    <div>
-                                        <h4 className="font-medium mb-2">Điều kiện vé</h4>
-                                        <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
-
-                                            <div>{isRefundable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div>
-                                            <div>{isChangeable ? '✓ Có thể đổi' : '✗ Không thể đổi'}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-
-                        {/* Add-on Services */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Dịch vụ bổ sung</CardTitle>
-                                <p className="text-[hsl(var(--muted-foreground))]">
-                                    Nâng cao trải nghiệm bay của bạn với các dịch vụ thêm
-                                </p>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {dynamicAddOnServices.map((service) => (
-                                        <div
-                                            key={service.id}
-                                            className={`border rounded-lg p-4 transition-colors ${selectedAddOnsByLeg[selectedLeg].includes(service.id)
-                                                ? 'border-primary bg-[hsl(var(--primary))/0.05]'
-                                                : 'hover:bg-[hsl(var(--muted))]'
-                                                }`}
-                                            onClick={() => toggleAddOn(service.id)}
-                                        >
-                                            <div className="flex items-start space-x-3">
-                                                <Checkbox
-                                                    checked={selectedAddOnsByLeg[selectedLeg].includes(service.id)}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    onCheckedChange={() => toggleAddOn(service.id)}
-                                                />
-                                                <div className="flex-1">
-                                                    <div className="flex items-center justify-between">
-                                                        <h4 className="font-medium">{service.name}</h4>
-                                                        <span className="font-bold text-[hsl(var(--primary))]">
-                                                            {service.currency && service.currency !== 'VND'
-                                                                ? `${Number(service.price).toLocaleString()} ${service.currency}`
-                                                                : formatPrice(Number(service.price))}
-                                                        </span>
+                                        {/* Flight Info */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                            <div>
+                                                <h4 className="font-medium mb-2">Hành lý</h4>
+                                                <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
+                                                    <div className="flex items-center gap-2">
+                                                        <Luggage className="h-4 w-4" />
+                                                        {/*                                                Xách tay: {flightDetails.baggage.handbag} */}
+                                                        {/* -                                                Xách tay: {displayCabin} */}
+                                                        Xách tay: {displayCabin}
                                                     </div>
-                                                    <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-                                                        {service.description ?? (service.raw ? JSON.stringify(service.raw).slice(0, 200) : '')}
-                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Luggage className="h-4 w-4" />
+                                                        {/*                                                Ký gửi: {flightDetails.baggage.checkin} */}
+                                                        {/* -                                                Ký gửi: {displayChecked} */}
+                                                        Ký gửi: {displayChecked}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="font-medium mb-2">Tiện ích</h4>
+                                                <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                    {/* load from aircraftAmenities if present */}
+                                                    {aircraftAmenities?.seat && (
+                                                        <div>Khoảng cách ghế: {aircraftAmenities.seat.legSpace}{aircraftAmenities.seat.spaceUnit ? ` ${aircraftAmenities.seat.spaceUnit}` : ''}</div>
+                                                    )}
+                                                    {aircraftAmenities?.food && (
+                                                        <div>Suất ăn: {aircraftAmenities.food.isChargeable ? 'Có tính phí' : 'Miễn phí'}</div>
+                                                    )}
+                                                    {aircraftAmenities?.beverage && (
+                                                        <div>Đồ uống: {aircraftAmenities.beverage.isChargeable ? 'Có tính phí' : 'Miễn phí'}</div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="font-medium mb-2">Điều kiện vé</h4>
+                                                <div className="space-y-1 text-sm text-[hsl(var(--muted-foreground))]">
+
+                                                    <div>{isRefundable ? '✓ Có hoàn hủy' : '✗ Không hoàn hủy'}</div>
+                                                    <div>{isChangeable ? '✓ Có thể đổi' : '✗ Không thể đổi'}</div>
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                        {/* Seatmap (showable, compact) */}
-                        <div ref={(el) => { seatmapRef.current = el as HTMLElement | null; }} className="shadow-lg rounded-2xl bg-white p-5">
-                            {/* Header */}
-                            <div className="mb-4">
-                                <h2 className="text-lg font-semibold flex items-center gap-2">
-                                    🪑 Sơ đồ chỗ ngồi
-                                </h2>
-                            </div>
+                                    </CardContent>
+                                </Card>
 
-                            {/* Info banner */}
-                            {showSeatSelectionInstruction && (
-                                <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm p-3 rounded-lg mb-4">
-                                    Bạn đã bật "Chọn chỗ ngồi". Nhấp vào sơ đồ bên dưới để chọn tối đa {totalParticipants} ghế.
-                                </div>
-                            )}
 
-                            {/* Empty state */}
-                            {seatRows.length === 0 && (
-                                <div className="text-center text-gray-500 text-sm py-6 border rounded-xl">
-                                    Không có dữ liệu sơ đồ ghế
-                                </div>
-                            )}
-
-                            {/* Cockpit */}
-                            <div className="flex justify-center mb-3">
-                                <div className="bg-gray-800 text-white text-xs font-semibold px-5 py-1.5 rounded-t-xl shadow-inner">
-                                    ✈ Buồng lái
-                                </div>
-                            </div>
-
-                            {/* Seat map */}
-                            <div className="space-y-3 flex flex-col items-center">
-                                {/** column layout: letters with aisles after C and F */}
-                                {markedSeatRows.map((row) => {
-                                    const letters = ['A', 'B', 'C', '_aisle', 'D', 'E', 'F', '_aisle', 'G', 'H', 'K'];
-                                    // map seats by letter for quick lookup
-                                    const seatMap: Record<string, any> = {};
-                                    row.seats.forEach((s: any) => {
-                                        const letter = String(s.number || '').replace(/^\d+/, '') || '';
-                                        seatMap[letter] = s;
-                                    });
-
-                                    // NEW: detect if any seat in this row will render a top price badge (CH + explicit price)
-                                    const rowHasTopBadge = row.seats.some((s: any) => {
-                                        const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-                                        const hasCH = charsUp.includes('CH');
-                                        const explicitPrice = Number(s.price || 0) > 0;
-                                        return hasCH && explicitPrice;
-                                    });
-
-                                    return (
-                                        // NOTE: added conditional padding-top when rowHasTopBadge to avoid price badge overlap
-                                        <div key={row.row} className={`grid grid-cols-[44px_repeat(11,44px)] items-center gap-2 relative ${rowHasTopBadge ? 'pt-4' : ''}`}>
-                                            {/* row number column */}
-                                            <div className="w-11 text-center font-bold text-sm">{row.row}</div>
-
-                                            {/* seats + aisles columns */}
-                                            {letters.map((col: string, idx) => {
-                                                if (col === '_aisle') {
-                                                    return (
-                                                        <div key={idx} className="h-10 flex items-center justify-center">
-                                                            <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center" >
-                                                                <span className='text-[10px] text-gray-500 space-x-1'>Lối đi</span>
+                                {/* Add-on Services */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle>Dịch vụ bổ sung</CardTitle>
+                                        <p className="text-[hsl(var(--muted-foreground))]">
+                                            Nâng cao trải nghiệm bay của bạn với các dịch vụ thêm
+                                        </p>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {dynamicAddOnServices.map((service) => (
+                                                <div
+                                                    key={service.id}
+                                                    className={`border rounded-lg p-4 transition-colors ${selectedAddOnsByLeg[selectedLeg].includes(service.id)
+                                                        ? 'border-primary bg-[hsl(var(--primary))/0.05]'
+                                                        : 'hover:bg-[hsl(var(--muted))]'
+                                                        }`}
+                                                    onClick={() => toggleAddOn(service.id)}
+                                                >
+                                                    <div className="flex items-start space-x-3">
+                                                        <Checkbox
+                                                            checked={selectedAddOnsByLeg[selectedLeg].includes(service.id)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onCheckedChange={() => toggleAddOn(service.id)}
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center justify-between">
+                                                                <h4 className="font-medium">{service.name}</h4>
+                                                                <span className="font-bold text-[hsl(var(--primary))]">
+                                                                    {service.currency && service.currency !== 'VND'
+                                                                        ? `${Number(service.price).toLocaleString()} ${service.currency}`
+                                                                        : formatPrice(Number(service.price))}
+                                                                </span>
                                                             </div>
-                                                        </div>
-                                                    );
-                                                }
-
-                                                const s = seatMap[col];
-                                                if (!s) {
-                                                    // empty seat placeholder (align grid)
-                                                    return <div key={idx} className="w-11 h-11" />;
-                                                }
-
-                                                const isSelected = !!selectedSeatsByLeg[selectedLeg].find(ss => ss.id === s.id);
-                                                const unavailable = s.availability !== 'AVAILABLE';
-
-
-                                                // detect paid seats: MUST have "CH" AND a numeric price (parsed to s.price)
-                                                const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
-                                                const hasCH = charsUp.includes('CH');
-                                                const explicitPrice = Number(s.price || 0) > 0;
-                                                const isPaid = hasCH && explicitPrice; // require BOTH
-                                                const isFree = !isPaid && Number(s.price || 0) === 0;
-
-                                                // determine seat type badge
-                                                let seatType = 'M';
-                                                if (charsUp.includes('EXIT') || charsUp.includes('EXIT_ROW')) seatType = 'EX';
-                                                else if (charsUp.includes('GALLEY') || charsUp.includes('GAL')) seatType = 'GAL';
-                                                else if (charsUp.includes('AISLE') || ['C', 'D', 'F', 'G'].includes(col)) seatType = 'A';
-                                                else if (charsUp.includes('WINDOW') || ['A', 'K', 'F'].includes(col)) seatType = 'W';
-
-                                                const baseUnavailable = 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed';
-                                                const baseSelected = 'bg-[hsl(var(--primary))] text-white shadow-md';
-                                                const baseFree = 'bg-white border border-gray-300 hover:bg-gray-50 cursor-pointer';
-                                                const basePaid = 'bg-yellow-50 border border-yellow-400 hover:bg-yellow-100 cursor-pointer ring-1 ring-yellow-200';
-
-                                                const base = unavailable
-                                                    ? baseUnavailable
-                                                    : isSelected
-                                                        ? baseSelected
-                                                        : isPaid
-                                                            ? basePaid
-                                                            : baseFree;
-
-                                                return (
-                                                    <div key={idx} className="relative flex items-center justify-center">
-                                                        <button
-                                                            title={`${s.number} • ${hasCH ? 'CH (có thể tính phí)' : 'Miễn phí'} • ${s.availability}${explicitPrice ? ` • ${s.currency} ${s.price.toLocaleString()}` : ''}`}
-                                                            onClick={() => toggleSeat(s)}
-                                                            className={`${base} w-11 h-11 rounded-md text-xs flex items-center justify-center transition`}
-                                                        >
-                                                            <div className="flex flex-col items-center">
-                                                                <span className="font-semibold text-xs leading-none">{s.number}</span>
-                                                                {/* quick cue inside seat: explicit price => currency symbol; CH present but no explicit price => "CH" */}
-                                                                {explicitPrice && s.price > 0 && s.availability === 'AVAILABLE' && (
-                                                                    <span className="text-[10px] text-yellow-700 mt-0.5"></span>
-                                                                )}
-                                                                {!explicitPrice && hasCH && s.availability === 'AVAILABLE' && (
-                                                                    <span className="text-[9px] text-yellow-700 mt-0.5 font-semibold">CH</span>
-                                                                )}
-                                                            </div>
-                                                        </button>
-
-                                                        {/* price badge: show amount only when CH present AND explicit price exists */}
-                                                        {(hasCH && explicitPrice) && s.availability === 'AVAILABLE' && (
-                                                            <div className="absolute -top-2 -right-2 bg-yellow-100 text-[10px] px-1 rounded border border-yellow-200 z-20 whitespace-nowrap">
-                                                                {s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price)}
-                                                            </div>
-                                                        )}
-
-                                                        {/* seat type tag bottom-left */}
-                                                        <div className="absolute -bottom-3 left-0 text-[10px] text-gray-600">
-                                                            <span className="inline-block px-1 py-0.5 bg-gray-100 rounded font-medium">{seatType}</span>
+                                                            <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
+                                                                {service.description ?? (service.raw ? JSON.stringify(service.raw).slice(0, 200) : '')}
+                                                            </p>
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
-
-                                            {/* exit indicator for certain rows (if any seat has EXIT char) */}
-                                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                                                {row.seats.some((s: any) => (s.characteristics ?? []).some((c: string) => /EXIT/i.test(String(c)))) && (
-                                                    <div className="text-xs text-red-600 font-semibold">🛟 Exit</div>
-                                                )}
-                                            </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    );
-                                })}
-                            </div>
-                            {/* Legend */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-600 mt-6">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded bg-[hsl(var(--primary))] border border-[hsl(var(--primary))]"></div>
-                                    <div>Đang chọn</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded border bg-white border-gray-300"></div>
-                                    <div>Ghế trống (AVAILABLE)</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]"></div>
-                                    <div>Ghế trả phí (CH hoặc có giá)</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
-                                    <div>Không khả dụng / Đã đặt</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">W</div>
-                                    <div>Cửa sổ (Window)</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">A</div>
-                                    <div>Hàng lối (Aisle)</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">EX</div>
-                                    <div>Cửa thoát hiểm</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">GAL</div>
-                                    <div>Galley</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-4 h-4 rounded bg-red-200 border border-red-300"></div>
-                                    <div>Ghế đã đặt (Occupied)</div>
-                                </div>
-                            </div>
-
-                            <p className="text-xs text-gray-500 mt-2">
-                                Ghế miễn phí sẽ tự gán nếu còn đủ cho {participants.adults + participants.children} khách. (em bé sẽ ngồi cùng người lớn)
-                            </p>
-                        </div>
-
-                        {/* Passenger Information */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Thông tin hành khách</CardTitle>
-                                <p className="text-red-600">
-                                    Vui lòng điền chính xác thông tin theo giấy tờ tùy thân và thông tin liên hệ
-                                </p>
-                            </CardHeader>
-                            <CardContent>
-                                <Tabs defaultValue="passenger" className="w-full">
-                                    <TabsList>
-                                        <TabsTrigger value="passenger">Hành khách</TabsTrigger>
-                                        <TabsTrigger value="contact">Thông tin liên hệ</TabsTrigger>
-                                    </TabsList>
-
-                                    <TabsContent value="passenger" className="space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <Label htmlFor="title">Danh xưng</Label>
-                                                <Select value={passengerInfo.title} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, title: value }))}>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="Mr">Ông</SelectItem>
-                                                        <SelectItem value="Mrs">Bà</SelectItem>
-                                                        <SelectItem value="Ms">Cô</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="firstName">Họ và tên đệm</Label>
-                                                <Input id="firstName" value={passengerInfo.firstName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, firstName: e.target.value }))} placeholder="VD: NGUYEN VAN" />
-                                                {passengerErrors.firstName && (
-                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.firstName}</div>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="lastName">Tên</Label>
-                                                <Input id="lastName" value={passengerInfo.lastName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, lastName: e.target.value }))} placeholder="VD: AN" />
-                                                {passengerErrors.lastName && (
-                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.lastName}</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <Label htmlFor="dateOfBirth">Ngày sinh</Label>
-                                                <Input id="dateOfBirth" type="date"
-                                                    className="block h-12 bg-white shadow-md text-black w-full"
-                                                    value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
-                                                {passengerErrors.dateOfBirth && (
-                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.dateOfBirth}</div>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="nationality">Quốc tịch</Label>
-                                                <Select value={passengerInfo.nationality} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, nationality: value }))}>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="VN">Việt Nam</SelectItem>
-                                                        <SelectItem value="US">Hoa Kỳ</SelectItem>
-                                                        <SelectItem value="GB">Anh</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <Label htmlFor="idType">Loại giấy tờ</Label>
-                                                <Select value={passengerInfo.idType} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, idType: value }))}>
-                                                    <SelectTrigger>
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="cccd">CCCD</SelectItem>
-                                                        <SelectItem value="cmnd">CMND</SelectItem>
-                                                        <SelectItem value="passport">Hộ chiếu</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="idNumber">Số giấy tờ</Label>
-                                                <Input id="idNumber" value={passengerInfo.idNumber} onChange={(e) => setPassengerInfo(prev => ({ ...prev, idNumber: e.target.value }))} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
-                                                {passengerErrors.idNumber && (
-                                                    <div className="text-xs text-red-600 mt-1">{passengerErrors.idNumber}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </TabsContent>
-
-                                    <TabsContent value="contact" className="space-y-4">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div>
-                                                <Label htmlFor="email">Email *</Label>
-                                                <Input id="email" type="email" value={contactInfo.email} onChange={(e) => setContactInfo(prev => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" />
-                                                {contactErrors.email && (
-                                                    <div className="text-xs text-red-600 mt-1">{contactErrors.email}</div>
-                                                )}
-                                            </div>
-                                            <div>
-                                                <Label htmlFor="phone">Số điện thoại *</Label>
-                                                <Input id="phone" value={contactInfo.phone} onChange={(e) => setContactInfo(prev => ({ ...prev, phone: e.target.value }))} placeholder="0912345678" />
-                                                {contactErrors.phone && (
-                                                    <div className="text-xs text-red-600 mt-1">{contactErrors.phone}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label htmlFor="address">Địa chỉ</Label>
-                                            <Input id="address" value={contactInfo.address} onChange={(e) => setContactInfo(prev => ({ ...prev, address: e.target.value }))} placeholder="Địa chỉ liên hệ" />
-                                        </div>
-                                    </TabsContent>
-                                </Tabs>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Sidebar - Booking Summary */}
-                    <div className="lg:w-96">
-                        <Card className="sticky top-20">
-                            <CardHeader>
-                                <CardTitle>Đặt vé máy bay</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                {/* Outbound Flight */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="font-medium">Chuyến đi</span>
-                                        <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                            {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
-                                            {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
-                                        </span>
+                                    </CardContent>
+                                </Card>
+                                {/* Seatmap (showable, compact) */}
+                                <div ref={(el) => { seatmapRef.current = el as HTMLElement | null; }} className="shadow-lg rounded-2xl bg-white p-5">
+                                    {/* Header */}
+                                    <div className="mb-4">
+                                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                                            🪑 Sơ đồ chỗ ngồi
+                                        </h2>
                                     </div>
-                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                        {/* {`${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`} */}
-                                        {(() => {
-                                            const seg = extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
-                                            const depCode = seg?.departure?.iataCode ?? flightDetails.departure.airport;
-                                            const arrCode = seg?.arrival?.iataCode ?? flightDetails.arrival.airport;
-                                            const depLabel = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.departure.city);
-                                            const arrLabel = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.arrival.city);
-                                            return `${depCode} (${depLabel}) → ${arrCode} (${arrLabel})`;
-                                        })()}
-                                        <br />
-                                        {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
-                                    </div>
-                                    <div className="space-y-1 mt-2">
-                                        <div className="flex justify-between">
-                                            <span>Người lớn ({participants.adults})</span>
-                                            <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.adultsUnit * participants.adults)) : `${Math.round(derivedOutbound.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
+
+                                    {/* Info banner */}
+                                    {showSeatSelectionInstruction && (
+                                        <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm p-3 rounded-lg mb-4">
+                                            Bạn đã bật "Chọn chỗ ngồi". Nhấp vào sơ đồ bên dưới để chọn tối đa {totalParticipants} ghế.
                                         </div>
-                                        {participants.children > 0 && (
-                                            <div className="flex justify-between">
-                                                <span>Trẻ em ({participants.children})</span>
-                                                <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.childrenUnit * participants.children)) : `${Math.round(derivedOutbound.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
+                                    )}
+
+                                    {/* Empty state */}
+                                    {seatRows.length === 0 && (
+                                        <div className="text-center text-gray-500 text-sm py-6 border rounded-xl">
+                                            Không có dữ liệu sơ đồ ghế
+                                        </div>
+                                    )}
+
+                                    {isLoadingSeatmap ? (
+                                        <div className="text-center text-gray-500 text-sm py-6 border rounded-xl">
+                                            Đang tải sơ đồ ghế...
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {/* Cockpit */}
+                                            <div className="flex justify-center mb-3">
+                                                <div className="bg-gray-800 text-white text-xs font-semibold px-5 py-1.5 rounded-t-xl shadow-inner">
+                                                    ✈ Buồng lái
+                                                </div>
                                             </div>
-                                        )}
-                                        {participants.infants > 0 && (
-                                            <div className="flex justify-between">
-                                                <span>Em bé ({participants.infants})</span>
-                                                <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.infantsUnit * participants.infants)) : `${Math.round(derivedOutbound.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
-                                            </div>
-                                        )}
-                                        {selectedAddOnsByLeg.outbound.length > 0 && (
-                                            <div className="space-y-1">
-                                                {selectedAddOnsByLeg.outbound.map((addOnId) => {
-                                                    const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
-                                                    if (!addOn) return null;
-                                                    const qty = addOnPerPassenger[addOnId] || 1; // Lấy số lượng
+
+                                            {/* Seat map */}
+                                            <div className="space-y-3 flex flex-col items-center">
+                                                {/** column layout: letters with aisles after C and F */}
+                                                {markedSeatRows.map((row) => {
+                                                    const letters = ['A', 'B', 'C', '_aisle', 'D', 'E', 'F', '_aisle', 'G', 'H', 'K'];
+                                                    // map seats by letter for quick lookup
+                                                    const seatMap: Record<string, any> = {};
+                                                    row.seats.forEach((s: any) => {
+                                                        const letter = String(s.number || '').replace(/^\d+/, '') || '';
+                                                        seatMap[letter] = s;
+                                                    });
+
+                                                    // NEW: detect if any seat in this row will render a top price badge (CH + explicit price)
+                                                    const rowHasTopBadge = row.seats.some((s: any) => {
+                                                        const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                                                        const hasCH = charsUp.includes('CH');
+                                                        const explicitPrice = Number(s.price || 0) > 0;
+                                                        return hasCH && explicitPrice;
+                                                    });
+
                                                     return (
-                                                        <div key={addOnId} className="flex justify-between text-sm">
-                                                            <span>{addOn.name} ({qty})</span>
-                                                            <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
+                                                        // NOTE: added conditional padding-top when rowHasTopBadge to avoid price badge overlap
+                                                        <div key={row.row} className={`grid grid-cols-[44px_repeat(11,44px)] items-center gap-2 relative ${rowHasTopBadge ? 'pt-4' : ''}`}>
+                                                            {/* row number column */}
+                                                            <div className="w-11 text-center font-bold text-sm">{row.row}</div>
+
+                                                            {/* seats + aisles columns */}
+                                                            {letters.map((col: string, idx) => {
+                                                                if (col === '_aisle') {
+                                                                    return (
+                                                                        <div key={idx} className="h-10 flex items-center justify-center">
+                                                                            <div className="w-full h-full bg-gray-100 rounded flex items-center justify-center" >
+                                                                                <span className='text-[10px] text-gray-500 space-x-1'>Lối đi</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                const s = seatMap[col];
+                                                                if (!s) {
+                                                                    // empty seat placeholder (align grid)
+                                                                    return <div key={idx} className="w-11 h-11" />;
+                                                                }
+
+                                                                const isSelected = !!selectedSeatsByLeg[selectedLeg].find(ss => ss.id === s.id);
+                                                                const unavailable = s.availability !== 'AVAILABLE';
+
+
+                                                                // detect paid seats: MUST have "CH" AND a numeric price (parsed to s.price)
+                                                                const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                                                                const hasCH = charsUp.includes('CH');
+                                                                const explicitPrice = Number(s.price || 0) > 0;
+                                                                const isPaid = hasCH && explicitPrice; // require BOTH
+                                                                const isFree = !isPaid && Number(s.price || 0) === 0;
+
+                                                                // determine seat type badge
+                                                                let seatType = 'M';
+                                                                if (charsUp.includes('EXIT') || charsUp.includes('EXIT_ROW')) seatType = 'EX';
+                                                                else if (charsUp.includes('GALLEY') || charsUp.includes('GAL')) seatType = 'GAL';
+                                                                else if (charsUp.includes('AISLE') || ['C', 'D', 'F', 'G'].includes(col)) seatType = 'A';
+                                                                else if (charsUp.includes('WINDOW') || ['A', 'K', 'F'].includes(col)) seatType = 'W';
+
+                                                                const baseUnavailable = 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed';
+                                                                const baseSelected = 'bg-[hsl(var(--primary))] text-white shadow-md';
+                                                                const baseFree = 'bg-white border border-gray-300 hover:bg-gray-50 cursor-pointer';
+                                                                const basePaid = 'bg-yellow-50 border border-yellow-400 hover:bg-yellow-100 cursor-pointer ring-1 ring-yellow-200';
+
+                                                                const base = unavailable
+                                                                    ? baseUnavailable
+                                                                    : isSelected
+                                                                        ? baseSelected
+                                                                        : isPaid
+                                                                            ? basePaid
+                                                                            : baseFree;
+
+                                                                return (
+                                                                    <div key={idx} className="relative flex items-center justify-center">
+                                                                        <button
+                                                                            title={`${s.number} • ${hasCH ? 'CH (có thể tính phí)' : 'Miễn phí'} • ${s.availability}${explicitPrice ? ` • ${s.currency} ${s.price.toLocaleString()}` : ''}`}
+                                                                            onClick={() => toggleSeat(s)}
+                                                                            className={`${base} w-11 h-11 rounded-md text-xs flex items-center justify-center transition`}
+                                                                        >
+                                                                            <div className="flex flex-col items-center">
+                                                                                <span className="font-semibold text-xs leading-none">{s.number}</span>
+                                                                                {/* quick cue inside seat: explicit price => currency symbol; CH present but no explicit price => "CH" */}
+                                                                                {explicitPrice && s.price > 0 && s.availability === 'AVAILABLE' && (
+                                                                                    <span className="text-[10px] text-yellow-700 mt-0.5"></span>
+                                                                                )}
+                                                                                {!explicitPrice && hasCH && s.availability === 'AVAILABLE' && (
+                                                                                    <span className="text-[9px] text-yellow-700 mt-0.5 font-semibold">CH</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </button>
+
+                                                                        {/* price badge: show amount only when CH present AND explicit price exists */}
+                                                                        {(hasCH && explicitPrice) && s.availability === 'AVAILABLE' && (
+                                                                            <div className="absolute -top-2 -right-2 bg-yellow-100 text-[10px] px-1 rounded border border-yellow-200 z-20 whitespace-nowrap">
+                                                                                {s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price)}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* seat type tag bottom-left */}
+                                                                        <div className="absolute -bottom-3 left-0 text-[10px] text-gray-600">
+                                                                            <span className="inline-block px-1 py-0.5 bg-gray-100 rounded font-medium">{seatType}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+
+                                                            {/* exit indicator for certain rows (if any seat has EXIT char) */}
+                                                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                                {row.seats.some((s: any) => (s.characteristics ?? []).some((c: string) => /EXIT/i.test(String(c)))) && (
+                                                                    <div className="text-xs text-red-600 font-semibold">🛟 Exit</div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}
                                             </div>
-                                        )}
-                                        {selectedSeatsByLeg.outbound.length > 0 && (
-                                            <div className="space-y-1">
-                                                {selectedSeatsByLeg.outbound.map((s) => (
-                                                    <div key={s.id} className="flex justify-between text-sm">
-                                                        <span>Ghế {s.number}</span>
-                                                        <span>{s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
-                                                    </div>
-                                                ))}
+                                            {/* Legend */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-600 mt-6">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded bg-[hsl(var(--primary))] border border-[hsl(var(--primary))]"></div>
+                                                    <div>Đang chọn</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border bg-white border-gray-300"></div>
+                                                    <div>Ghế trống (AVAILABLE)</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[10px]"></div>
+                                                    <div>Ghế trả phí (CH hoặc có giá)</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
+                                                    <div>Không khả dụng / Đã đặt</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">W</div>
+                                                    <div>Cửa sổ (Window)</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">A</div>
+                                                    <div>Hàng lối (Aisle)</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">EX</div>
+                                                    <div>Cửa thoát hiểm</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[10px]">GAL</div>
+                                                    <div>Galley</div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 rounded bg-red-200 border border-red-300"></div>
+                                                    <div>Ghế đã đặt (Occupied)</div>
+                                                </div>
                                             </div>
-                                        )}
-                                        <div className="flex justify-between font-semibold text-base mt-2">
-                                            <span>Tổng chuyến đi</span>
-                                            <span className="text-[hsl(var(--primary))]">
-                                                {(() => {
-                                                    const base = derivedOutbound.adultsUnit * participants.adults + derivedOutbound.childrenUnit * participants.children + derivedOutbound.infantsUnit * participants.infants;
-                                                    const addOns = selectedAddOnsByLeg.outbound.reduce((sum, id) => {
-                                                        const addOn = dynamicAddOnServices.find((s) => s.id === id);
-                                                        if (!addOn) return sum;
-                                                        const qty = addOnPerPassenger[id] ? totalParticipants : 1;
-                                                        return sum + (addOn.price * qty);
-                                                    }, 0);
-                                                    const seats = selectedSeatsByLeg.outbound.reduce((sum, s) => sum + (s.price || 0), 0);
-                                                    const total = base + addOns + seats;
-                                                    return currency === 'VND' ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
-                                                })()}
-                                            </span>
-                                        </div>
-                                    </div>
+
+                                        </>
+                                    )}
+
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        Ghế miễn phí sẽ tự gán nếu còn đủ cho {participants.adults + participants.children} khách. (em bé sẽ ngồi cùng người lớn)
+                                    </p>
                                 </div>
-                                <Separator />
-                                {/* Inbound Flight */}
-                                {isRoundtrip && inboundCachedPricing && (
-                                    <>
+
+                                {/* Passenger Information */}
+                                {/* <Card>
+                                    <CardHeader>
+                                        <CardTitle>Thông tin hành khách</CardTitle>
+                                        <p className="text-red-600">
+                                            Vui lòng điền chính xác thông tin theo giấy tờ tùy thân và thông tin liên hệ
+                                        </p>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <Tabs defaultValue="passenger" className="w-full">
+                                            <TabsList>
+                                                <TabsTrigger value="passenger">Hành khách</TabsTrigger>
+                                                <TabsTrigger value="contact">Thông tin liên hệ</TabsTrigger>
+                                            </TabsList>
+
+                                            <TabsContent value="passenger" className="space-y-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <div>
+                                                        <Label htmlFor="title">Danh xưng</Label>
+                                                        <Select value={passengerInfo.title} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, title: value }))}>
+                                                            <SelectTrigger>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="Mr">Ông</SelectItem>
+                                                                <SelectItem value="Mrs">Bà</SelectItem>
+                                                                <SelectItem value="Ms">Cô</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div>
+                                                        <Label htmlFor="firstName">Họ và tên đệm</Label>
+                                                        <Input id="firstName" value={passengerInfo.firstName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, firstName: e.target.value }))} placeholder="VD: NGUYEN VAN" />
+                                                        {passengerErrors.firstName && (
+                                                            <div className="text-xs text-red-600 mt-1">{passengerErrors.firstName}</div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <Label htmlFor="lastName">Tên</Label>
+                                                        <Input id="lastName" value={passengerInfo.lastName} onChange={(e) => setPassengerInfo(prev => ({ ...prev, lastName: e.target.value }))} placeholder="VD: AN" />
+                                                        {passengerErrors.lastName && (
+                                                            <div className="text-xs text-red-600 mt-1">{passengerErrors.lastName}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <Label htmlFor="dateOfBirth">Ngày sinh</Label>
+                                                        <Input id="dateOfBirth" type="date"
+                                                            className="block h-12 bg-white shadow-md text-black w-full"
+                                                            value={passengerInfo.dateOfBirth} onChange={(e) => setPassengerInfo(prev => ({ ...prev, dateOfBirth: e.target.value }))} />
+                                                        {passengerErrors.dateOfBirth && (
+                                                            <div className="text-xs text-red-600 mt-1">{passengerErrors.dateOfBirth}</div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <Label htmlFor="nationality">Quốc tịch</Label>
+                                                        <Select value={passengerInfo.nationality} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, nationality: value }))}>
+                                                            <SelectTrigger>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="VN">Việt Nam</SelectItem>
+                                                                <SelectItem value="US">Hoa Kỳ</SelectItem>
+                                                                <SelectItem value="GB">Anh</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <Label htmlFor="idType">Loại giấy tờ</Label>
+                                                        <Select value={passengerInfo.idType} onValueChange={(value) => setPassengerInfo(prev => ({ ...prev, idType: value }))}>
+                                                            <SelectTrigger>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="cccd">CCCD</SelectItem>
+                                                                <SelectItem value="cmnd">CMND</SelectItem>
+                                                                <SelectItem value="passport">Hộ chiếu</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div>
+                                                        <Label htmlFor="idNumber">Số giấy tờ</Label>
+                                                        <Input id="idNumber" value={passengerInfo.idNumber} onChange={(e) => setPassengerInfo(prev => ({ ...prev, idNumber: e.target.value }))} placeholder="Nhập số CCCD/CMND/Hộ chiếu" />
+                                                        {passengerErrors.idNumber && (
+                                                            <div className="text-xs text-red-600 mt-1">{passengerErrors.idNumber}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+
+                                            <TabsContent value="contact" className="space-y-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <Label htmlFor="email">Email *</Label>
+                                                        <Input id="email" type="email" value={contactInfo.email} onChange={(e) => setContactInfo(prev => ({ ...prev, email: e.target.value }))} placeholder="email@example.com" />
+                                                        {contactErrors.email && (
+                                                            <div className="text-xs text-red-600 mt-1">{contactErrors.email}</div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <Label htmlFor="phone">Số điện thoại *</Label>
+                                                        <Input id="phone" value={contactInfo.phone} onChange={(e) => setContactInfo(prev => ({ ...prev, phone: e.target.value }))} placeholder="0912345678" />
+                                                        {contactErrors.phone && (
+                                                            <div className="text-xs text-red-600 mt-1">{contactErrors.phone}</div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <Label htmlFor="address">Địa chỉ</Label>
+                                                    <Input id="address" value={contactInfo.address} onChange={(e) => setContactInfo(prev => ({ ...prev, address: e.target.value }))} placeholder="Địa chỉ liên hệ" />
+                                                </div>
+                                            </TabsContent>
+                                        </Tabs>
+                                    </CardContent>
+                                </Card> */}
+                            </div>
+
+                            {/* Sidebar - Booking Summary */}
+                            <div className="lg:w-96">
+                                <Card className="sticky top-20">
+                                    <CardHeader>
+                                        <CardTitle>Đặt vé máy bay</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {/* Outbound Flight */}
                                         <div>
                                             <div className="flex items-center justify-between mb-2">
-                                                <span className="font-medium">Chuyến về</span>
+                                                <span className="font-medium">Chuyến đi</span>
                                                 <span className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                    {/* {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
-                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} */}
-                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
-                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
+                                                    {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                                    {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
                                                 </span>
                                             </div>
                                             <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
-                                                <br />
-                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
-                                                {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ? flightDetails.departure.city : flightDetails.departure.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ? flightDetails.arrival.city : flightDetails.arrival.city})`}
-                                                <br />
-                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
+                                                {/* {`${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city}) → ${extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city})`} */}
                                                 {(() => {
-                                                    const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
-                                                    const depCode = seg?.departure?.iataCode ?? flightDetails.arrival.airport;
-                                                    const depCity = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.arrival.city);
-                                                    const arrCode = seg?.arrival?.iataCode ?? flightDetails.departure.airport;
-                                                    const arrCity = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.departure.city);
-                                                    // return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
-                                                    return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
-
+                                                    const seg = extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                    const depCode = seg?.departure?.iataCode ?? flightDetails.departure.airport;
+                                                    const arrCode = seg?.arrival?.iataCode ?? flightDetails.arrival.airport;
+                                                    const depLabel = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.departure.city);
+                                                    const arrLabel = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.arrival.city);
+                                                    return `${depCode} (${depLabel}) → ${arrCode} (${arrLabel})`;
                                                 })()}
                                                 <br />
-                                                {(() => {
-                                                    const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
-                                                    const date = seg?.departure?.at?.split('T')?.[0] ?? flightDetails.date;
-                                                    const depTime = seg?.departure?.at ? seg.departure.at.split('T')[1]?.slice(0, 5) : flightDetails.departure.time;
-                                                    const arrTime = seg?.arrival?.at ? seg.arrival.at.split('T')[1]?.slice(0, 5) : flightDetails.arrival.time;
-                                                    return `${date} • ${depTime} - ${arrTime}`;
-                                                })()}
+                                                {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(outboundCachedPricing || cachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time}
                                             </div>
                                             <div className="space-y-1 mt-2">
                                                 <div className="flex justify-between">
                                                     <span>Người lớn ({participants.adults})</span>
-                                                    <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.adultsUnit * participants.adults)) : `${Math.round(derivedInbound.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
+                                                    <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.adultsUnit * participants.adults)) : `${Math.round(derivedOutbound.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
                                                 </div>
                                                 {participants.children > 0 && (
                                                     <div className="flex justify-between">
                                                         <span>Trẻ em ({participants.children})</span>
-                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.childrenUnit * participants.children)) : `${Math.round(derivedInbound.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
+                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.childrenUnit * participants.children)) : `${Math.round(derivedOutbound.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
                                                     </div>
                                                 )}
                                                 {participants.infants > 0 && (
                                                     <div className="flex justify-between">
                                                         <span>Em bé ({participants.infants})</span>
-                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.infantsUnit * participants.infants)) : `${Math.round(derivedInbound.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
+                                                        <span>{currency === 'VND' ? formatPrice(Math.round(derivedOutbound.infantsUnit * participants.infants)) : `${Math.round(derivedOutbound.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
                                                     </div>
                                                 )}
-                                                {selectedAddOnsByLeg.inbound.length > 0 && (
+                                                {selectedAddOnsByLeg.outbound.length > 0 && (
                                                     <div className="space-y-1">
-                                                        {selectedAddOnsByLeg.inbound.map((addOnId) => {
+                                                        {selectedAddOnsByLeg.outbound.map((addOnId) => {
                                                             const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
                                                             if (!addOn) return null;
-                                                            const qty = addOnPerPassenger[addOnId] || 1; // Sử dụng số lượng từ state
+                                                            const qty = addOnPerPassenger[addOnId] || 1; // Lấy số lượng
                                                             return (
                                                                 <div key={addOnId} className="flex justify-between text-sm">
                                                                     <span>{addOn.name} ({qty})</span>
@@ -2081,9 +2300,9 @@ export default function ChiTietVeMayBay() {
                                                         })}
                                                     </div>
                                                 )}
-                                                {selectedSeatsByLeg.inbound.length > 0 && (
+                                                {selectedSeatsByLeg.outbound.length > 0 && (
                                                     <div className="space-y-1">
-                                                        {selectedSeatsByLeg.inbound.map((s) => (
+                                                        {selectedSeatsByLeg.outbound.map((s) => (
                                                             <div key={s.id} className="flex justify-between text-sm">
                                                                 <span>Ghế {s.number}</span>
                                                                 <span>{s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
@@ -2092,17 +2311,18 @@ export default function ChiTietVeMayBay() {
                                                     </div>
                                                 )}
                                                 <div className="flex justify-between font-semibold text-base mt-2">
-                                                    <span>Tổng chuyến về</span>
+                                                    <span>Tổng chuyến đi</span>
                                                     <span className="text-[hsl(var(--primary))]">
                                                         {(() => {
-                                                            const base = derivedInbound.adultsUnit * participants.adults + derivedInbound.childrenUnit * participants.children + derivedInbound.infantsUnit * participants.infants;
-                                                            const addOns = selectedAddOnsByLeg.inbound.reduce((sum, id) => {
+                                                            const base = derivedOutbound.adultsUnit * participants.adults + derivedOutbound.childrenUnit * participants.children + derivedOutbound.infantsUnit * participants.infants;
+                                                            const addOns = selectedAddOnsByLeg.outbound.reduce((sum, id) => {
                                                                 const addOn = dynamicAddOnServices.find((s) => s.id === id);
                                                                 if (!addOn) return sum;
-                                                                const qty = addOnPerPassenger[id] ? totalParticipants : 1;
+                                                                // Sửa: Sử dụng giá trị số thực tế của addOnPerPassenger[id], không phải logic boolean
+                                                                const qty = addOnPerPassenger[id] || 1;
                                                                 return sum + (addOn.price * qty);
                                                             }, 0);
-                                                            const seats = selectedSeatsByLeg.inbound.reduce((sum, s) => sum + (s.price || 0), 0);
+                                                            const seats = selectedSeatsByLeg.outbound.reduce((sum, s) => sum + (s.price || 0), 0);
                                                             const total = base + addOns + seats;
                                                             return currency === 'VND' ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
                                                         })()}
@@ -2111,37 +2331,138 @@ export default function ChiTietVeMayBay() {
                                             </div>
                                         </div>
                                         <Separator />
-                                    </>
-                                )}
-                                {/* Grand Total */}
-                                <div className="flex justify-between font-bold text-lg">
-                                    <span>Tổng cộng</span>
-                                    <span className="text-[hsl(var(--primary))]">
-                                        {currency === 'VND' ? formatPrice(Math.round(calculateTotal())) : `${Math.round(calculateTotal()).toLocaleString()} ${currency}`}
-                                    </span>
-                                </div>
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                    Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
-                                </div>
-                                <Separator />
-                                {/* Important Notes */}
-                                <div className="space-y-2">
-                                    <div className="flex items-start gap-2">
-                                        <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
-                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                            Giá vé có thể thay đổi trong quá trình đặt chỗ
+                                        {/* Inbound Flight */}
+                                        {isRoundtrip && inboundCachedPricing && (
+                                            <>
+                                                <div>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="font-medium">Chuyến về</span>
+                                                        <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                            {/* {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                                    {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber} */}
+                                                            {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.carrierCode ?? flightDetails.airline}
+                                                            {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.number ?? flightDetails.flightNumber}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                        {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${flightDetails.arrival.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${flightDetails.departure.city})`}
+                                                <br />
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
+                                                        {/* {`${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ?? flightDetails.departure.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.iataCode ? flightDetails.departure.city : flightDetails.departure.city}) → ${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ?? flightDetails.arrival.airport} (${extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.iataCode ? flightDetails.arrival.city : flightDetails.arrival.city})`}
+                                                <br />
+                                                {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] ?? flightDetails.date} • {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.departure.time} - {extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0]?.arrival?.at?.split('T')?.[1]?.slice(0, 5) ?? flightDetails.arrival.time} */}
+                                                        {(() => {
+                                                            const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                            const depCode = seg?.departure?.iataCode ?? flightDetails.arrival.airport;
+                                                            const depCity = getAirportLabel(depCode, seg?.departure?.city ?? flightDetails.arrival.city);
+                                                            const arrCode = seg?.arrival?.iataCode ?? flightDetails.departure.airport;
+                                                            const arrCity = getAirportLabel(arrCode, seg?.arrival?.city ?? flightDetails.departure.city);
+                                                            // return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
+                                                            return `${depCode} (${depCity}) → ${arrCode} (${arrCity})`;
+
+                                                        })()}
+                                                        <br />
+                                                        {(() => {
+                                                            const seg = extractOfferFromPricing(inboundCachedPricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                            const date = seg?.departure?.at?.split('T')?.[0] ?? flightDetails.date;
+                                                            const depTime = seg?.departure?.at ? seg.departure.at.split('T')[1]?.slice(0, 5) : flightDetails.departure.time;
+                                                            const arrTime = seg?.arrival?.at ? seg.arrival.at.split('T')[1]?.slice(0, 5) : flightDetails.arrival.time;
+                                                            return `${date} • ${depTime} - ${arrTime}`;
+                                                        })()}
+                                                    </div>
+                                                    <div className="space-y-1 mt-2">
+                                                        <div className="flex justify-between">
+                                                            <span>Người lớn ({participants.adults})</span>
+                                                            <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.adultsUnit * participants.adults)) : `${Math.round(derivedInbound.adultsUnit * participants.adults).toLocaleString()} ${currency}`}</span>
+                                                        </div>
+                                                        {participants.children > 0 && (
+                                                            <div className="flex justify-between">
+                                                                <span>Trẻ em ({participants.children})</span>
+                                                                <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.childrenUnit * participants.children)) : `${Math.round(derivedInbound.childrenUnit * participants.children).toLocaleString()} ${currency}`}</span>
+                                                            </div>
+                                                        )}
+                                                        {participants.infants > 0 && (
+                                                            <div className="flex justify-between">
+                                                                <span>Em bé ({participants.infants})</span>
+                                                                <span>{currency === 'VND' ? formatPrice(Math.round(derivedInbound.infantsUnit * participants.infants)) : `${Math.round(derivedInbound.infantsUnit * participants.infants).toLocaleString()} ${currency}`}</span>
+                                                            </div>
+                                                        )}
+                                                        {selectedAddOnsByLeg.inbound.length > 0 && (
+                                                            <div className="space-y-1">
+                                                                {selectedAddOnsByLeg.inbound.map((addOnId) => {
+                                                                    const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                                    if (!addOn) return null;
+                                                                    const qty = addOnPerPassenger[addOnId] || 1; // Sử dụng số lượng từ state
+                                                                    return (
+                                                                        <div key={addOnId} className="flex justify-between text-sm">
+                                                                            <span>{addOn.name} ({qty})</span>
+                                                                            <span>{addOn.currency && addOn.currency !== 'VND' ? `${(addOn.price * qty).toLocaleString()} ${addOn.currency}` : formatPrice(addOn.price * qty)}</span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
+                                                        {selectedSeatsByLeg.inbound.length > 0 && (
+                                                            <div className="space-y-1">
+                                                                {selectedSeatsByLeg.inbound.map((s) => (
+                                                                    <div key={s.id} className="flex justify-between text-sm">
+                                                                        <span>Ghế {s.number}</span>
+                                                                        <span>{s.currency && s.currency !== 'VND' ? `${s.price.toLocaleString()} ${s.currency}` : formatPrice(s.price || 0)}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                        <div className="flex justify-between font-semibold text-base mt-2">
+                                                            <span>Tổng chuyến về</span>
+                                                            <span className="text-[hsl(var(--primary))]">
+                                                                {(() => {
+                                                                    const base = derivedInbound.adultsUnit * participants.adults + derivedInbound.childrenUnit * participants.children + derivedInbound.infantsUnit * participants.infants;
+                                                                    const addOns = selectedAddOnsByLeg.inbound.reduce((sum, id) => {
+                                                                        const addOn = dynamicAddOnServices.find((s) => s.id === id);
+                                                                        if (!addOn) return sum;
+                                                                        const qty = addOnPerPassenger[id] || 1;  // Sửa tương tự
+                                                                        return sum + (addOn.price * qty);
+                                                                    }, 0);
+                                                                    const seats = selectedSeatsByLeg.inbound.reduce((sum, s) => sum + (s.price || 0), 0);
+                                                                    const total = base + addOns + seats;
+                                                                    return currency === 'VND' ? formatPrice(total) : `${total.toLocaleString()} ${currency}`;
+                                                                })()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <Separator />
+                                            </>
+                                        )}
+                                        {/* Grand Total */}
+                                        <div className="flex justify-between font-bold text-lg">
+                                            <span>Tổng cộng</span>
+                                            <span className="text-[hsl(var(--primary))]">
+                                                {currency === 'VND' ? formatPrice(Math.round(calculateTotal())) : `${Math.round(calculateTotal()).toLocaleString()} ${currency}`}
+                                            </span>
                                         </div>
-                                    </div>
-                                    <div className="flex items-start gap-2">
-                                        <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
                                         <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                            Vé sẽ được giữ chỗ trong 15 phút
+                                            Tổng {totalParticipants} khách • Giá đã bao gồm thuế và phí
                                         </div>
-                                    </div>
-                                </div>
-                                {/* Action Buttons */}
-                                <div className="space-y-2 pt-4">
-                                    {/* <Button
+                                        <Separator />
+                                        {/* Important Notes */}
+                                        <div className="space-y-2">
+                                            <div className="flex items-start gap-2">
+                                                <AlertCircle className="h-4 w-4 text-[hsl(var(--warning))] mt-0.5" />
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                    Giá vé có thể thay đổi trong quá trình đặt chỗ
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-2">
+                                                <Info className="h-4 w-4 text-[hsl(var(--primary))] mt-0.5" />
+                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                    Vé sẽ được giữ chỗ trong 15 phút
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {/* Action Buttons */}
+                                        <div className="space-y-2 pt-4">
+                                            {/* <Button
                                         className="w-full"
                                         size="lg"
                                         onClick={() => {
@@ -2281,226 +2602,240 @@ export default function ChiTietVeMayBay() {
                                         Tiếp tục thanh toán
                                     </Button> */}
 
-                                    <Button
-                                        className="w-full"
-                                        size="lg"
-                                        onClick={() => {
-                                            if (!validateLeadPassengerAndContact()) {
-                                                window.scrollTo({ top: 200, behavior: "smooth" });
-                                                alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
-                                                return;
-                                            }
+                                            <Button
+                                                className="w-full"
+                                                size="lg"
+                                                onClick={() => {
 
-                                            // Hàm dọn dẹp booking cũ
-                                            const cleanOldBookings = () => {
-                                                Object.keys(sessionStorage).forEach(key => {
-                                                    if (key.startsWith('booking_')) {
-                                                        try {
-                                                            const data = JSON.parse(sessionStorage.getItem(key) || '{}');
-                                                            const isCurrentFlight = data.flights?.outbound?.id === id;
-                                                            const isExpired = Date.now() - (data.timestamp || 0) > 15 * 60 * 1000; // Hết hạn sau 15 phút
-                                                            if (isCurrentFlight && isExpired) {
-                                                                sessionStorage.removeItem(key);
-                                                            }
-                                                        } catch (e) {
-                                                            console.warn('Lỗi khi dọn dẹp booking cũ:', e);
-                                                        }
+                                                    if (!isLoggedIn()) {
+                                                        toast.info('Bạn chưa đăng nhập. Đang chuyển sang trang đăng nhập...');
+                                                        // Thêm delay 2.5 giây trước khi chuyển hướng
+                                                        setTimeout(() => {
+                                                            router.push(`/dang-nhap?redirect=${encodeURIComponent(window.location.pathname)}`);
+                                                        }, 2500); // 2.5 giây
+                                                        return;
                                                     }
-                                                });
-                                            };
 
-                                            // Hàm lấy bookingKey hiện có
-                                            const getExistingBookingKey = () => {
-                                                for (const key of Object.keys(sessionStorage)) {
-                                                    if (key.startsWith('booking_')) {
-                                                        try {
-                                                            const data = JSON.parse(sessionStorage.getItem(key) || '{}');
-                                                            if (
-                                                                data.flights?.outbound?.id === id &&
-                                                                Date.now() - (data.timestamp || 0) <= 15 * 60 * 1000 // Còn hạn trong 15 phút
-                                                            ) {
-                                                                return key;
+                                                    // if (!validateLeadPassengerAndContact()) {
+                                                    //     window.scrollTo({ top: 200, behavior: "smooth" });
+                                                    //     alert("Vui lòng điền đầy đủ thông tin hành khách và liên hệ trước khi tiếp tục.");
+                                                    //     return;
+                                                    // }
+
+                                                    // Hàm dọn dẹp booking cũ
+                                                    const cleanOldBookings = () => {
+                                                        Object.keys(sessionStorage).forEach(key => {
+                                                            if (key.startsWith('booking_')) {
+                                                                try {
+                                                                    const data = JSON.parse(sessionStorage.getItem(key) || '{}');
+                                                                    const isCurrentFlight = data.flights?.outbound?.id === id;
+                                                                    const isExpired = Date.now() - (data.timestamp || 0) > 15 * 60 * 1000; // Hết hạn sau 15 phút
+                                                                    if (isCurrentFlight && isExpired) {
+                                                                        sessionStorage.removeItem(key);
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.warn('Lỗi khi dọn dẹp booking cũ:', e);
+                                                                }
                                                             }
-                                                        } catch (e) {
-                                                            console.warn('Lỗi khi kiểm tra bookingKey:', e);
+                                                        });
+                                                    };
+
+                                                    // Hàm lấy bookingKey hiện có
+                                                    const getExistingBookingKey = () => {
+                                                        for (const key of Object.keys(sessionStorage)) {
+                                                            if (key.startsWith('booking_')) {
+                                                                try {
+                                                                    const data = JSON.parse(sessionStorage.getItem(key) || '{}');
+                                                                    if (
+                                                                        data.flights?.outbound?.id === id &&
+                                                                        Date.now() - (data.timestamp || 0) <= 15 * 60 * 1000 // Còn hạn trong 15 phút
+                                                                    ) {
+                                                                        return key;
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.warn('Lỗi khi kiểm tra bookingKey:', e);
+                                                                }
+                                                            }
                                                         }
+                                                        return null;
+                                                    };
+
+                                                    // Tính toán dữ liệu booking
+                                                    const paxCount = participants.adults + participants.children + participants.infants;
+                                                    const pricingPerPax = {
+                                                        adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
+                                                        childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
+                                                        infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
+                                                    };
+                                                    const paxTotals = {
+                                                        adultsTotal: pricingPerPax.adultUnit * participants.adults,
+                                                        childrenTotal: pricingPerPax.childUnit * participants.children,
+                                                        infantsTotal: pricingPerPax.infantUnit * participants.infants,
+                                                    };
+
+                                                    const addOnsDetailed = {
+                                                        outbound: selectedAddOnsByLeg.outbound.map((id) => {
+                                                            const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                            const qty = addOnPerPassenger[id] || 1; // Sử dụng số lượng
+                                                            return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: qty > 1, leg: "outbound" }; // perPassenger có thể giữ boolean nếu cần, nhưng qty là chính
+                                                        }),
+                                                        inbound: selectedAddOnsByLeg.inbound.map((id) => {
+                                                            const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
+                                                            const qty = addOnPerPassenger[id] || 1;
+                                                            return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: qty > 1, leg: "inbound" };
+                                                        }),
+                                                    };
+
+                                                    const seatsDetailed = {
+                                                        outbound: selectedSeatsByLeg.outbound.map((s) => ({
+                                                            id: s.id,
+                                                            number: s.number,
+                                                            price: Number(s.price) || 0,
+                                                            currency: s.currency || currency || "VND",
+                                                            leg: "outbound",
+                                                        })),
+                                                        inbound: selectedSeatsByLeg.inbound.map((s) => ({
+                                                            id: s.id,
+                                                            number: s.number,
+                                                            price: Number(s.price) || 0,
+                                                            currency: s.currency || currency || "VND",
+                                                            leg: "inbound",
+                                                        })),
+                                                    };
+
+                                                    const taxesEstimate = (() => {
+                                                        const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
+                                                        if (offerTotal && offerTotal > 0) {
+                                                            const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
+                                                            const t = Math.max(0, Math.round(offerTotal - paxSum));
+                                                            return t || 290000 * paxCount;
+                                                        }
+                                                        return 290000 * paxCount;
+                                                    })();
+
+                                                    const addOnsTotal = addOnsDetailed.outbound.reduce((s, a) => s + a.total, 0) + addOnsDetailed.inbound.reduce((s, a) => s + a.total, 0);
+                                                    const seatsTotal = seatsDetailed.outbound.reduce((s, a) => s + a.price, 0) + seatsDetailed.inbound.reduce((s, a) => s + a.price, 0);
+                                                    const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
+                                                    const estimatedTotal = passengerBaseTotal * (isRoundtrip ? 2 : 1) + taxesEstimate * (isRoundtrip ? 2 : 1) + addOnsTotal + seatsTotal;
+
+                                                    // const buildFlight = (pricing: any, isInbound: boolean = false) => {
+                                                    //     const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                    //     const dep = offerSeg?.departure ?? null;
+                                                    //     const arr = offerSeg?.arrival ?? null;
+                                                    //     const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
+                                                    //     const number = offerSeg?.number ?? null;
+                                                    //     const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
+                                                    //     const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
+                                                    //     const routeStr = isInbound
+                                                    //         ? `${arr?.iataCode ?? flightDetails.arrival.airport} → ${dep?.iataCode ?? flightDetails.departure.airport}`
+                                                    //         : `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
+                                                    //     const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
+                                                    //     const timeStr = dep?.at && arr?.at
+                                                    //         ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
+                                                    //         : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+
+                                                    //     return {
+                                                    //         id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
+                                                    //         flightNumber: flightNumberStr,
+                                                    //         airline: airlineName,
+                                                    //         route: routeStr,
+                                                    //         date: dateStr,
+                                                    //         time: timeStr,
+                                                    //         itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
+                                                    //         currency,
+                                                    //     };
+                                                    // };
+                                                    const buildFlight = (pricing: any, isInbound: boolean = false) => {
+                                                        const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
+                                                        const dep = offerSeg?.departure ?? null;
+                                                        const arr = offerSeg?.arrival ?? null;
+                                                        const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
+                                                        const number = offerSeg?.number ?? null;
+                                                        const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
+                                                        const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
+                                                        // Sửa: routeStr luôn là dep → arr
+                                                        const routeStr = `${dep?.iataCode} → ${arr?.iataCode}`;
+                                                        const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
+                                                        const timeStr = dep?.at && arr?.at
+                                                            ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
+                                                            : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
+
+                                                        return {
+                                                            id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
+                                                            flightNumber: flightNumberStr,
+                                                            airline: airlineName,
+                                                            route: routeStr,
+                                                            date: dateStr,
+                                                            time: timeStr,
+                                                            itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
+                                                            currency,
+                                                        };
+                                                    };
+
+                                                    const booking = {
+                                                        source: "megatrip-client",
+                                                        flights: {
+                                                            outbound: buildFlight(outboundCachedPricing || cachedPricing),
+                                                            inbound: isRoundtrip && inboundCachedPricing ? buildFlight(inboundCachedPricing, true) : null,
+                                                        },
+                                                        passengers: {
+                                                            counts: { ...participants },
+                                                            contactInfo,
+                                                            leadPassenger: passengerInfo,
+                                                        },
+                                                        pricingOutbound: derivedOutbound,  // Thêm: Lưu pricing riêng cho outbound
+                                                        pricingInbound: derivedInbound,    // Thêm: Lưu pricing riêng cho inbound
+                                                        pricing: {  // Giữ lại pricing tổng hợp nếu cần (cho backward compatibility)
+                                                            perPax: pricingPerPax,
+                                                            paxTotals,
+                                                            taxesEstimate,
+                                                            addOns: [...addOnsDetailed.outbound, ...addOnsDetailed.inbound],
+                                                            seats: [...seatsDetailed.outbound, ...seatsDetailed.inbound],
+                                                            passengerBaseTotal,
+                                                            addOnsTotal,
+                                                            seatsTotal,
+                                                            estimatedTotal,
+                                                            offerTotal: derived.offerTotal || null,
+                                                        },
+                                                        rawPricing: {
+                                                            outbound: outboundCachedPricing ?? cachedPricing ?? null,
+                                                            inbound: inboundCachedPricing ?? null,
+                                                        },
+                                                        timestamp: Date.now(),
+                                                    };
+
+                                                    try {
+                                                        // Dọn dẹp booking cũ
+                                                        cleanOldBookings();
+                                                        // Lấy bookingKey hiện có hoặc tạo mới
+                                                        let bookingKey = getExistingBookingKey();
+                                                        if (!bookingKey) {
+                                                            bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+                                                        }
+                                                        // Lưu booking vào sessionStorage
+                                                        sessionStorage.setItem(bookingKey, JSON.stringify(booking));
+                                                        // Chuyển hướng
+                                                        router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
+                                                    } catch (e) {
+                                                        console.error("Lỗi lưu booking", e);
+                                                        alert("Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.");
                                                     }
-                                                }
-                                                return null;
-                                            };
-
-                                            // Tính toán dữ liệu booking
-                                            const paxCount = participants.adults + participants.children + participants.infants;
-                                            const pricingPerPax = {
-                                                adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
-                                                childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
-                                                infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
-                                            };
-                                            const paxTotals = {
-                                                adultsTotal: pricingPerPax.adultUnit * participants.adults,
-                                                childrenTotal: pricingPerPax.childUnit * participants.children,
-                                                infantsTotal: pricingPerPax.infantUnit * participants.infants,
-                                            };
-
-                                            const addOnsDetailed = {
-                                                outbound: selectedAddOnsByLeg.outbound.map((id) => {
-                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
-                                                    const qty = addOnPerPassenger[id] || 1; // Sử dụng số lượng
-                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: qty > 1, leg: "outbound" }; // perPassenger có thể giữ boolean nếu cần, nhưng qty là chính
-                                                }),
-                                                inbound: selectedAddOnsByLeg.inbound.map((id) => {
-                                                    const svc = dynamicAddOnServices.find((s) => s.id === id) ?? { id, name: id, price: 0 };
-                                                    const qty = addOnPerPassenger[id] || 1;
-                                                    return { id: svc.id, name: svc.name, unitPrice: Number(svc.price) || 0, qty, total: (Number(svc.price) || 0) * qty, perPassenger: qty > 1, leg: "inbound" };
-                                                }),
-                                            };
-
-                                            const seatsDetailed = {
-                                                outbound: selectedSeatsByLeg.outbound.map((s) => ({
-                                                    id: s.id,
-                                                    number: s.number,
-                                                    price: Number(s.price) || 0,
-                                                    currency: s.currency || currency || "VND",
-                                                    leg: "outbound",
-                                                })),
-                                                inbound: selectedSeatsByLeg.inbound.map((s) => ({
-                                                    id: s.id,
-                                                    number: s.number,
-                                                    price: Number(s.price) || 0,
-                                                    currency: s.currency || currency || "VND",
-                                                    leg: "inbound",
-                                                })),
-                                            };
-
-                                            const taxesEstimate = (() => {
-                                                const offerTotal = parseNumberSafe(normalizedOffer?.price?.total ?? cachedPricing?.price?.total ?? 0);
-                                                if (offerTotal && offerTotal > 0) {
-                                                    const paxSum = (paxTotals.adultsTotal || 0) + (paxTotals.childrenTotal || 0) + (paxTotals.infantsTotal || 0);
-                                                    const t = Math.max(0, Math.round(offerTotal - paxSum));
-                                                    return t || 290000 * paxCount;
-                                                }
-                                                return 290000 * paxCount;
-                                            })();
-
-                                            const addOnsTotal = addOnsDetailed.outbound.reduce((s, a) => s + a.total, 0) + addOnsDetailed.inbound.reduce((s, a) => s + a.total, 0);
-                                            const seatsTotal = seatsDetailed.outbound.reduce((s, a) => s + a.price, 0) + seatsDetailed.inbound.reduce((s, a) => s + a.price, 0);
-                                            const passengerBaseTotal = paxTotals.adultsTotal + paxTotals.childrenTotal + paxTotals.infantsTotal;
-                                            const estimatedTotal = passengerBaseTotal * (isRoundtrip ? 2 : 1) + taxesEstimate * (isRoundtrip ? 2 : 1) + addOnsTotal + seatsTotal;
-
-                                            // const buildFlight = (pricing: any, isInbound: boolean = false) => {
-                                            //     const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
-                                            //     const dep = offerSeg?.departure ?? null;
-                                            //     const arr = offerSeg?.arrival ?? null;
-                                            //     const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
-                                            //     const number = offerSeg?.number ?? null;
-                                            //     const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
-                                            //     const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
-                                            //     const routeStr = isInbound
-                                            //         ? `${arr?.iataCode ?? flightDetails.arrival.airport} → ${dep?.iataCode ?? flightDetails.departure.airport}`
-                                            //         : `${dep?.iataCode ?? flightDetails.departure.airport} → ${arr?.iataCode ?? flightDetails.arrival.airport}`;
-                                            //     const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
-                                            //     const timeStr = dep?.at && arr?.at
-                                            //         ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
-                                            //         : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
-
-                                            //     return {
-                                            //         id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
-                                            //         flightNumber: flightNumberStr,
-                                            //         airline: airlineName,
-                                            //         route: routeStr,
-                                            //         date: dateStr,
-                                            //         time: timeStr,
-                                            //         itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
-                                            //         currency,
-                                            //     };
-                                            // };
-                                            const buildFlight = (pricing: any, isInbound: boolean = false) => {
-                                                const offerSeg = extractOfferFromPricing(pricing)?.itineraries?.[0]?.segments?.[0] ?? null;
-                                                const dep = offerSeg?.departure ?? null;
-                                                const arr = offerSeg?.arrival ?? null;
-                                                const carrier = offerSeg?.carrierCode ?? offerSeg?.operating?.carrierCode ?? null;
-                                                const number = offerSeg?.number ?? null;
-                                                const flightNumberStr = carrier && number ? `${carrier}${number}` : flightDetails.flightNumber;
-                                                const airlineName = (extractOfferFromPricing(pricing)?.validatingAirlineCodes && extractOfferFromPricing(pricing)?.validatingAirlineCodes[0]) || flightDetails.airline;
-                                                // Sửa: routeStr luôn là dep → arr
-                                                const routeStr = `${dep?.iataCode} → ${arr?.iataCode}`;
-                                                const dateStr = dep?.at?.split("T")?.[0] ?? flightDetails.date;
-                                                const timeStr = dep?.at && arr?.at
-                                                    ? `${dep.at.split("T")[1]?.slice(0, 5)} - ${arr.at.split("T")[1]?.slice(0, 5)}`
-                                                    : `${flightDetails.departure.time} - ${flightDetails.arrival.time}`;
-
-                                                return {
-                                                    id: extractOfferFromPricing(pricing)?.id ?? flightDetails.id,
-                                                    flightNumber: flightNumberStr,
-                                                    airline: airlineName,
-                                                    route: routeStr,
-                                                    date: dateStr,
-                                                    time: timeStr,
-                                                    itineraries: extractOfferFromPricing(pricing)?.itineraries ?? null,
-                                                    currency,
-                                                };
-                                            };
-
-                                            const booking = {
-                                                source: "megatrip-client",
-                                                flights: {
-                                                    outbound: buildFlight(outboundCachedPricing || cachedPricing),
-                                                    inbound: isRoundtrip && inboundCachedPricing ? buildFlight(inboundCachedPricing, true) : null,
-                                                },
-                                                passengers: {
-                                                    counts: { ...participants },
-                                                    contactInfo,
-                                                    leadPassenger: passengerInfo,
-                                                },
-                                                pricing: {
-                                                    perPax: pricingPerPax,
-                                                    paxTotals,
-                                                    taxesEstimate,
-                                                    addOns: [...addOnsDetailed.outbound, ...addOnsDetailed.inbound],
-                                                    seats: [...seatsDetailed.outbound, ...seatsDetailed.inbound],
-                                                    passengerBaseTotal,
-                                                    addOnsTotal,
-                                                    seatsTotal,
-                                                    estimatedTotal,
-                                                    offerTotal: derived.offerTotal || null,
-                                                },
-                                                rawPricing: {
-                                                    outbound: outboundCachedPricing ?? cachedPricing ?? null,
-                                                    inbound: inboundCachedPricing ?? null,
-                                                },
-                                                timestamp: Date.now(),
-                                            };
-
-                                            try {
-                                                // Dọn dẹp booking cũ
-                                                cleanOldBookings();
-                                                // Lấy bookingKey hiện có hoặc tạo mới
-                                                let bookingKey = getExistingBookingKey();
-                                                if (!bookingKey) {
-                                                    bookingKey = `booking_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-                                                }
-                                                // Lưu booking vào sessionStorage
-                                                sessionStorage.setItem(bookingKey, JSON.stringify(booking));
-                                                // Chuyển hướng
-                                                router.push(`/thanh-toan?bookingKey=${encodeURIComponent(bookingKey)}`);
-                                            } catch (e) {
-                                                console.error("Lỗi lưu booking", e);
-                                                alert("Không thể lưu dữ liệu thanh toán. Vui lòng thử lại.");
-                                            }
-                                        }}
-                                    >
-                                        Tiếp tục thanh toán
-                                    </Button>
-                                    {/* <Button variant="outline" className="w-full">
+                                                }}
+                                            >
+                                                Tiếp tục thanh toán
+                                            </Button>
+                                            {/* <Button variant="outline" className="w-full">
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         Thêm vào giỏ hàng
                                     </Button> */}
-                                </div>
-                            </CardContent>
-                        </Card>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
+                </>
+            )}
         </>
     );
 }

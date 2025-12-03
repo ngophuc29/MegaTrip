@@ -69,6 +69,7 @@ interface Tour {
     metaKeywords?: string;
     createdAt: string;
     updatedAt: string;
+    isCompleted: boolean;
 }
 
 interface TourFormData {
@@ -118,7 +119,7 @@ interface TourFormData {
 }
 
 interface TourFilters {
-    status: string;
+    visibility: string;
     category: string;
     priceRange?: [number, number];
     dateRange?: [string, string];
@@ -251,7 +252,7 @@ export default function Tours() {
     const [selectedTours, setSelectedTours] = useState<string[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filters, setFilters] = useState<TourFilters>({
-        status: "all",
+        visibility: "all",
         category: "all",
     });
     const [modalOpen, setModalOpen] = useState(false);
@@ -275,7 +276,7 @@ export default function Tours() {
         adultPrice: 0,
         childPrice: 0,
         infantPrice: 0,
-        maxGroupSize: 1,
+        maxGroupSize: 40,
         minBooking: 1,
         categoryId: "",
         tags: [],
@@ -305,7 +306,7 @@ export default function Tours() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-     
+
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
@@ -339,6 +340,12 @@ export default function Tours() {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<any>(null);
     const [originalTour, setOriginalTour] = useState<Tour | null>(null);
+    // Thêm state loading cho updateVisibility (nếu chưa có)
+    const [updatingVisibility, setUpdatingVisibility] = useState<string | null>(null);
+    const [hasBookings, setHasBookings] = useState<boolean>(false);
+    // Add state for total stats
+    const [totalTours, setTotalTours] = useState(0);
+    const [totalVisible, setTotalVisible] = useState(0);
     // add compress helpers (insert near top of file after imports)
     async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
         return new Promise((resolve) => {
@@ -396,6 +403,8 @@ export default function Tours() {
         const startDatesLocal = Array.isArray(t.startDates) ? t.startDates.map((d: string) => toLocal(d)) : (t.startDate ? [toLocal(t.startDate)] : []);
         const endDatesLocal = Array.isArray(t.endDates) ? t.endDates.map((d: string) => toLocal(d)) : (t.endDate ? [toLocal(t.endDate)] : []);
         const durationDisplay = (startDatesLocal[0] && endDatesLocal[0]) ? calculateDuration(startDatesLocal[0], endDatesLocal[0]) : (typeof t.duration === "number" ? `${t.duration} ngày ${Math.max(0, t.duration - 1)} đêm` : (t.duration || ""));
+        const now = new Date();
+        const isCompleted = Array.isArray(t.startDates) && t.startDates.length > 0 && t.startDates.every((d: string) => new Date(d) < now);
         return {
             id: t._id || t.id,
             name: t.name || "",
@@ -415,7 +424,7 @@ export default function Tours() {
             maxGroupSize: Number(t.maxGroupSize || 1),
             seatsBooked: Number(t.seatsBooked || 0),
             minBooking: Number(t.minBooking || 1),
-            status: t.status || "draft",
+            status: t.status || (t.isVisible ? "active" : "hidden"),
             highlight: Boolean(t.highlight),
             isVisible: Boolean(t.isVisible),
             categoryId: t.categoryId || "",
@@ -434,8 +443,32 @@ export default function Tours() {
             metaKeywords: t.metaKeywords || "",
             createdAt: t.createdAt || t.created_at || new Date().toISOString(),
             updatedAt: t.updatedAt || t.updated_at || new Date().toISOString(),
+            isCompleted,
         } as any;
     };
+
+
+    // Sửa hàm updateVisibility
+    const updateVisibility = async (id: string, isVisible: boolean) => {
+        setUpdatingVisibility(id); // Set loading
+        try {
+            const res = await fetch(`${API_BASE}/api/tours/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isVisible }),
+            });
+            if (!res.ok) throw new Error('Failed to update visibility');
+
+            // Cập nhật local state
+            setTours(prev => prev.map(t => t.id === id ? { ...t, isVisible } : t));
+            toast({ title: 'Cập nhật trạng thái thành công' });
+        } catch (err) {
+            toast({ title: 'Lỗi cập nhật trạng thái', variant: 'destructive' });
+        } finally {
+            setUpdatingVisibility(null); // Clear loading
+        }
+    };
+
 
     useEffect(() => {
         let mounted = true;
@@ -443,8 +476,22 @@ export default function Tours() {
             setIsLoading(true);
             setError(null);
             try {
-                // admin endpoint returns all tours (no isVisible filter)
-                const res = await fetch(`${API_BASE}/api/tours/admin`);
+                // Build query params for server-side filtering and pagination
+                const params = new URLSearchParams({
+                    page: pagination.current.toString(),
+                    pageSize: pagination.pageSize.toString(),
+                });
+                if (filters.visibility !== "all") {
+                    params.append("visibility", filters.visibility);
+                }
+                if (filters.category !== "all") {
+                    params.append("category", filters.category);
+                }
+                if (searchQuery.trim()) {
+                    params.append("search", searchQuery.trim());
+                }
+                // admin endpoint returns paginated and filtered tours
+                const res = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
                 if (!mounted) return;
                 if (!res.ok) {
                     console.warn("Fetch /api/tours/admin failed:", res.status);
@@ -453,10 +500,14 @@ export default function Tours() {
                 }
                 const body = await res.json().catch(() => null);
                 const data = body?.data || body;
-                if (Array.isArray(data) && data.length > 0) {
+                const total = body?.total || 0;
+                if (Array.isArray(data)) {
                     setTours(data.map(mapServerTour));
+                    setPagination(prev => ({ ...prev, total }));
                 } else {
-                    console.info("No tours returned from API — keeping mock data");
+                    console.info("No tours returned from API");
+                    setTours([]);
+                    setPagination(prev => ({ ...prev, total: 0 }));
                 }
             } catch (err) {
                 console.error("Error fetching admin tours:", err);
@@ -467,27 +518,37 @@ export default function Tours() {
         };
         load();
         return () => { mounted = false; };
-    }, []);
+    }, [pagination.current, pagination.pageSize, filters.visibility, filters.category, searchQuery]);
 
-    const filteredTours = mockTours
+    const filteredTours = tours
         .filter((tour) => {
-            if (filters.status !== "all" && tour.status !== filters.status) return false;
+            // Debug: Log filter visibility (giữ lại để debug)
+
+
+            if (filters.visibility !== "all") {
+                const expected = filters.visibility === "true";
+                if (tour.isVisible !== expected) {
+                    console.log(`[DEBUG] Tour ${tour.name} filtered out because isVisible ${tour.isVisible} !== ${expected}`);
+                    return false;
+                }
+            }
             if (filters.category !== "all" && tour.categoryId !== filters.category) return false;
             if (searchQuery && !tour.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
             return true;
-        })
-        .slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize);
+        });
 
     const toursData = {
-        data: filteredTours,
+        data: tours,  // Use tours directly
         pagination: {
-            total: filteredTours.length,
+            total: pagination.total,
         },
     };
 
     const refetch = () => {
-        setTours(mockTours);
-        toast({ title: "Dữ liệu đã được làm mới" });
+        // Trigger re-fetch by updating a dummy state or re-running useEffect
+        // Since useEffect depends on pagination, filters, searchQuery, we can force a re-run
+        setTours([]); // Temporarily clear to show loading
+        // The useEffect will re-run automatically due to dependencies
     };
 
     const toLocalInput = (d: Date) => {
@@ -1014,7 +1075,11 @@ export default function Tours() {
                 updatedAt: createdTour.updatedAt ?? new Date().toISOString(),
             } as any;
 
-            setTours(prev => [...prev, newTour]);
+            // Thêm tour mới và sort lại theo createdAt descending (mới nhất trước)
+            setTours(prev => {
+                const newList = [...prev, newTour];
+                return newList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+            });
             queryClient.invalidateQueries({ queryKey: ["tours"] });
             setModalOpen(false);
             resetForm();
@@ -1189,7 +1254,7 @@ export default function Tours() {
         },
     });
 
-    const total = toursData?.pagination?.total || 0;
+    const total = tours.length;
 
     // Form validation
     const validateForm = (data: TourFormData, modalMode: string, originalTour: Tour | null = null): Record<string, string> => {
@@ -1200,7 +1265,9 @@ export default function Tours() {
         }
 
 
-
+        if (!data.description || !data.description.trim()) {
+            errors.description = "Bạn phải nhập mô tả chi tiết";
+        }
         // if (!data.categoryId) {
         //     errors.categoryId = "Bạn phải chọn danh mục";
         // }
@@ -1209,11 +1276,24 @@ export default function Tours() {
             errors.departureFrom = "Bạn phải nhập điểm khởi hành";
         }
         if (!data.startLocation || !String(data.startLocation.pickupDropoff || "").trim()) {
-            errors.pickupDropoff = "Bạn phải nhập điểm đón chính (startLocation.pickupDropoff)";
+            errors.pickupDropoff = "Bạn phải nhập điểm đón chính ";
         }
 
         if (!data.destination.trim()) {
             errors.destination = "Bạn phải nhập điểm đến";
+        }
+        if (!data.startLocation || !String(data.startLocation.address || "").trim()) {
+            errors.startLocationAddress = "Bạn phải nhập địa chỉ điểm đón";
+        }
+
+        if (modalMode === "edit" && hasBookings && originalTour) {
+            const originalStarts = Array.isArray(originalTour.startDates)
+                ? originalTour.startDates.map(date => toLocalInput(new Date(date)))
+                : [toLocalInput(new Date(originalTour.startDate))];
+            const currentStarts = Array.isArray(data.startDates) ? data.startDates : [data.startDate];
+            if (JSON.stringify(originalStarts) !== JSON.stringify(currentStarts)) {
+                errors.startDate = "Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ. ";
+            }
         }
 
         // startDates: require at least one, each valid and not in past (chỉ nếu thay đổi)
@@ -1229,13 +1309,13 @@ export default function Tours() {
                     errors[`startDates_${i}`] = `Ngày bắt đầu thứ ${i + 1} không hợp lệ`;
                 } else {
                     // Chỉ check ngày quá khứ nếu là create hoặc ngày đã thay đổi
-                    const isChanged = modalMode === "create";
+                    let isChanged = modalMode === "create";  // <-- Changed from const to let
                     if (modalMode === "edit" && originalTour) {
                         const originalStarts = Array.isArray(originalTour.startDates)
                             ? originalTour.startDates.map(date => toLocalInput(new Date(date)))
                             : [toLocalInput(new Date(originalTour.startDate))];
                         if (originalStarts[i] !== d) {
-                            isChanged = true;
+                            isChanged = true;  // <-- Now this reassignment works
                         }
                     }
                     if (isChanged && dt.getTime() < now.getTime()) {
@@ -1279,23 +1359,29 @@ export default function Tours() {
             }
         }
 
-        if (data.adultPrice <= 0) {
-            errors.priceAdult = "Giá người lớn phải lớn hơn 0";
+        if (!data.adultPrice || data.adultPrice <= 0) {
+            errors.adultPrice = "Giá người lớn phải là số lớn hơn 0 và không được để trống";
         }
 
-        if (typeof data.childPrice !== "number" || isNaN(data.childPrice) || data.childPrice < 0) {
-            errors.childPrice = "Giá trẻ em (≥5 tuổi) phải là số không âm";
-        }
-        if (typeof data.infantPrice !== "number" || isNaN(data.infantPrice) || data.infantPrice < 0) {
-            errors.infantPrice = "Giá em bé (<5 tuổi) phải là số không âm";
-        }
-        if (typeof data.childPrice === "number" && typeof data.infantPrice === "number" && data.infantPrice > data.childPrice) {
-            errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em (≥5 tuổi)";
+        if (!data.childPrice || data.childPrice <= 0) {
+            errors.childPrice = "Giá trẻ em (≥5 tuổi) phải là số lớn hơn 0 và không được để trống";
         }
 
-        if (data.maxGroupSize < 1) {
-            errors.maxGroupSize = "Số chỗ tối đa phải ít nhất là 1";
+        if (!data.infantPrice || data.infantPrice <= 0) {
+            errors.infantPrice = "Giá em bé (<5 tuổi) phải là số lớn hơn 0 và không được để trống";
         }
+
+        // Giữ nguyên các check so sánh giá
+        if (typeof data.childPrice === "number" && typeof data.adultPrice === "number" && data.childPrice > data.adultPrice) {
+            errors.childPrice = "Giá trẻ em phải không lớn hơn giá người lớn";
+        }
+        if (typeof data.infantPrice === "number" && typeof data.childPrice === "number" && data.infantPrice > data.childPrice) {
+            errors.infantPrice = "Giá em bé phải không lớn hơn giá trẻ em";
+        }
+
+        // if (data.maxGroupSize < 1) {
+        //     errors.maxGroupSize = "Số chỗ tối đa phải ít nhất là 1";
+        // }
 
         if (data.minBooking < 1) {
             errors.minBooking = "Số booking tối thiểu phải ít nhất là 1";
@@ -1311,6 +1397,49 @@ export default function Tours() {
 
         return errors;
     };
+
+    useEffect(() => {
+        const errors = validateForm(formData, modalMode, originalTour);
+        setFormErrors(errors);
+    }, [formData, modalMode, originalTour]);
+    // Add useEffect to fetch total stats
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                // Build query params for current filters and search
+                const params = new URLSearchParams({
+                    page: '1',
+                    pageSize: '1',
+                });
+                if (filters.visibility !== "all") {
+                    params.append("visibility", filters.visibility);
+                }
+                if (filters.category !== "all") {
+                    params.append("category", filters.category);
+                }
+                if (searchQuery.trim()) {
+                    params.append("search", searchQuery.trim());
+                }
+                // Fetch total tours (filtered)
+                const resTotal = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
+                if (resTotal.ok) {
+                    const body = await resTotal.json();
+                    setTotalTours(body.total || 0);
+                }
+                // Fetch total visible tours (filtered + visibility=true)
+                params.set("visibility", "true");
+                const resVisible = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
+                if (resVisible.ok) {
+                    const body = await resVisible.json();
+                    setTotalVisible(body.total || 0);
+                }
+            } catch (err) {
+                console.error('Error fetching stats:', err);
+            }
+        };
+        fetchStats();
+    }, [filters.visibility, filters.category, searchQuery]);
 
     const isValidVideoUrl = (url: string): boolean => {
         const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
@@ -1365,7 +1494,7 @@ export default function Tours() {
             adultPrice: 0,
             childPrice: 0,
             infantPrice: 0,
-            maxGroupSize: 1,
+            maxGroupSize: 40,
             minBooking: 1,
             categoryId: "",
             tags: [],
@@ -1570,10 +1699,10 @@ export default function Tours() {
             sortable: true,
             render: (_, record: Tour) => (
                 <div className="text-sm">
-                    <div className="flex items-center">
+                    {/* <div className="flex items-center">
                         <Users className="w-3 h-3 mr-1" />
                         {record.seatsBooked}/{record.maxGroupSize}
-                    </div>
+                    </div> */}
                     <div
                         className={`text-xs ${record.maxGroupSize - record.seatsBooked <= record.maxGroupSize * 0.2
                             ? "text-orange-600"
@@ -1582,40 +1711,51 @@ export default function Tours() {
                                 : "text-green-600"
                             }`}
                     >
-                        {record.maxGroupSize - record.seatsBooked} chỗ trống
+                        {record.maxGroupSize - record.seatsBooked} chỗ
                     </div>
                 </div>
             ),
         },
-        {
-            key: "ratingsAverage",
-            title: "Đánh giá",
-            sortable: true,
-            render: (value, record: Tour) => (
-                <div className="text-sm">
-                    <div className="flex items-center">
-                        <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
-                        {value}
-                    </div>
-                    <div className="text-gray-500 text-xs">{record.ratingsQuantity} đánh giá</div>
-                </div>
-            ),
-        },
+        // {
+        //     key: "ratingsAverage",
+        //     title: "Đánh giá",
+        //     sortable: true,
+        //     render: (value, record: Tour) => (
+        //         <div className="text-sm">
+        //             <div className="flex items-center">
+        //                 <Star className="w-3 h-3 mr-1 text-yellow-500 fill-current" />
+        //                 {value}
+        //             </div>
+        //             <div className="text-gray-500 text-xs">{record.ratingsQuantity} đánh giá</div>
+        //         </div>
+        //     ),
+        // },
         {
             key: "isVisible",
-            title: "Hiển thị",
+            title: "Trạng thái",
             sortable: true,
-            render: (value: boolean) => (
-                <Badge
-                    className={
-                        value
-                            ? "bg-green-100 text-green-800 hover:bg-green-100"
-                            : "bg-gray-100 text-gray-800 hover:bg-gray-100"
-                    }
-                >
-                    {value ? "Hiện" : "Ẩn"}
-                </Badge>
-            ),
+            render: (value: boolean, record: Tour) => {
+                if (record.isCompleted && value) {
+                    return (
+                        <div className="flex items-center space-x-2">
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Hiện Hành</Badge>
+                            <Badge className="bg-red-600 text-white font-bold animate-pulse shadow-lg">Tour đã qua</Badge>
+                            <Button size="sm"
+                                className="bg-red-500 hover:bg-red-600 text-white font-semibold shadow-md hover:shadow-lg transition-all"
+                                onClick={() => updateVisibility(record.id, false)}
+                                disabled={updatingVisibility === record.id} // Disable khi loading
+                            >
+                                {updatingVisibility === record.id ? "Đang cập nhật..." : "Cập nhật"}
+                            </Button>
+                        </div>
+                    );
+                }
+                return (
+                    <Badge className={value ? "bg-green-100 text-green-800 hover:bg-green-100" : "bg-gray-100 text-gray-800 hover:bg-gray-100"}>
+                        {value ? "Hiện Hành" : "Ẩn"}
+                    </Badge>
+                );
+            },
         },
         {
             key: "highlight",
@@ -1634,7 +1774,7 @@ export default function Tours() {
 
     const handleEdit = (tour: Tour) => {
         setSelectedTour(tour);
-        setOriginalTour(tour); 
+        setOriginalTour(tour);
         setFormData({
             name: tour.name,
             slug: tour.slug,
@@ -1687,6 +1827,19 @@ export default function Tours() {
         setModalMode("edit");
         setModalOpen(true);
         setIsFormDirty(false);
+
+        // Fetch slots để check nếu có bookings
+        fetch(`${API_BASE}/api/tours/${tour.id}/slots`)
+            .then(res => res.json())
+            .then(data => {
+                const slots = data?.slots || [];
+                const hasAnyBookings = slots.some((slot: any) => (slot.reserved || 0) > 0);
+                setHasBookings(hasAnyBookings);
+            })
+            .catch(err => {
+                console.error('Error fetching slots:', err);
+                setHasBookings(false); // Mặc định không có bookings nếu lỗi
+            });
     };
 
     const handleDelete = (tour: Tour) => {
@@ -1745,9 +1898,10 @@ export default function Tours() {
 
         if (Object.keys(errors).length > 0) {
             console.warn("[DEBUG] Validation failed - showing toast and returning", errors);
+            const errorMessages = Object.values(errors).filter(Boolean);
             toast({
                 title: "Lỗi validation",
-                description: "Vui lòng kiểm tra lại thông tin nhập vào",
+                description: errorMessages.length > 0 ? errorMessages.join('; ') : "Vui lòng kiểm tra lại thông tin nhập vào",
                 variant: "destructive",
             });
             return;
@@ -2009,7 +2163,7 @@ export default function Tours() {
                     </div>
 
                     <div className="space-y-4"
-                        // style={{ height: '70vh', overflowY: 'auto' }}
+                    // style={{ height: '70vh', overflowY: 'auto' }}
                     >
                         <div>
                             <Label className="text-sm font-medium text-gray-700">Lịch trình</Label>
@@ -2129,6 +2283,9 @@ export default function Tours() {
                             onChange={(newContent) => handleFormChange("description", newContent)}
                             placeholder="Mô tả chi tiết ngày này"
                         />
+                        {formErrors.description && (
+                            <p className="text-sm text-red-500 mt-1">{formErrors.description}</p>
+                        )}
                     </div>
 
                     <div>
@@ -2251,8 +2408,19 @@ export default function Tours() {
                         <div className="col-span-2">
                             <Label>Lịch khởi hành *</Label>
 
+                            {/* Thêm thông báo nếu disabled */}
+                            {hasBookings && modalMode === "edit" && (
+                                <div className="text-sm text-red-500 mt-1">
+                                    Không thể thay đổi ngày khởi hành vì đã có người đặt chỗ.
+                                </div>
+                            )}
+
                             <div className="flex items-center space-x-2 mb-2">
-                                <Select value={recurrenceMode} onValueChange={(v) => setRecurrenceMode(v as any)} >
+                                <Select
+                                    value={recurrenceMode}
+                                    onValueChange={(v) => setRecurrenceMode(v as any)}
+                                    disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                >
                                     <SelectTrigger className="flex-1">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -2265,7 +2433,11 @@ export default function Tours() {
                                 </Select>
 
                                 {recurrenceMode === "weekday_of_month" && (
-                                    <Select value={String(recurrenceWeekday)} onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}>
+                                    <Select
+                                        value={String(recurrenceWeekday)}
+                                        onValueChange={(v) => setRecurrenceWeekday(parseInt(v, 10))}
+                                        disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                    >
                                         <SelectTrigger className="w-40">
                                             <SelectValue />
                                         </SelectTrigger>
@@ -2282,11 +2454,17 @@ export default function Tours() {
                                 )}
 
                                 <div className="flex items-center space-x-2">
-                                    <Button onClick={applyRecurrence}>Áp dụng</Button>
+                                    <Button
+                                        onClick={applyRecurrence}
+                                        disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                    >
+                                        Áp dụng
+                                    </Button>
                                     {recurrenceApplied && (
                                         <Button
                                             onClick={handleResetSchedule}
                                             className="bg-primary-100 text-red-600 hover:bg-red-100 hover:text-red-700 flex items-center gap-1 text-1 text-sm"
+                                            disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -2343,8 +2521,7 @@ export default function Tours() {
                                                     }}
                                                     min={getTomorrowLocal()}
                                                     className={`w-full ${formErrors[`startDates_${idx}`] ? "border-red-500" : ""}`}
-
-
+                                                    disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
                                                 />
                                             </div>
 
@@ -2369,26 +2546,25 @@ export default function Tours() {
                                                     }}
                                                     min={(formData.startDates && formData.startDates.length && formData.startDates[idx]) ? formData.startDates[idx] : getTomorrowLocal()}
                                                     className={formErrors[`endDates_${idx}`] ? "border-red-500" : ""}
+                                                    disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
                                                 />
                                             </div>
 
                                             <div className="flex items-end" style={{ marginTop: 'auto' }}>
-                                                <Button variant="outline" onClick={() => {
-                                                    const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
-                                                    const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
-                                                    if (!starts.length && formData.startDate) starts.push(formData.startDate);
-                                                    starts.splice(idx, 1);
-                                                    ends.splice(idx, 1);
-                                                    handleFormChange('startDates' as any, starts);
-                                                    handleFormChange('endDates' as any, ends);
-                                                    handleFormChange('startDate', (starts[0] || ""));
-                                                    handleFormChange('endDate', (ends[0] || ""));
-                                                }}>Xóa</Button>
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => {
+                                                        // ... existing onClick logic ...
+                                                    }}
+                                                    disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                                >
+                                                    Xóa
+                                                </Button>
                                             </div>
                                         </div>
                                     );
                                 })}
-                                <div>
+                                {/* <div>
                                     <Button variant="ghost" onClick={() => {
                                         const starts = Array.isArray(formData.startDates) ? formData.startDates.slice() : [];
                                         const ends = Array.isArray(formData.endDates) ? formData.endDates.slice() : [];
@@ -2411,8 +2587,11 @@ export default function Tours() {
                                         handleFormChange('endDates' as any, ends);
                                         if (starts.length === 1 && starts[0]) handleFormChange('startDate', starts[0]);
                                         if (ends.length === 1 && ends[0]) handleFormChange('endDate', ends[0]);
-                                    }}>Thêm ngày khởi hành</Button>
-                                </div>
+
+                                    }}
+                                        disabled={hasBookings && modalMode === "edit"} // Disable nếu có bookings
+                                    >Thêm ngày khởi hành</Button>
+                                </div> */}
                             </div>
                         </div>
 
@@ -2486,7 +2665,11 @@ export default function Tours() {
                                 onChange={(e) => handleFormChange("adultPrice", parseInt(e.target.value) || 0)}
                                 placeholder="3500000"
                                 className={formErrors.adultPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.adultPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.adultPrice}</p>
                             )}
@@ -2498,10 +2681,13 @@ export default function Tours() {
                                 type="number"
                                 value={formData.childPrice || ""}
                                 onChange={(e) => handleFormChange("childPrice", parseInt(e.target.value) || 0)}
-
                                 placeholder="2800000"
                                 className={formErrors.childPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.childPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.childPrice}</p>
                             )}
@@ -2515,14 +2701,18 @@ export default function Tours() {
                                 onChange={(e) => handleFormChange("infantPrice", parseInt(e.target.value) || 0)}
                                 placeholder="1000000"
                                 className={formErrors.infantPrice ? "border-red-500" : ""}
+                                disabled={hasBookings && modalMode === "edit"}
                             />
+                            {hasBookings && modalMode === "edit" && (
+                                <p className="text-sm text-red-500 mt-1">Không thể thay đổi giá vé vì đã có người đặt chỗ.</p>
+                            )}
                             {formErrors.infantPrice && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.infantPrice}</p>
                             )}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <Label htmlFor="maxGroupSize">Số chỗ tối đa *</Label>
                             <Input
@@ -2530,14 +2720,14 @@ export default function Tours() {
                                 type="number"
                                 value={formData.maxGroupSize || ""}
                                 onChange={(e) => handleFormChange("maxGroupSize", parseInt(e.target.value) || 1)}
-                                placeholder="30"
+                                placeholder="40"
                                 className={formErrors.maxGroupSize ? "border-red-500" : ""}
                             />
                             {formErrors.maxGroupSize && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.maxGroupSize}</p>
                             )}
                         </div>
-                        <div>
+                        {/* <div>
                             <Label htmlFor="minBooking">Số booking tối thiểu *</Label>
                             <Input
                                 id="minBooking"
@@ -2550,7 +2740,7 @@ export default function Tours() {
                             {formErrors.minBooking && (
                                 <p className="text-sm text-red-500 mt-1">{formErrors.minBooking}</p>
                             )}
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* <div>
@@ -2571,7 +2761,7 @@ export default function Tours() {
                         />
                     </div> */}
                     <div>
-                        <Label htmlFor="startLocationPickup">Pickup chính (startLocation.pickupDropoff) *</Label>
+                        <Label htmlFor="startLocationPickup">Điểm đón</Label>
                         <Input
                             id="startLocationPickup"
                             value={(formData.startLocation && formData.startLocation.pickupDropoff) || ""}
@@ -2589,7 +2779,7 @@ export default function Tours() {
                     </div>
 
                     <div className="mt-2">
-                        <Label htmlFor="startLocationAddress">Địa chỉ điểm đón (tùy chọn)</Label>
+                        <Label htmlFor="startLocationAddress">Địa chỉ điểm đón </Label>
                         <Input
                             id="startLocationAddress"
                             value={(formData.startLocation && formData.startLocation.address) || ""}
@@ -2599,8 +2789,9 @@ export default function Tours() {
                                     address: e.target.value,
                                 } as any)
                             }
-                            placeholder="Địa chỉ chi tiết (tùy chọn)"
+                            placeholder="Địa chỉ chi tiết"
                         />
+                        {formErrors.startLocationAddress && <p className="text-sm text-red-500 mt-1">{formErrors.startLocationAddress}</p>}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
@@ -2872,7 +3063,7 @@ export default function Tours() {
                     <p className="text-gray-600 mt-1">Quản lý các tour du lịch và lịch trình</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
@@ -2880,7 +3071,7 @@ export default function Tours() {
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Thêm tour mới
@@ -2889,13 +3080,13 @@ export default function Tours() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tổng tour</p>
-                                <p className="text-2xl font-bold">{total || 0}</p>
+                                <p className="text-2xl font-bold">{totalTours}</p>
                             </div>
                             <MapPin className="w-8 h-8 text-primary" />
                         </div>
@@ -2906,22 +3097,19 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đang bán</p>
-                                <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.status === "active").length}
-                                </p>
+                                <p className="text-2xl font-bold">{totalVisible}</p>
                             </div>
                             <Eye className="w-8 h-8 text-green-500" />
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Sắp hết chỗ</p>
                                 <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.maxGroupSize - t.seatsBooked <= t.maxGroupSize * 0.2)
-                                        .length}
+                                    {tours.filter((t: Tour) => t.maxGroupSize - t.seatsBooked <= t.maxGroupSize * 0.2).length}
                                 </p>
                             </div>
                             <Users className="w-8 h-8 text-orange-500" />
@@ -2933,12 +3121,14 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đánh giá TB</p>
-                                <p className="text-2xl font-bold">4.7</p>
+                                <p className="text-2xl font-bold">
+                                    {tours.length > 0 ? (tours.reduce((sum, t) => sum + t.ratingsAverage, 0) / tours.length).toFixed(1) : '0.0'}
+                                </p>
                             </div>
                             <Star className="w-8 h-8 text-yellow-500" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
             </div>
 
             {/* Main Table */}
@@ -2951,40 +3141,23 @@ export default function Tours() {
                         </div>
                         <div className="flex items-center space-x-2">
                             <Select
-                                value={filters.status}
-                                onValueChange={(value) => setFilters((prev) => ({ ...prev, status: value }))}
+                                value={filters.visibility}
+                                onValueChange={(value) => setFilters((prev) => ({ ...prev, visibility: value }))}
                             >
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                                    <SelectItem value="active">Hoạt động</SelectItem>
-                                    <SelectItem value="hidden">Ẩn</SelectItem>
-                                    <SelectItem value="draft">Bản nháp</SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={filters.category}
-                                onValueChange={(value) => setFilters((prev) => ({ ...prev, category: value }))}
-                            >
-                                <SelectTrigger className="w-36">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Tất cả danh mục</SelectItem>
-                                    {mockCategories.map((category) => (
-                                        <SelectItem key={category.id} value={category.id}>
-                                            {category.name}
-                                        </SelectItem>
-                                    ))}
+                                    <SelectItem value="all">Tất cả</SelectItem>
+                                    <SelectItem value="true">Hiện hành</SelectItem>
+                                    <SelectItem value="false">Ẩn</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <DataTable
+                    {/* <DataTable
                         columns={columns}
                         data={tours}
                         pagination={{
@@ -2998,7 +3171,29 @@ export default function Tours() {
                             selectedRowKeys: selectedTours,
                             onChange: setSelectedTours,
                         }}
-                        bulkActions={bulkActions}
+                        // bulkActions={bulkActions}
+                        actions={actions}
+                        exportable
+                        onExport={() =>
+                            toast({ title: "Đang xuất file...", description: "File sẽ được tải xuống sau vài giây" })
+                        }
+                        loading={isLoading}
+                    /> */}
+                    <DataTable
+                        columns={columns}
+                        data={tours}  // Change from filteredTours to tours
+                        pagination={{
+                            current: pagination.current,
+                            pageSize: pagination.pageSize,
+                            total: pagination.total,  // Use pagination.total from server
+                        }}
+                        onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
+                        onSearch={setSearchQuery}
+                        rowSelection={{
+                            selectedRowKeys: selectedTours,
+                            onChange: setSelectedTours,
+                        }}
+                        // bulkActions={bulkActions}
                         actions={actions}
                         exportable
                         onExport={() =>

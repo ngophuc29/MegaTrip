@@ -27,7 +27,9 @@ import {
   Plus,
   Newspaper
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
+import auth from '../../apis/auth';
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -50,7 +52,7 @@ interface AdminLayoutProps {
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Thống kê & Báo cáo', href: '/admin/reports', icon: BarChart3 },
-  { name: 'Quản lý khách hàng', href: '/admin/customers', icon: Users },
+  { name: 'Quản lý người dùng', href: '/admin/customers', icon: Users },
   { name: 'Quản lý tour', href: '/admin/tours', icon: MapPin },
   // { name: 'Quản lý chuyến bay', href: '/admin/flights', icon: Plane },
   { name: 'Quản lý vé xe', href: '/admin/buses', icon: Bus },
@@ -60,18 +62,90 @@ const navigation = [
   { name: 'Quản lý khuyến mãi', href: '/admin/promotions', icon: Tag },
   { name: 'Quản lý đánh giá', href: '/admin/reviews', icon: Star },
   { name: 'Chăm sóc khách hàng', href: '/admin/support', icon: HeadphonesIcon },
-  { name: 'Cài đặt hệ thống', href: '/admin/system-settings', icon: Cog },
+  // { name: 'Cài đặt hệ thống', href: '/admin/system-settings', icon: Cog },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [user, setUser] = useState<any | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const hasToken = typeof window !== 'undefined' ? !!localStorage.getItem('accessToken') : false;
 
-  const getBreadcrumb = () => {
-    const currentNav = navigation.find(nav => nav.href === pathname);
+  const getBreadcrumb = (visibleNav: typeof navigation) => {
+    const currentNav = visibleNav.find(nav => nav.href === pathname);
     return currentNav ? currentNav.name : 'Dashboard';
   };
+
+  useEffect(() => {
+    // If no token at all, redirect immediately to login to prevent unauthenticated access
+    if (pathname !== '/admin/login') {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      if (!token) {
+        router.replace('/admin/login');
+        return;
+      }
+    }
+
+    // Skip auth check for login page
+    if (pathname === '/admin/login') {
+      setAuthChecked(true);
+      return;
+    }
+
+    const check = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        if (!token) {
+          router.push('/admin/login');
+          return;
+        }
+        const meRes: any = await auth.me();
+        // Allow both 'admin' and 'employee' roles to access admin UI.
+        if (!meRes || (meRes.role !== 'admin' && meRes.role !== 'employee')) {
+          localStorage.removeItem('accessToken');
+          router.push('/admin/login');
+          return;
+        }
+        setUser(meRes);
+      } catch (err) {
+        localStorage.removeItem('accessToken');
+        router.push('/admin/login');
+      } finally {
+        setAuthChecked(true);
+      }
+    };
+    check();
+  }, [pathname, router]);
+
+  // Nếu đang ở trang admin (không phải /admin/login) và chưa check auth xong hoặc không có token -> hiện spinner
+  if (pathname !== '/admin/login' && (!authChecked || !hasToken)) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="mb-4">
+            <svg className="animate-spin h-10 w-10 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+          </div>
+          <div className="text-gray-700">Đang kiểm tra quyền truy cập...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Nếu đang ở trang login admin, chỉ render nội dung con (không render chrome của admin)
+  if (pathname === '/admin/login') {
+    return (
+      <main className="min-h-[calc(100vh-4rem)]">
+        {children}
+        <Toaster />
+      </main>
+    );
+  }
 
   return (
     <>
@@ -112,7 +186,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </Button>
           </div>
           <nav className="flex-1 px-3 py-4 space-y-1">
-            {navigation.map((item) => {
+            {(user?.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -141,10 +215,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Desktop sidebar */}
-        <div className={cn(
-          "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col lg:bg-primary lg:shadow-xl lg:transition-all lg:duration-300",
-          sidebarCollapsed ? "lg:w-16" : "lg:w-64"
-        )}>
+          <div className={cn(
+            "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col lg:bg-primary lg:shadow-xl lg:transition-all lg:duration-300",
+            sidebarCollapsed ? "lg:w-16" : "lg:w-64"
+          )}>
           <div className="flex h-16 items-center justify-between px-4 border-b border-primary-600">
             {!sidebarCollapsed && (
               <div className="flex items-center space-x-3">
@@ -168,7 +242,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             </Button>
           </div>
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+            {(user?.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation).map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -231,7 +305,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                           <span className="ml-1 text-sm font-medium text-gray-900 md:ml-2">
-                            {getBreadcrumb()}
+                            {getBreadcrumb(user ? (user.role === 'employee' ? navigation.filter(n => ['/admin/orders','/admin/support'].includes(n.href)) : navigation) : navigation)}
                           </span>
                         </div>
                       </li>
@@ -242,7 +316,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
               <div className="flex items-center space-x-4">
                 {/* Search */}
-                <div className="relative hidden md:block w-64">
+                {/* <div className="relative hidden md:block w-64">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-4 w-4 text-gray-400" />
                   </div>
@@ -251,7 +325,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     placeholder="Tìm kiếm toàn cục..."
                     type="search"
                   />
-                </div>
+                </div> */}
 
                 {/* Quick Add Button */}
                 {/* <Button size="sm" className="bg-primary hover:bg-primary-600">
@@ -260,12 +334,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </Button> */}
 
                 {/* Notifications */}
-                <Button variant="ghost" size="icon" className="relative">
+                {/* <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
                   <Badge className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 text-xs bg-red-500 text-white border-2 border-white">
                     5
                   </Badge>
-                </Button>
+                </Button> */}
 
                 {/* User menu */}
                 <DropdownMenu>
@@ -279,23 +353,29 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                   <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">Nguyễn Văn Admin</p>
+                        <p className="text-sm font-medium leading-none">{user?.name || 'Quản trị viên'}</p>
                         <p className="text-xs leading-none text-muted-foreground">
-                          admin@travelcompany.vn
+                          {user?.email || '---'}
                         </p>
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
+                    {/* <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
                       <UserCheck className="mr-2 h-4 w-4" />
                       <span>Hồ sơ cá nhân</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
                       <Cog className="mr-2 h-4 w-4" />
                       <span>Cài đặt</span>
-                    </DropdownMenuItem>
+                    </DropdownMenuItem> */}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors">
+                    <DropdownMenuItem
+                      className="bg-white hover:bg-primary hover:text-white focus:bg-primary focus:text-white transition-colors"
+                      onSelect={() => {
+                        try { localStorage.removeItem('accessToken'); } catch (e) { }
+                        router.push('/admin/login');
+                      }}
+                    >
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Đăng xuất</span>
                     </DropdownMenuItem>

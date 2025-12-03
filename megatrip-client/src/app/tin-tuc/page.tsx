@@ -64,7 +64,7 @@ export default function TinTuc() {
                         featured: !!a.featured,
                         author: a.author?.name || 'Admin',
                         publishDate: a.publishedAt ? (new Date(a.publishedAt)).toLocaleDateString('vi-VN') : (a.createdAt ? (new Date(a.createdAt)).toLocaleDateString('vi-VN') : ''),
-                        readTime: a.readTime || '3 phút đọc',
+                        readTime: a.readTime || '',
                         views: a.views || 0,
                         likes: a.likes || 0,
                         tags: a.tags || [],
@@ -281,7 +281,7 @@ export default function TinTuc() {
                         </Card>
 
                         {/* Popular Tags */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle className="text-lg">Thẻ phổ biến</CardTitle>
                             </CardHeader>
@@ -294,7 +294,7 @@ export default function TinTuc() {
                                     ))}
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Quick Stats */}
                         <Card>

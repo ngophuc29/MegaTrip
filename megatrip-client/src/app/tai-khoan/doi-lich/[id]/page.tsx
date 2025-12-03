@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogD
 import { Input } from '../../../components/ui/input';
 import { toast } from '../../../components/ui/use-toast';
 import { ArrowLeft, CalendarDays, Clock, Plane, Ticket, TrendingUp, ChevronRight, Bus, MapPin } from 'lucide-react';
-
+import { useSearchParams } from 'next/navigation';
 interface Booking {
     id: string;
     type: 'flight' | 'bus' | 'tour';
@@ -105,11 +105,289 @@ function ServiceIcon({ type }: { type: string }) {
 }
 
 export default function DoiLichPage() {
+    // Định nghĩa seatTypeLabel (mapping cho seat types)
+    const seatTypeLabel: Record<string, string> = {
+        'W': 'Cửa sổ',
+        'A': 'Hàng lối',
+        'EX': 'Cửa thoát hiểm',
+        'GAL': 'Galley',
+        'M': 'Tiêu chuẩn',
+    };
     // const booking = useBookingFromRoute();
+    // Luôn gọi hook ở đầu để tránh lỗi "more hooks than previous render"
+    const bookingFromRoute = useBookingFromRoute();
     const params = useParams() as any;
     const routeId = params?.id as string | undefined;
     const router = useRouter();
+    // Thêm state cho API flights và cache
+    const [apiFlights, setApiFlights] = useState<any[]>([]);
+    const [currentCacheKey, setCurrentCacheKey] = useState<string | null>(null);
+    const [cacheExpired, setCacheExpired] = useState(false);
+    // State cho seatmap flight (khác với bus)
+    const [flightSeatMap, setFlightSeatMap] = useState<any>({ rows: [], summary: null, amenities: null, freeSeats: [] });
 
+    const [selectedLeg, setSelectedLeg] = useState<'outbound' | 'inbound'>('outbound');
+
+    // Thêm hàm mapOfferToFlight từ ve-may-bay
+    const mapOfferToFlight = (offer: any, dictionaries: any, idx: number) => {
+        const itineraries = offer.itineraries || [];
+        const firstItin = itineraries[0] || {};
+        const segments = firstItin.segments || [];
+        const firstSeg = segments[0] || {};
+        const lastSeg = segments[segments.length - 1] || firstSeg;
+
+        const depAt: string = firstSeg.departure?.at || '';
+        const arrAt: string = lastSeg.arrival?.at || '';
+        const depDate = depAt.split('T')[0] || '';
+        const arrDate = arrAt.split('T')[0] || '';
+        const depTime = depAt.split('T')[1]?.slice(0, 5) || '';
+        const arrTime = arrAt.split('T')[1]?.slice(0, 5) || '';
+
+        const carrier = (offer.validatingAirlineCodes && offer.validatingAirlineCodes[0]) || firstSeg.carrierCode || '';
+        const airlineName = dictionaries?.carriers?.[carrier] || carrier || 'Unknown';
+
+        const aircraftCodes = [...new Set(segments.map((s: any) => s.aircraft?.code).filter(Boolean))];
+        const aircraft = aircraftCodes.map((c: string) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
+
+        const stopsCount = Math.max(0, segments.length - 1);
+        const stopsText = stopsCount === 0 ? 'Bay thẳng' : `${stopsCount} dừng`;
+
+        const traveler = offer.travelerPricings?.[0] || {};
+        const cabins = (traveler.fareDetailsBySegment || []).map((f: any) => f.cabin).filter(Boolean);
+        const cabinText = cabins.length > 0 ? cabins.join('/') : (traveler.travelerType || '');
+
+        const baggage = {
+            handbag: {
+                pieces: traveler.fareDetailsBySegment?.[0]?.includedCabinBags?.quantity ?? undefined,
+                weight: traveler.fareDetailsBySegment?.[0]?.includedCabinBags?.weight ?? undefined,
+                unit: traveler.fareDetailsBySegment?.[0]?.includedCabinBags?.weightUnit ?? undefined
+            },
+            checkin: {
+                pieces: traveler.fareDetailsBySegment?.[0]?.includedCheckedBags?.quantity ?? undefined,
+                weight: traveler.fareDetailsBySegment?.[0]?.includedCheckedBags?.weight ?? undefined,
+                unit: traveler.fareDetailsBySegment?.[0]?.includedCheckedBags?.weightUnit ?? undefined
+            }
+        };
+
+        const priceStr = String(offer.price?.total || offer.price?.grandTotal || '0');
+        const currency = offer.price?.currency || 'VND';
+        let priceNumeric = Number(priceStr) || 0;
+
+        const amenities = {
+            wifi: { available: false },
+            meal: { included: false, available: true, price: 'Từ 120.000đ' },
+            entertainment: { available: false },
+            power: { available: false },
+            priority: false
+        };
+
+        const policies = {
+            cancellable: false,
+            changeable: false,
+            refundable: 'Không hoàn tiền, không đổi lịch'
+        };
+
+        return {
+            id: String(offer.id) || `offer-${idx}`,
+            airline: airlineName,
+            airlineCode: carrier,
+            flightNumber: `${firstSeg.carrierCode || ''}${firstSeg.number || ''}`,
+            departure: { time: depTime, airport: firstSeg.departure?.iataCode || '', city: firstSeg.departure?.iataCode || '', date: depDate },
+            arrival: { time: arrTime, airport: lastSeg.arrival?.iataCode || '', city: lastSeg.arrival?.iataCode || '', date: arrDate },
+            duration: convertDuration(firstItin.duration),
+            aircraft,
+            price: priceNumeric,
+            currency,
+            // Bỏ originalPrice, dùng price
+            class: cabinText || 'ECONOMY',
+            baggage,
+            benefits: [],
+            promotions: [],
+            amenities,
+            policies,
+            availableSeats: offer.numberOfBookableSeats || 0,
+            stopsCount,
+            stopsText,
+            raw: offer
+        };
+    };
+
+    // Thêm hàm convertDuration
+    const convertDuration = (iso: string | undefined) => {
+        if (!iso) return '';
+        const matchH = iso.match(/(\d+)H/);
+        const matchM = iso.match(/(\d+)M/);
+        const h = matchH ? `${matchH[1]}h` : '';
+        const m = matchM ? `${matchM[1]}m` : '';
+        return [h, m].filter(Boolean).join(' ');
+    };
+
+    // Thêm hàm fetchAmadeusOffers cho flight
+    // Thêm hàm fetchAmadeusOffers cho flight
+    const fetchAmadeusOffersForFlight = async (origin: string, destination: string, departureDate: string) => {
+        setIsLoading(true);
+        try {
+            // Lấy pax counts từ order (đảm bảo pc được khai báo)
+            const pc = paxCountsFromOrder(order || {});
+
+            const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    grant_type: 'client_credentials',
+                    client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
+                    client_secret: '9fcdtMUicUy6ZAGm'
+                })
+            });
+            const tokenJson = await tokenRes.json();
+            const token = tokenJson.access_token;
+            if (!token) throw new Error('No token from Amadeus');
+
+            const params = new URLSearchParams();
+            params.set('originLocationCode', origin);
+            params.set('destinationLocationCode', destination);
+            params.set('departureDate', departureDate);
+            params.set('adults', pc.adults.toString());  // Sử dụng pc.adults thay hardcoded '1'
+            params.set('children', pc.children.toString());  // Sử dụng pc.children thay hardcoded '0'
+            params.set('infants', pc.infants.toString());
+            params.set('includedAirlineCodes', 'VN');
+            params.set('currencyCode', 'VND');
+            params.set('nonStop', 'true');
+            params.set('max', '5');
+
+            const offersRes = await fetch(`https://test.api.amadeus.com/v2/shopping/flight-offers?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const offersJson = await offersRes.json();
+            const dicts = offersJson.dictionaries || {};
+            const data = offersJson.data || [];
+            const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
+
+            // Lưu cache
+            const cacheKey = `flight-${origin}-${destination}-${departureDate}`;
+            localStorage.setItem(cacheKey, JSON.stringify({ data: mapped, timestamp: Date.now() }));
+            setCurrentCacheKey(cacheKey);
+
+            console.log('Fetched flight offers:', mapped); // Log để xem data
+
+            setApiFlights(mapped);
+            setCacheExpired(false);
+        } catch (err) {
+            console.error('Amadeus fetch error', err);
+            setApiFlights([]);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Thêm hàm fetch token và seatmap cho flight (từ ve-may-bay)
+    const fetchAmadeusTokenSimple = async () => {
+        const tokenRes = await fetch('https://test.api.amadeus.com/v1/security/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                grant_type: 'client_credentials',
+                client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
+                client_secret: '9fcdtMUicUy6ZAGm'
+            })
+        });
+        const tokenJson = await tokenRes.json();
+        return tokenJson.access_token;
+    };
+
+    const fetchSeatmapForFlight = async (offer: any) => {
+        try {
+            const token = await fetchAmadeusTokenSimple();
+            if (!token) throw new Error('No Amadeus token');
+
+            const seatmapBody = { data: [offer] };
+            const seatmapUrl = 'https://test.api.amadeus.com/v1/shopping/seatmaps';
+            const seatRes = await fetch(seatmapUrl, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/vnd.amadeus+json'
+                },
+                body: JSON.stringify(seatmapBody)
+            });
+            const seatJson = await seatRes.json();
+            const normalizedSeat = Array.isArray(seatJson) ? seatJson[0] : (seatJson?.data?.[0] ?? seatJson);
+            return normalizedSeat;
+        } catch (err) {
+            console.error('Fetch seatmap error', err);
+            return null;
+        }
+    };
+
+    // Hàm parse seatmap từ Amadeus (từ FlightResults.tsx)
+    const parseSeatmap = (raw: any) => {
+        try {
+            const decks = raw?.decks ?? [];
+            const allSeats: any[] = [];
+            for (const d of decks) {
+                for (const s of (d.seats ?? [])) {
+                    const seatNum = s.number ?? '';
+                    const rowMatch = String(seatNum).match(/\d+/);
+                    const row = rowMatch ? rowMatch[0] : '0';
+
+                    let travEntry: any = null;
+                    if (Array.isArray(s.travelerPricing) && s.travelerPricing.length > 0) travEntry = s.travelerPricing[0];
+                    else if (s.travelerPricing && typeof s.travelerPricing === 'object') travEntry = s.travelerPricing;
+
+                    const availability = travEntry?.seatAvailabilityStatus ?? 'UNKNOWN';
+                    const priceRaw = travEntry?.price?.total ?? travEntry?.price?.amount ?? null;
+                    const price = priceRaw != null ? Number(String(priceRaw).replace(/[^\d.-]/g, '')) : 0;
+                    const currency = travEntry?.price?.currency ?? travEntry?.price?.currencyCode ?? 'VND';
+                    const characteristics = s.characteristicsCodes ?? s.characteristics ?? [];
+
+                    allSeats.push({
+                        id: seatNum,
+                        number: seatNum,
+                        row,
+                        availability,
+                        price: Number.isFinite(price) ? price : 0,
+                        currency: currency ?? 'VND',
+                        coords: s.coordinates ?? null,
+                        characteristics,
+                        raw: s
+                    });
+                }
+            }
+
+            const rowsMap: Record<string, any[]> = {};
+            allSeats.forEach(s => {
+                rowsMap[s.row] = rowsMap[s.row] ?? [];
+                rowsMap[s.row].push(s);
+            });
+            const rows = Object.keys(rowsMap)
+                .map(r => ({ row: r, seats: rowsMap[r].sort((a, b) => a.number.localeCompare(b.number)) }))
+                .sort((a, b) => Number(a.row) - Number(b.row));
+
+            const summary = {
+                aircraftCode: raw?.aircraft?.code ?? raw?.data?.aircraft?.code ?? null,
+                availableSeatsCounters: raw?.availableSeatsCounters ?? raw?.data?.availableSeatsCounters ?? null,
+                rawSeatmap: raw
+            };
+
+            const amenities = raw?.aircraftCabinAmenities ?? null;
+
+            const freeSeats = allSeats.filter(s => {
+                const chars = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                const hasCH = chars.includes('CH');
+                const priceIsZero = Number(s.price || 0) === 0;
+                return s.availability === 'AVAILABLE' && priceIsZero && !hasCH;
+            });
+
+            return { rows, summary, amenities, freeSeats };
+        } catch (e) {
+            console.warn('parseSeatmap error', e);
+            return { rows: [], summary: null, amenities: null, freeSeats: [] };
+        }
+    };
+
+
+    // Thêm state isLoading nếu chưa có
+    const [isLoading, setIsLoading] = useState(false);
     // real order loaded from server (fallback to SAMPLE_BOOKINGS for dev)
     const [order, setOrder] = useState<any | null>(null);
     const [loadingOrder, setLoadingOrder] = useState(false);
@@ -142,7 +420,7 @@ export default function DoiLichPage() {
 
     // payment modal state
     const [payOpen, setPayOpen] = useState<boolean>(false);
-    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('momo');
+    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('zalopay');
     const [payAckConfirmed, setPayAckConfirmed] = useState<boolean>(false);
 
     const [options, setOptions] = useState<Option[]>([]);
@@ -157,6 +435,11 @@ export default function DoiLichPage() {
     const [refundBack, setRefundBack] = useState<number>(0);
     const [penaltyPercent, setPenaltyPercent] = useState<number>(0);
     const [penaltyAmount, setPenaltyAmount] = useState<number>(0);
+    // Thêm state cho phí ghế đã chọn
+    const [selectedSeatFees, setSelectedSeatFees] = useState<number>(0);
+
+
+
     // helper: extract pax counts from order snapshot (adults/children/infants)
     function paxCountsFromOrder(ord: any) {
         const snap = ord?.metadata?.bookingDataSnapshot || ord?.metadata || {};
@@ -184,6 +467,7 @@ export default function DoiLichPage() {
         return { adults, children, infants, seatCount };
     }
 
+
     // when order loads, prefill selectedDate/options based on product type
     // set initial selectedDate once when order loads (guard to avoid infinite loop)
     useEffect(() => {
@@ -200,168 +484,30 @@ export default function DoiLichPage() {
     }, [order]);
 
     // load product options (depends on order and selectedDate) - DOES NOT set selectedDate
-    useEffect(() => {
-        async function loadProductOptions() {
-            if (!order) { setOptions([]); return; }
-            setLoadingOptions(true);
-            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
-
-            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
-            const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
-            const { adults, children, infants, seatCount } = paxCountsFromOrder(order);
-            const type = (item?.type || '').toLowerCase();
-
-            const now = new Date();
-            const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-
-            if (type === 'flight') {
-                const baseFare = Math.round((order.total || 0) / Math.max(1, adults + children + infants));
-                const dates: Date[] = [];
-                const start = selectedDate || new Date();
-                const startIso = new Date(start.getFullYear(), start.getMonth(), start.getDate()).toISOString().slice(0, 10);
-                const actualStart = startIso <= todayIso ? new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) : start; // Từ ngày mai nếu selectedDate <= today
-                for (let i = 0; i < 7; i++) dates.push(new Date(actualStart.getFullYear(), actualStart.getMonth(), actualStart.getDate() + i));
-                const opts: Option[] = [];
-                for (const d of dates) {
-                    const gen = generateOptions(baseFare, d);
-                    for (const g of gen) opts.push({ ...g });
-                }
-                setOptions(opts);
-                return;
-            }
-
-            const productId = item?.productId || item?.itemId;
-            if (!productId) return setOptions([]);
-            try {
-                if (type === 'tour') {
-                    const r = await fetch(`${Tourbase}/api/tours/${encodeURIComponent(productId)}`);
-                    if (!r.ok) throw new Error(String(r.status));
-                    const j = await r.json();
-                    const tour = j && j.data ? j.data : j;
-                    let dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
-                    // Filter chỉ giữ ngày > today
-                    dates = dates.filter(d => d > todayIso);
-                    const adultUnit = Number(tour?.adultPrice ?? tour?.pricing?.perPax?.adultUnit ?? tour?.price ?? 0);
-                    const childUnit = Number(tour?.childPrice ?? tour?.pricing?.perPax?.childUnit ?? 0);
-                    const infantUnit = Number(tour?.infantPrice ?? tour?.pricing?.perPax?.infantUnit ?? 0);
-                    const perPax = { adult: adultUnit, child: childUnit, infant: infantUnit };
-
-                    // fetch slot info for each date in parallel to get accurate availability
-                    const dateList = (dates || []).map((d: any) => {
-                        try { return new Date(d).toISOString(); } catch { return String(d); }
-                    });
-                    const slotPromises = dateList.map(async (dtIso, idx) => {
-                        const dateIso = dtIso.split('T')[0];
-                        const slotUrl = `${Tourbase}/api/tours/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
-                        try {
-                            const sr = await fetch(slotUrl);
-                            if (!sr.ok) return { dateIso, slot: null };
-                            const sj = await sr.json();
-                            return { dateIso, slot: sj?.slot ?? sj };
-                        } catch {
-                            return { dateIso, slot: null };
-                        }
-                    });
-                    const slotResults = await Promise.all(slotPromises);
-
-                    const opts = slotResults.map((res: any, idx: number) => {
-                        const dateIso = res.dateIso;
-                        const time = tour?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                        // seatsAvailable from slot API else fallback to tour.maxGroupSize or capacity or 0
-                        let seatsAvailable = null;
-                        if (res.slot) {
-                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
-                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
-                        }
-                        if (seatsAvailable == null) seatsAvailable = Number(tour?.maxGroupSize ?? tour?.capacity ?? 0);
-                        const fareTotal = (adultUnit * adults) + (childUnit * children) + (infantUnit * infants);
-                        return {
-                            id: `tour-${idx}-${dateIso}`,
-                            time,
-                            fare: fareTotal,
-                            notes: undefined,
-                            labelDate: dateIso,
-                            seatsAvailable,
-                            perPax
-                        } as any;
-                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
-                    setOptions(opts);
-                } else if (type === 'bus') {
-                    const r = await fetch(`${base}/api/buses/${encodeURIComponent(productId)}`);
-                    if (!r.ok) throw new Error(String(r.status));
-                    const j = await r.json();
-                    const bus = j && j.data ? j.data : j;
-                    let dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
-                    // Filter chỉ giữ ngày > today
-                    dates = dates.filter(d => d > todayIso);
-                    const adultUnit = Number(bus?.adultPrice || bus?.price || 0);
-                    const childUnit = Number(bus?.childPrice || 0);
-                    const infantUnit = 0;
-
-                    // try fetch slot info per date from bus slot endpoint if available
-                    const dateList = (dates || []).map((d: any) => {
-                        try { return new Date(d).toISOString(); } catch { return String(d); }
-                    });
-                    const slotPromises = dateList.map(async (dtIso) => {
-                        const dateIso = dtIso.split('T')[0];
-                        const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
-                        try {
-                            const sr = await fetch(slotUrl);
-                            if (!sr.ok) return { dateIso, slot: null };
-                            const sj = await sr.json();
-                            return { dateIso, slot: sj?.slot ?? sj };
-                        } catch {
-                            return { dateIso, slot: null };
-                        }
-                    });
-                    const slotResults = await Promise.all(slotPromises);
-
-                    const opts = slotResults.map((res: any, idx: number) => {
-                        const dateIso = res.dateIso;
-                        const time = bus?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
-                        let seatsAvailable = null;
-                        if (res.slot) {
-                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
-                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
-                        }
-                        if (seatsAvailable == null) seatsAvailable = Number(bus?.seatsAvailable ?? bus?.seatsTotal ?? 0);
-                        return {
-                            id: `bus-${idx}-${dateIso}`,
-                            time,
-                            fare: adultUnit * (adults + children) + infantUnit * infants,
-                            notes: undefined,
-                            labelDate: dateIso,
-                            seatsAvailable,
-                            perPax: { adult: adultUnit, child: childUnit, infant: infantUnit }
-                        } as any;
-                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
-                    setOptions(opts);
-                } else {
-                    setOptions([]);
-                }
-            } catch (e) {
-                console.warn('load product options failed', e);
-                setOptions([]);
-            } finally {
-                setLoadingOptions(false);
-            }
-        }
-        loadProductOptions();
-    }, [order, selectedDate]);
 
 
+
+    // recompute totals when selection or order/options change
+    // ...existing code...
+
+    // recompute totals when selection or order/options change
     // recompute totals when selection or order/options change
     useEffect(() => {
         if (!order) { setNewTotal(0); setFareDiff(0); setExtraPay(0); setRefundBack(0); return; }
         const { adults, children, infants } = paxCountsFromOrder(order);
-        // compute new total base (sum of pax * unit) then add proportional tax from original order
         let computedNewTotalBase = 0;
         if (selectedOption && (selectedOption as any).perPax) {
             const pp = (selectedOption as any).perPax;
             computedNewTotalBase = (Number(pp.adult || 0) * adults) + (Number(pp.child || 0) * children) + (Number(pp.infant || 0) * infants);
         } else if (selectedOption) {
-            const totalPax = adults + children + infants;
-            computedNewTotalBase = Number(selectedOption.fare || 0) * Math.max(1, totalPax);
+            const unitPrice = Number(selectedOption.raw?.price?.total || selectedOption.price || selectedOption.fare || 0);
+            // Fix: For flight, price is already total; don't multiply by totalPax
+            if (booking?.type === 'flight') {
+                computedNewTotalBase = unitPrice;
+            } else {
+                const totalPax = adults + children + infants;
+                computedNewTotalBase = unitPrice * Math.max(1, totalPax);
+            }
         } else {
             computedNewTotalBase = 0;
         }
@@ -369,9 +515,10 @@ export default function DoiLichPage() {
         const origBase = Number(order?.metadata?.bookingDataSnapshot?.pricing?.basePrice ?? order?.subtotal ?? (order?.total ? (Number(order.total || 0) - Number(order.tax || 0)) : 0));
         const origTax = Number(order?.metadata?.bookingDataSnapshot?.pricing?.taxes ?? order?.tax ?? 0);
         const computedNewTax = origBase > 0 ? Math.round(origTax * (computedNewTotalBase / Math.max(1, origBase))) : origTax;
-        const computedNewTotal = computedNewTotalBase + computedNewTax;
+        const computedNewTotal = computedNewTotalBase + computedNewTax + (selectedSeatFees || 0);  // Thêm selectedSeatFees
         const currentTotal = Number(order.total || 0);
         const diff = computedNewTotal - currentTotal;
+
         // compute days until original service date (used to pick penalty policy)
         let daysUntilService = Infinity;
         try {
@@ -433,6 +580,22 @@ export default function DoiLichPage() {
                 amountDue = penAmount - refundGross;
             }
         }
+        // console.log('selectedOption:', selectedOption);
+        // console.log('selectedOption.raw.price:', selectedOption?.raw?.price);
+        // console.log('selectedOption.price:', selectedOption?.price);
+        // console.log('unitPrice:', Number(selectedOption?.raw?.price?.total || selectedOption?.price || selectedOption?.fare || 0), 'totalPax:', adults + children + infants);
+
+        // console.log('selectedOption:', selectedOption);
+        // console.log('unitPrice:', Number(selectedOption?.fare || selectedOption?.price || 0), 'totalPax:', adults + children + infants);
+        // console.log('computedNewTotalBase:', computedNewTotalBase);
+        // console.log('origBase:', origBase, 'origTax:', origTax);
+        // console.log('computedNewTax:', computedNewTax);
+        // console.log('selectedSeatFees:', selectedSeatFees);
+        // console.log('computedNewTotal:', computedNewTotal);
+        // console.log('currentTotal:', currentTotal);
+        // console.log('diff:', diff);
+        // console.log('penAmount:', penAmount);
+        // console.log('amountDue:', amountDue);
 
         // per your request: do NOT include change fee into automatic total; show fee separately
         // const pay = Math.max(0, diff);
@@ -447,7 +610,9 @@ export default function DoiLichPage() {
         setRefundBack(refund);
         setPenaltyPercent(penAmount / currentTotal); // Tùy chỉnh hiển thị %
         setPenaltyAmount(penAmount);
-    }, [order, selectedOption, options]);
+    }, [order, selectedOption, options, selectedSeatFees]);  // Thêm selectedSeatFees vào dependency  // Thêm selectedSeatFees vào dependency
+
+    // ...existing code...
 
     function saveRequest() {
         if (!booking || !selectedDateLabel || !selectedOption) return '';
@@ -486,6 +651,12 @@ export default function DoiLichPage() {
             return;
         }
 
+        // Check phải chọn ghế cho flight/bus
+        if ((booking.type === 'flight' || booking.type === 'bus') && selectedSeats.length === 0) {
+            toast({ title: 'Chưa chọn ghế', description: 'Vui lòng chọn ghế trước khi xác nhận đổi lịch.' });
+            return;
+        }
+
         // if user selected a date but didn't pick a time option, auto-select first available option for that date
         if (!selectedOption && optionsForSelectedDate && optionsForSelectedDate.length > 0) {
             // set state and ask user to confirm again (simple & safe)
@@ -506,11 +677,14 @@ export default function DoiLichPage() {
 
         // ready to open payment modal
         setPayAckConfirmed(false);
-        setPayMethod('momo');
+        setPayMethod('zalopay');
         setPayOpen(true);
     };
 
     // final payment handler (simulated): save request + attach payment info, then navigate
+    // ...existing code...
+
+
     async function handlePay() {
         if (!booking || !order || !selectedDateLabel || !selectedOption) {
             toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày và chuyến mới' });
@@ -532,13 +706,22 @@ export default function DoiLichPage() {
                 passengers: booking.passengers,
                 changeFeePerPax: changeFeePerPax,
                 fareDiff: fareDiff,
-                totalpayforChange: extraPay
+                totalpayforChange: extraPay,
+                selectedSeatFees: selectedSeatFees,
             };
 
             // Nếu là bus, thêm selectedSeats
             if (booking.type === 'bus') {
                 requestBody.selectedSeats = selectedSeats;
             }
+            // Nếu là flight, thêm selectedSeats
+            if (booking.type === 'flight') {
+                requestBody.selectedSeats = selectedSeats;
+            }
+
+            // Log requestBody trước khi gửi
+            console.log('RequestBody gửi lên change-calendar:', requestBody);
+
             // Bước mới: Gọi API để update inforChangeCalendar trước
             const changeResponse = await fetch(`${ORDERS_API}/api/orders/${order._id || order.orderNumber}/change-calendar`, {
                 method: "POST",
@@ -550,44 +733,56 @@ export default function DoiLichPage() {
 
             if (!changeResponse.ok) {
                 const errorData = await changeResponse.json().catch(() => ({}));
+                console.error('Change-calendar response error:', errorData); // Log lỗi
                 throw new Error(errorData.error || 'Failed to update change calendar');
             }
             const responseData = await changeResponse.json();
+            console.log('Response từ change-calendar:', responseData); // Log response
+
             const { codeChange, amountDue, refund } = responseData;
+            console.log('Final amountDue before payment:', Math.max(0, amountDue)); // Log amountDue cuối cùng trước khi thanh toán
             if (!codeChange || typeof amountDue !== 'number') {
                 throw new Error('Invalid response from change calendar API');
             }
 
             // Nếu không cần thanh toán (amountDue <= 0), hiển thị thông tin hoàn tiền và navigate
             if (amountDue <= 0) {
-                const refundAmount = Math.abs(amountDue) || refund || 0; // Sử dụng refund nếu có
+                const refundAmount = Math.abs(amountDue) || refund || 0;
                 const id = saveRequest();
                 toast({
                     title: 'Yêu cầu lưu',
                     description: refundAmount > 0 ? `Không cần thanh toán. Sẽ hoàn lại ${formatPrice(refundAmount)}. Mã yêu cầu ${id}` : `Không cần thanh toán. Mã yêu cầu ${id}`
                 });
                 setPayOpen(false);
-                router.push('/tai-khoan'); // Navigate nhất quán
+                router.push('/tai-khoan');
                 return;
             }
 
             // Tiếp tục logic thanh toán với amountDue từ server
             const changeCode = codeChange;
 
+            // Log payment request trước khi gửi
+            console.log('Payment method:', payMethod, 'Amount:', amountDue);
+
             // Build payment payloads per gateway (dùng amountDue thay vì extraPay)
             if (payMethod === 'momo') {
+                const paymentBody = {
+                    orderId: changeCode,
+                    amount: Math.max(0, Math.round(amountDue)),
+                    orderInfo: `Thanh toán đổi lịch - ${order.orderNumber || ''}`,
+                    orderDescription: `${booking.title} — ${selectedDateLabel} ${selectedOption?.time ?? ''}`,
+                    extraData: JSON.stringify({ originalOrder: order.orderNumber, changeCode })
+                };
+                console.log('MoMo payment request:', paymentBody); // Log MoMo request
+
                 const resp = await fetch(`${PAYMENT_BASE}/momo/payment`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        orderId: changeCode,
-                        amount: Math.max(0, Math.round(amountDue)), // Dùng amountDue từ server
-                        orderInfo: `Thanh toán đổi lịch - ${order.orderNumber || ''}`,
-                        orderDescription: `${booking.title} — ${selectedDateLabel} ${selectedOption?.time ?? ''}`,
-                        extraData: JSON.stringify({ originalOrder: order.orderNumber, changeCode })
-                    })
+                    body: JSON.stringify(paymentBody)
                 });
                 const data = await resp.json();
+                console.log('MoMo payment response:', data); // Log MoMo response
+
                 const url = data?.payUrl || data?.shortLink || data?.payUrl;
                 if (url) {
                     window.location.href = url;
@@ -596,19 +791,24 @@ export default function DoiLichPage() {
                     throw new Error('MoMo tạo payment không trả về URL');
                 }
             } else if (payMethod === 'zalopay') {
+                const paymentBody = {
+                    amount: Math.max(0, Math.round(amountDue)),
+                    description: `Thanh toán đổi lịch ${order.orderNumber || ''}`,
+                    orderId: changeCode,
+                    app_user: order.customerEmail || 'guest',
+                    callback_url: `${ORDERS_API}/api/payment/callback/zalo`,
+                    embed_data: { orderNumber: changeCode, originalOrder: order.orderNumber }
+                };
+                console.log('ZaloPay payment request:', paymentBody); // Log ZaloPay request
+
                 const resp = await fetch(`${PAYMENT_BASE}/zalo/payment`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        amount: Math.max(0, Math.round(amountDue)), // Dùng amountDue từ server
-                        description: `Thanh toán đổi lịch ${order.orderNumber || ''}`,
-                        orderId: changeCode,
-                        app_user: order.customerEmail || 'guest',
-                        callback_url: `${ORDERS_API}/api/payment/callback/zalo`,
-                        embed_data: { orderNumber: changeCode, originalOrder: order.orderNumber }
-                    })
+                    body: JSON.stringify(paymentBody)
                 });
                 const data = await resp.json();
+                console.log('ZaloPay payment response:', data); // Log ZaloPay response
+
                 const url = data?.order_url || data?.paymentUrl || (data && data.data && data.data.order_url);
                 if (url) {
                     window.location.href = url;
@@ -620,20 +820,45 @@ export default function DoiLichPage() {
                 throw new Error('Phương thức thanh toán không hỗ trợ');
             }
         } catch (err: any) {
-            console.error('Payment init failed', err);
+            console.error('Payment init failed:', err); // Log lỗi tổng
             toast({ title: 'Lỗi thanh toán', description: String(err?.message || err) });
             return;
         }
     }
+
     // Map server Order shape -> booking summary used by this page
     function mapOrderToBooking(order: any): Booking {
         if (!order) return null as any;
-        const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
-        const snapshot = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+        // let serviceDate = '';
+        // const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+        // const snapshot = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+        // // determine service date
+        // const serviceRaw = snapshot?.details?.startDateTime ?? snapshot?.details?.date ?? item?.travelDate ?? order?.createdAt;
+        // try { serviceDate = new Date(serviceRaw).toISOString().slice(0, 10); } catch { serviceDate = String(serviceRaw || '').slice(0, 10); }
         // determine service date
-        const serviceRaw = snapshot?.details?.startDateTime ?? snapshot?.details?.date ?? item?.travelDate ?? order?.createdAt;
         let serviceDate = '';
-        try { serviceDate = new Date(serviceRaw).toISOString().slice(0, 10); } catch { serviceDate = String(serviceRaw || '').slice(0, 10); }
+        const snapshot = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+        const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+
+        // Nếu là flight, lấy ngày từ flights trước (ưu tiên)
+        if (item?.type === 'flight') {
+            const flights = snapshot?.flights;
+            if (flights?.outbound && flights?.inbound) {
+                serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+            } else if (flights?.outbound) {
+                serviceDate = flights.outbound.date;
+            } else if (flights?.inbound) {
+                serviceDate = flights.inbound.date;
+            }
+        }
+
+        // Fallback nếu không phải flight hoặc không có
+        if (!serviceDate) {
+            const serviceRaw = snapshot?.details?.startDateTime ?? snapshot?.details?.date ?? item?.travelDate ?? order?.createdAt;
+            try { serviceDate = new Date(serviceRaw).toISOString().slice(0, 10); } catch { serviceDate = String(serviceRaw || '').slice(0, 10); }
+        }
+
+
         // booking date
         const bookingDate = order?.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : (order?.bookingDate || new Date().toISOString().slice(0, 10));
         // passengers count: fallback to snapshot counts or item.quantity
@@ -665,8 +890,345 @@ export default function DoiLichPage() {
             total: Number(order.total || 0),
         } as Booking;
     }
+
+    // const bookingFromRoute = useBookingFromRoute();
     // use loaded order -> map to booking shape for display; fallback to SAMPLE_BOOKINGS if order not found
-    const booking = order ? (mapOrderToBooking(order)) : (routeId ? null : useBookingFromRoute());
+    const booking = order ? mapOrderToBooking(order) : bookingFromRoute;
+    // Thêm hàm markOccupiedSeats (từ ChiTietMayBay)
+    // Thêm state cho bookedSeatsByLeg (từ ChiTietMayBay)
+    const [bookedSeatsByLeg, setBookedSeatsByLeg] = useState<{
+        outbound: string[];
+        inbound: string[];
+    }>({ outbound: [], inbound: [] });
+    // Thêm hàm markOccupiedSeats (từ ChiTietMayBay)
+    const markOccupiedSeats = (rows: any[], leg: 'outbound' | 'inbound') => {
+        console.log(`🔍 [Đổi lịch] Mark OCCUPIED cho leg: ${leg}`);
+        console.log(`🔍 [Đổi lịch] bookedSeatsByLeg[${leg}]:`, bookedSeatsByLeg[leg]);
+        const markedRows = rows.map(row => ({
+            ...row,
+            seats: row.seats.map((seat: any) => {
+                const isOccupied = bookedSeatsByLeg[leg].includes(seat.number);
+                if (isOccupied) {
+                    console.log(`✅ [Đổi lịch] Ghế ${seat.number} được mark OCCUPIED (từ bookedSeatsByLeg)`);
+                }
+                return {
+                    ...seat,
+                    availability: isOccupied ? 'OCCUPIED' : seat.availability,
+                };
+            }),
+        }));
+        console.log(`🔍 [Đổi lịch] Tổng ghế OCCUPIED sau mark:`, markedRows.flatMap(r => r.seats).filter(s => s.availability === 'OCCUPIED').map(s => s.number));
+        return markedRows;
+    };
+    // Thêm useEffect để load bookedSeatsByLeg từ tickets (từ ChiTietMayBay, adapt cho đổi lịch)
+    useEffect(() => {
+        if (!selectedOptionId || !booking || booking.type !== 'flight') {
+            setBookedSeatsByLeg({ outbound: [], inbound: [] });
+            return;
+        }
+        const fetchAndMatchTickets = async () => {
+            // Log ngày của selectedOption's flight
+            const selectedOffer = options.find((f: any) => f.id === selectedOptionId);
+            console.log(`🔍 [Đổi lịch] Ngày flight outbound:`, selectedOffer?.raw?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] || 'Không có');
+            if (selectedOffer?.raw?.itineraries?.[0]?.segments?.[1]) {  // Nếu có inbound (roundtrip)
+                console.log(`🔍 [Đổi lịch] Ngày flight inbound:`, selectedOffer.raw.itineraries[0].segments[1]?.departure?.at?.split('T')?.[0] || 'Không có');
+            }
+            try {
+                // Fetch tickets: chỉ lấy flight tickets với status paid/changed (đồng bộ với ChiTietMayBay)
+                const response = await fetch('http://localhost:7700/api/tickets?type=flight&status=paid&status=changed');
+                if (!response.ok) return;
+                const { data: tickets } = await response.json();
+
+                const outboundBooked: string[] = [];
+                const inboundBooked: string[] = [];
+
+                // Hàm helper để so khớp flight info (đồng bộ với ChiTietMayBay)
+                const matchFlight = (segment: any, ticketFlight: any) => {
+                    const segCarrier = segment?.carrierCode;
+                    const tickCarrier = ticketFlight?.airline;
+                    const segFlightNum = segment?.carrierCode + segment?.number;
+                    const tickFlightNum = ticketFlight?.flightNumber;
+                    const segDepIata = segment?.departure?.iataCode;
+                    const tickDepIata = ticketFlight?.route?.split(' → ')?.[0];
+                    const segArrIata = segment?.arrival?.iataCode;
+                    const tickArrIata = ticketFlight?.route?.split(' → ')?.[1];
+                    const segDate = segment?.departure?.at?.split('T')?.[0];
+                    const tickDate = ticketFlight?.date;
+                    const segTime = segment?.departure?.at?.includes(ticketFlight?.time?.split(' - ')?.[0]?.trim());
+
+                    console.log(`🔍 [Đổi lịch] Debug matchFlight:`);
+                    console.log(`  Segment carrier: ${segCarrier}, Ticket airline: ${tickCarrier}`);
+                    console.log(`  Segment flightNum: ${segFlightNum}, Ticket flightNumber: ${tickFlightNum}`);
+                    console.log(`  Segment depIata: ${segDepIata}, Ticket depIata: ${tickDepIata}`);
+                    console.log(`  Segment arrIata: ${segArrIata}, Ticket arrIata: ${tickArrIata}`);
+                    console.log(`  Segment date: ${segDate}, Ticket date: ${tickDate}`);
+                    console.log(`  Segment time match: ${segTime}`);
+
+                    const match = (
+                        segCarrier === tickCarrier &&
+                        segFlightNum === tickFlightNum &&
+                        segDepIata === tickDepIata &&
+                        segArrIata === tickArrIata &&
+                        segDate === tickDate &&
+                        segTime
+                    );
+                    if (match) {
+                        console.log('✅ Matched flight segment:', segment, 'with ticket flight:', ticketFlight);
+                    } else {
+                        console.log('❌ No match for segment:', segment, 'and ticket flight:', ticketFlight);
+                    }
+                    return match;
+                };
+
+                // Duyệt tickets và match với selectedOption's flight (adapt cho chuyến mới)
+                tickets.forEach((ticket: any) => {
+                    console.log('🔍 Checking ticket:', ticket.ticketNumber, 'status:', ticket.status, 'uniq:', ticket.uniq);
+                    const resInfo = ticket.reservationInfo || {};
+                    const outboundFlight = resInfo.flights?.outbound;
+                    const inboundFlight = resInfo.flights?.inbound;
+
+                    // Lấy leg từ uniq hoặc pricing.seats (đồng bộ với ChiTietMayBay)
+                    const uniqParts = (ticket.uniq || '').split('::');
+                    const legFromUniq = uniqParts.includes('outbound') ? 'outbound' : uniqParts.includes('inbound') ? 'inbound' : null;
+                    const legFromPricing = ticket.pricing?.seats?.[0]?.leg || null;
+
+                    // Build list of legs to check: prefer explicit leg info, fallback to reservationInfo
+                    const legsToCheck: Array<'outbound' | 'inbound'> = [];
+                    if (legFromPricing) legsToCheck.push(legFromPricing);
+                    if (legFromUniq && !legsToCheck.includes(legFromUniq as any)) legsToCheck.push(legFromUniq as any);
+                    if (outboundFlight && !legsToCheck.includes('outbound')) legsToCheck.push('outbound');
+                    if (inboundFlight && !legsToCheck.includes('inbound')) legsToCheck.push('inbound');
+
+                    // Log thông tin flight từ reservationInfo
+                    if (outboundFlight) {
+                        console.log(`🔍 [Đổi lịch] Ticket outbound flight:`, outboundFlight.flightNumber, outboundFlight.date, outboundFlight.route);
+                    }
+                    if (inboundFlight) {
+                        console.log(`🔍 [Đổi lịch] Ticket inbound flight:`, inboundFlight.flightNumber, inboundFlight.date, inboundFlight.route);
+                    }
+
+                    // For each potential leg, attempt to match với selectedOption's segment
+                    legsToCheck.forEach((leg) => {
+                        const ticketFlight = leg === 'outbound' ? outboundFlight : inboundFlight;
+                        if (!ticketFlight) return;
+
+                        // Match with selectedOffer's segment (for the new flight)
+                        const segment = selectedOffer?.raw?.itineraries?.[0]?.segments?.[selectedLeg === 'outbound' ? 0 : 1];  // 0 for outbound, 1 for inbound if roundtrip
+                        const didMatch = segment ? matchFlight(segment, ticketFlight) : false;
+
+                        // Add seats only when matched (for paid/changed tickets)
+                        if (didMatch && (ticket.status === 'paid' || ticket.status === 'changed')) {
+                            // Ưu tiên ticket.seats (array string, booked seats thực tế)
+                            let seatsToAdd: string[] = [];
+                            if (Array.isArray(ticket.seats) && ticket.seats.length > 0) {
+                                seatsToAdd = ticket.seats;
+                            } else {
+                                // Fallback: pricing.seats (array object với leg)
+                                seatsToAdd = ticket.pricing?.seats?.filter((s: any) => s.leg === leg).map((s: any) => s.number) || [];
+                            }
+
+                            // Add to the selectedLeg's bookedSeats (not the ticket's leg)
+                            if (selectedLeg === 'outbound') {
+                                outboundBooked.push(...seatsToAdd);
+                            } else {
+                                inboundBooked.push(...seatsToAdd);
+                            }
+                            console.log(`➕ [MATCHED - ${selectedLeg}] Added seats from ticket ${ticket.ticketNumber} for selected leg ${selectedLeg}:`, seatsToAdd);
+                        } else {
+                            console.log(`➖ Did not add seats for ticket ${ticket.ticketNumber} leg ${leg} (matched=${didMatch}, status=${ticket.status})`);
+                        }
+                    });
+                });
+
+                // Loại bỏ duplicate seats
+                setBookedSeatsByLeg({
+                    outbound: [...new Set(outboundBooked)],
+                    inbound: [...new Set(inboundBooked)],
+                });
+            } catch (e) {
+                console.warn('Error fetching/matching tickets for booked seats', e);
+                setBookedSeatsByLeg({ outbound: [], inbound: [] });
+            }
+        };
+
+        fetchAndMatchTickets();
+    }, [selectedOptionId, booking?.type, options]);
+
+
+    useEffect(() => {
+        async function loadProductOptions() {
+            if (!order) { setOptions([]); return; }
+            setLoadingOptions(true);
+            setOptions([]);
+            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
+            const { adults, children, infants, seatCount } = paxCountsFromOrder(order);
+            const type = (item?.type || '').toLowerCase();
+
+            const now = new Date();
+            const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+            if (type === 'flight') {
+                if (!selectedDateLabel) {
+                    setOptions([]);
+                    return;
+                }
+                // Sử dụng apiFlights nếu có, else fallback generate
+                if (apiFlights.length > 0) {
+                    const opts = apiFlights.map(g => ({
+                        ...g,
+                        time: `${g.departure?.time} - ${g.arrival?.time}` || g.time || '-', // Thêm time từ departure.time
+                        labelDate: selectedDateLabel
+                    }));
+                    setOptions(opts);
+                } else {
+                    const baseFare = Math.round((order.total || 0) / Math.max(1, adults + children + infants));
+                    const d = new Date(selectedDateLabel);
+                    const gen = generateOptions(baseFare, d);
+                    const opts = gen.map(g => ({ ...g, labelDate: selectedDateLabel }));
+                    setOptions(opts);
+                }
+                return;
+            }
+
+            const productId = item?.productId || item?.itemId;
+            if (!productId) return setOptions([]);
+            try {
+                if (type === 'tour') {
+                    const r = await fetch(`${Tourbase}/api/tours/${encodeURIComponent(productId)}`);
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const tour = j && j.data ? j.data : j;
+                    let dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
+                    // Filter chỉ giữ ngày > today
+                    dates = dates.filter(d => d > todayIso);
+                    const adultUnit = Number(tour?.adultPrice ?? tour?.pricing?.perPax?.adultUnit ?? tour?.price ?? 0);
+                    const childUnit = Number(tour?.childPrice ?? tour?.pricing?.perPax?.childUnit ?? 0);
+                    const infantUnit = Number(tour?.infantPrice ?? tour?.pricing?.perPax?.infantUnit ?? 0);
+                    const perPax = { adult: adultUnit, child: childUnit, infant: infantUnit };
+
+                    // fetch slot info for each date in parallel to get accurate availability
+                    const dateList = (dates || []).map((d: any) => {
+                        try { return new Date(d).toISOString(); } catch { return String(d); }
+                    });
+                    const slotPromises = dateList.map(async (dtIso, idx) => {
+                        const dateIso = dtIso.split('T')[0];
+                        const slotUrl = `${Tourbase}/api/tours/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
+                        try {
+                            const sr = await fetch(slotUrl);
+                            if (!sr.ok) return { dateIso, slot: null };
+                            const sj = await sr.json();
+                            return { dateIso, slot: sj?.slot ?? sj };
+                        } catch {
+                            return { dateIso, slot: null };
+                        }
+                    });
+                    const slotResults = await Promise.all(slotPromises);
+
+                    const opts = slotResults.map((res: any, idx: number) => {
+                        const dateIso = res.dateIso;
+                        const time = tour?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        // seatsAvailable from slot API else fallback to tour.maxGroupSize or capacity or 0
+                        let seatsAvailable = null;
+                        if (res.slot) {
+                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
+                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
+                        }
+                        if (seatsAvailable == null) seatsAvailable = Number(tour?.maxGroupSize ?? tour?.capacity ?? 0);
+                        const fareTotal = (adultUnit * adults) + (childUnit * children) + (infantUnit * infants);
+                        return {
+                            id: `tour-${idx}-${dateIso}`,
+                            time,
+                            fare: fareTotal,
+                            notes: undefined,
+                            labelDate: dateIso,
+                            seatsAvailable,
+                            perPax
+                        } as any;
+                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
+                    console.log('Tour options loaded:', opts.map(o => o.labelDate)); // Debug log
+                    setOptions(opts);
+                } else if (type === 'bus') {
+
+                    const r = await fetch(`${base}/api/buses/${encodeURIComponent(productId)}`);
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const bus = j && j.data ? j.data : j;
+                    // let dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
+                    let dates = Array.isArray(bus?.departureDates) ? bus.departureDates.map((d: string) => d.split('T')[0]) : (bus?.departureAt ? [bus.departureAt.split('T')[0]] : []);
+                    // Filter chỉ giữ ngày > today + 3 days
+                    const now = new Date();
+                    // dates = dates.filter(d => {
+                    //     const depDate = new Date(d);
+                    //     const depDateMidnight = new Date(depDate.getFullYear(), depDate.getMonth(), depDate.getDate());
+                    //     const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    //     const daysDiff = (depDateMidnight.getTime() - nowMidnight.getTime()) / (1000 * 60 * 60 * 24);
+                    //     return daysDiff > 3;
+                    // });
+                    dates = dates.filter(d => {
+                        const depDate = new Date(d + 'T00:00:00'); // assuming d is YYYY-MM-DD
+                        const hoursDiff = (depDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+                        return hoursDiff >= 24; // Match canChange policy for bus
+                    });
+                    console.log('dates bus after filter:', dates);
+
+                    const adultUnit = Number(bus?.adultPrice || bus?.price || 0);
+                    const childUnit = Number(bus?.childPrice || 0);
+                    const infantUnit = 0;
+
+                    // try fetch slot info per date from bus slot endpoint if available
+                    const dateList = (dates || []).map((d: any) => {
+                        try { return new Date(d).toISOString(); } catch { return String(d); }
+                    });
+                    const slotPromises = dateList.map(async (dtIso) => {
+                        const dateIso = dtIso.split('T')[0];
+                        const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
+                        try {
+                            const sr = await fetch(slotUrl);
+                            if (!sr.ok) return { dateIso, slot: null };
+                            const sj = await sr.json();
+                            return { dateIso, slot: sj?.slot ?? sj };
+                        } catch {
+                            return { dateIso, slot: null };
+                        }
+                    });
+                    const slotResults = await Promise.all(slotPromises);
+
+                    const opts = slotResults.map((res: any, idx: number) => {
+                        const dateIso = res.dateIso;
+                        const time = bus?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                        let seatsAvailable = null;
+                        if (res.slot) {
+                            if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
+                            else if (typeof res.slot.capacity === 'number' && typeof res.slot.reserved === 'number') seatsAvailable = Math.max(0, Number(res.slot.capacity) - Number(res.slot.reserved));
+                        }
+                        if (seatsAvailable == null) seatsAvailable = Number(bus?.seatsAvailable ?? bus?.seatsTotal ?? 0);
+                        return {
+                            id: `bus-${idx}-${dateIso}`,
+                            time,
+                            fare: adultUnit * (adults + children) + infantUnit * infants,
+                            notes: undefined,
+                            labelDate: dateIso,
+                            seatsAvailable,
+                            perPax: { adult: adultUnit, child: childUnit, infant: infantUnit }
+                        } as any;
+                    }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
+                    console.log('Bus options loaded:', opts.map(o => o.labelDate)); // Debug log
+                    setOptions(opts);
+                } else {
+                    setOptions([]);
+                }
+            } catch (e) {
+                console.warn('load product options failed', e);
+                setOptions([]);
+            } finally {
+                setLoadingOptions(false);
+            }
+        }
+        loadProductOptions();
+    }, [order, selectedDate, apiFlights, booking?.type, order?._id]);
     const groupedOptions = useMemo(() => {
         const g: Record<string, Option[]> = {};
         const excludeDate = booking?.serviceDate ?? null;
@@ -676,7 +1238,7 @@ export default function DoiLichPage() {
 
         for (const o of options) {
             const d = (o as any).labelDate || (o.id.split('-')[2] ?? null);
-            console.log('Processing option d:', d, 'todayIso:', todayIso, 'excludeDate:', excludeDate);
+            console.log('Processing option d:', d, 'todayIso:', todayIso, 'excludeDate:', excludeDate); // Debug log
             if (!d) continue;
             // skip current service date
             if (excludeDate && d === excludeDate) {
@@ -699,10 +1261,19 @@ export default function DoiLichPage() {
 
         // remove dates that have no remaining options (safety; should not be needed)
         Object.keys(g).forEach(k => { if (!g[k] || g[k].length === 0) delete g[k]; });
+        // console.log('Grouped options keys:', Object.keys(g)); // Debug log
         return g;
     }, [options, booking?.serviceDate]);
     // selected date label (YYYY-MM-DD) chosen from right column
     const [selectedDateLabel, setSelectedDateLabel] = useState<string | null>(null);
+    // Thêm useEffect để reset selectedOptionId, selectedSeats, selectedSeatFees khi selectedDateLabel thay đổi
+    useEffect(() => {
+        console.log('selectedDateLabel changed to:', selectedDateLabel, 'resetting selectedOptionId and selectedSeats');
+        // setSelectedOptionId('');
+        setSelectedSeats([]);
+        setSelectedSeatFees(0);
+    }, [selectedDateLabel]);
+
     const optionsForSelectedDate = useMemo(() => {
         if (!selectedDateLabel) return [] as Option[];
         return groupedOptions[selectedDateLabel] ?? [];
@@ -710,15 +1281,15 @@ export default function DoiLichPage() {
 
     const canChange = (() => {
         if (booking?.type === 'bus') {
-            // Cho bus: >=24 giờ
-            const sdRaw = order?.metadata?.bookingDataSnapshot?.details?.startDateTime ?? order?.metadata?.bookingDataSnapshot?.details?.date ?? booking?.serviceDate ?? order?.createdAt;
-            if (sdRaw) {
-                const sd = new Date(sdRaw);
-                const now = new Date();
-                const hoursDiff = (sd.getTime() - now.getTime()) / (1000 * 60 * 60);
-                return hoursDiff >= 24;
-            }
-            return false;
+            const snap = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+            const sdRaw = snap?.details?.startDateTime ?? order?.items?.[0]?.travelDate ?? booking?.serviceDate;  // Thêm fallback booking?.serviceDate
+            console.log('canChange debug - sdRaw:', sdRaw);
+            if (!sdRaw) return false;
+            const sd = new Date(sdRaw);
+            const now = new Date();
+            const hoursDiff = (sd.getTime() - now.getTime()) / (1000 * 60 * 60);
+            console.log('canChange debug - sd:', sd, 'now:', now, 'hoursDiff:', hoursDiff);
+            return hoursDiff >= 24;
         } else {
             // Tour/flight: >3 ngày
             try {
@@ -746,7 +1317,14 @@ export default function DoiLichPage() {
                 if (!Number.isNaN(dt.getTime())) return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             } catch { }
         }
-        // booking may be null — guard before accessing details
+        // Cho flight, lấy từ flights.outbound.time nếu có
+        if (booking?.type === 'flight') {
+            const flights = snap?.flights;
+            if (flights?.outbound?.time) {
+                return flights.outbound.time;
+            }
+        }
+        // Fallback từ booking.details
         const detailsStr = booking?.details ?? '';
         const m = String(detailsStr).match(/(\d{1,2}:\d{2})/);
         return m ? m[1] : '-';
@@ -755,14 +1333,10 @@ export default function DoiLichPage() {
     const [assignedSeats, setAssignedSeats] = useState<string[]>([]);
     const [seatMap, setSeatMap] = useState<any[]>([]); // seat objects { seatId, label, status, reservationId, type, pos }
     const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
+    const [seatmapLoading, setSeatmapLoading] = useState(false);
+
     // Clear selected seats & current seatMap when user picks a different date (avoid stale selection)
-    useEffect(() => {
-        // only for bus bookings — no-op for others
-        if (!booking || booking.type !== 'bus') return;
-        // when selectedDateLabel changes reset selections before loading new map
-        setSelectedSeats((prev) => (prev && prev.length ? [] : prev));
-        setSeatMap((prev) => (prev && prev.length ? [] : prev));
-    }, [selectedDateLabel, booking?.type]);
+
     // load assigned seats from order (try snapshot -> ticketIds)
     useEffect(() => {
         async function loadAssigned() {
@@ -881,27 +1455,122 @@ export default function DoiLichPage() {
     }, [booking?.type, selectedDateLabel, order?.items?.[0]?.productId]);
 
     // toggle seat selection (only available seats allowed) - limit by seatCount
+
     function toggleSeat(seatId: string) {
         if (!seatId) return;
         const pc = paxCountsFromOrder(order || ({} as any));
         const max = pc.seatCount;
         const existing = selectedSeats.includes(seatId);
         if (existing) {
-            setSelectedSeats(selectedSeats.filter(s => s !== seatId));
+            const newSelectedSeats = selectedSeats.filter(s => s !== seatId);
+            setSelectedSeats(newSelectedSeats);
+            console.log('selectedSeats after toggle (removed):', newSelectedSeats);
+            // Nếu bỏ chọn ghế paid, trừ phí
+            if (booking?.type === 'flight') {
+                const allSeats = flightSeatMap.rows.flatMap((r: any) => r.seats || []);
+                const seat = allSeats.find((s: any) => s.id === seatId);
+                if (seat) {
+                    const charsUp = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                    const hasCH = charsUp.includes('CH');
+                    const explicitPrice = Number(seat.price || 0) > 0;
+                    const isPaid = hasCH && explicitPrice;
+                    if (isPaid) {
+                        setSelectedSeatFees(prev => prev - Number(seat.price || 0));
+                    }
+                }
+            }
             return;
         }
         if (selectedSeats.length >= max) {
             toast({ title: 'Giới hạn chỗ', description: `Bạn chỉ được chọn tối đa ${max} ghế` });
             return;
         }
-        // ensure seat exists and available
-        const seat = seatMap.find(s => s.seatId === seatId);
-        if (seat && seat.status !== 'available') {
-            toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
-            return;
+        // Check availability cho bus
+        if (booking?.type === 'bus') {
+            const seat = seatMap.find(s => s.seatId === seatId);
+            if (seat && seat.status !== 'available') {
+                toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
+                return;
+            }
         }
-        setSelectedSeats([...selectedSeats, seatId]);
+        // Check availability cho flight (bao gồm OCCUPIED từ bookedSeatsByLeg)
+        if (booking?.type === 'flight') {
+            const allSeats = flightSeatMap.rows.flatMap((r: any) => r.seats || []);
+            const seat = allSeats.find((s: any) => s.id === seatId);
+            if (seat && seat.availability !== 'AVAILABLE') {
+                toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
+                return;
+            }
+            // Confirm cho paid seat
+            const charsUp = (seat.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+            const hasCH = charsUp.includes('CH');
+            const explicitPrice = Number(seat.price || 0) > 0;
+            const isPaid = hasCH && explicitPrice; // Require BOTH
+            if (isPaid) {
+                const msgPrice = seat.currency && seat.currency !== 'VND' ? `${seat.price.toLocaleString()} ${seat.currency}` : formatPrice(seat.price);
+                const ok = window.confirm(`Ghế ${seat.number} có phí ${msgPrice}. Bạn xác nhận chọn ghế này và chấp nhận trả phí?`);
+                if (!ok) return;
+                // Cộng phí khi chọn
+                setSelectedSeatFees(prev => prev + Number(seat.price || 0));
+            }
+        }
+        const newSelectedSeats = [...selectedSeats, seatId];
+        setSelectedSeats(newSelectedSeats);
+        console.log('selectedSeats after toggle (added):', newSelectedSeats);
     }
+
+
+    useEffect(() => {
+        // Reset cho bus
+        if (!booking || booking.type !== 'bus') return;
+        setSelectedSeats((prev) => (prev && prev.length ? [] : prev));
+        setSeatMap((prev) => (prev && prev.length ? [] : prev));
+        // Reset cho flight
+        if (booking.type !== 'flight') {
+            setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
+            setSelectedSeats([]);
+            setSelectedSeatFees(0);  // Reset phí ghế
+        }
+    }, [selectedDateLabel, booking?.type]);
+
+    // Load seatmap cho flight khi chọn option
+    useEffect(() => {
+        async function loadSeatMapForFlight() {
+            if (!selectedOptionId || !booking || booking.type !== 'flight') {
+                setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
+                setSelectedSeats([]);
+                return;
+            }
+
+            const selectedOffer = options.find((f: any) => f.id === selectedOptionId);
+            if (!selectedOffer || !selectedOffer.raw) {
+                setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
+                return;
+            }
+            setSeatmapLoading(true);
+
+            try {
+                const seatmap = await fetchSeatmapForFlight(selectedOffer.raw);
+                if (seatmap) {
+                    const parsed = parseSeatmap(seatmap);
+                    // Áp dụng markOccupiedSeats cho leg hiện tại (outbound/inbound dựa trên selectedLeg)
+                    const markedRows = markOccupiedSeats(parsed.rows, selectedLeg);
+                    setFlightSeatMap({ ...parsed, rows: markedRows });
+                } else {
+                    setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
+                }
+            } catch (err) {
+                console.error('Error loading flight seatmap', err);
+                setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
+            }
+            finally {
+                setSeatmapLoading(false);  // Thêm: Kết thúc loading sau khi mark xong
+            }
+        }
+        loadSeatMapForFlight();
+    }, [selectedOptionId, booking?.type, options, bookedSeatsByLeg, selectedLeg]);
+
+
     if (!booking) {
         return (
             <>
@@ -914,6 +1583,9 @@ export default function DoiLichPage() {
     return (
         <>
             <div className="container py-6">
+                <div style={{ background: 'yellow', padding: '10px', fontSize: '12px' }}>
+                    Debug: canChange={String(canChange)}, selectedDateLabel={selectedDateLabel}, selectedOptionId={selectedOptionId}, selectedSeatsLength={selectedSeats.length}
+                </div>
                 <div className="mb-4">
                     <Button variant="ghost" onClick={() => router.back()}>
                         <ArrowLeft className="h-4 w-4 mr-2" />
@@ -1051,84 +1723,160 @@ export default function DoiLichPage() {
                                                 <CardTitle>Chọn ngày để đổi</CardTitle>
                                             </CardHeader>
                                             <CardContent>
-
                                                 <div className="" style={{ height: '51.6vh', overflow: 'auto' }}>
+                                                    {booking.type === 'flight' ? (
+                                                        <div className="space-y-4">
+                                                            {selectedDateLabel === booking.serviceDate && <div className="text-sm text-red-500">Hãy chọn ngày khởi hành bạn muốn đổi khác với ngày khởi hành khác với chuyến bay của bạn </div>}
+                                                            <div className="flex gap-2 items-end">
+                                                                <div className="flex-1">
+                                                                    <Label htmlFor="flight-date">Chọn ngày đổi lịch</Label>
+                                                                    <Input
+                                                                        id="flight-date"
+                                                                        type="date"
+                                                                        value={selectedDateLabel || ''}
+                                                                        onChange={(e) => {
+                                                                            setSelectedDateLabel(e.target.value);
+                                                                            setSelectedOptionId(''); // Reset option khi đổi ngày
+                                                                        }}
+                                                                        min={new Date().toISOString().split('T')[0]} // Disabled ngày quá khứ
+                                                                    />
+                                                                </div>
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        const date = (document.getElementById('flight-date') as HTMLInputElement)?.value;
+                                                                        if (date) {
+                                                                            setSelectedDateLabel(date);
+                                                                            setSelectedOptionId(''); // Reset option để trigger load lại
+                                                                            // Lấy mã sân bay từ data order
+                                                                            const snap = order?.metadata?.bookingDataSnapshot || order?.metadata || {};
+                                                                            const flights = snap?.flights;
+                                                                            if (flights?.outbound) {
+                                                                                const route = flights.outbound.route; // Ví dụ: "HAN → SGN"
+                                                                                const [departure, arrival] = route.split(' → ');
+                                                                                console.log('Ngày đã chọn:', date);
+                                                                                console.log('Mã sân bay đi (Departure):', departure);
+                                                                                console.log('Mã sân bay đến (Arrival):', arrival);
+                                                                                // Gọi API
+                                                                                fetchAmadeusOffersForFlight(departure, arrival, date);
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    disabled={!selectedDateLabel || selectedDateLabel === booking.serviceDate || isLoading}  // Thêm disabled khi isLoading
+                                                                >
 
-
-                                                    {/* If a date selected, show available times for that date (optional) */}
-                                                    {optionsForSelectedDate.length > 0 && (
+                                                                    {isLoading ? "Đang tìm chuyến..." : "Tìm chuyến"}
+                                                                </Button>
+                                                            </div>
+                                                            {selectedDateLabel && (isLoading || optionsForSelectedDate.length > 0) && (  // Thêm isLoading vào điều kiện để hiện section ngay
+                                                                <div>
+                                                                    <div className="text-sm font-medium mb-2">Chọn giờ khởi hành</div>
+                                                                    {isLoading ? (  // Hiện loading khi isLoading
+                                                                        <div className="text-sm text-muted-foreground border rounded p-3">Đang tải thông tin chuyến bay...</div>
+                                                                    ) : (
+                                                                        <RadioGroup value={selectedOptionId} onValueChange={(value) => {
+                                                                            console.log('Selected option ID:', value);
+                                                                            const selectedOpt = options.find(o => o.id === value);  // Tìm item từ options
+                                                                            console.log('Selected option item (full):', selectedOpt);
+                                                                            if (selectedOpt?.raw) {
+                                                                                console.log('Selected option raw data for seatmap:', selectedOpt.raw);
+                                                                            } else {
+                                                                                console.log('No raw data found for selected option');
+                                                                            }
+                                                                            setSelectedOptionId(value);
+                                                                        }}>
+                                                                            <div className="space-y-2">
+                                                                                {optionsForSelectedDate.map((opt) => (
+                                                                                    <label key={opt.id} className="flex items-center justify-between rounded p-2 cursor-pointer">
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <RadioGroupItem value={opt.id} />
+                                                                                            <div>
+                                                                                                <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {opt.departure.time}</div>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div className="text-right">
+                                                                                            <div className="text-sm">Phí mới {formatPrice(opt.price)}</div>
+                                                                                        </div>
+                                                                                    </label>
+                                                                                ))}
+                                                                            </div>
+                                                                        </RadioGroup>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                            {selectedDateLabel && optionsForSelectedDate.length === 0 && !loadingOptions && (
+                                                                <div className="text-sm text-muted-foreground border rounded p-3">Không có chuyến phù hợp cho ngày này.</div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        // Code hiện tại cho tour/bus
                                                         <>
-                                                            <div className="text-sm font-medium mb-2">Bạn đã chọn </div>
-                                                            <RadioGroup value={selectedOptionId} onValueChange={setSelectedOptionId}>
-                                                                <div className="space-y-2">
-                                                                    {optionsForSelectedDate.map((opt) => {
-                                                                        const pc = paxCountsFromOrder(order || ({} as any));
-                                                                        const perPax = (opt as any).perPax || null;
-                                                                        const previewTotal = perPax
-                                                                            ? (Number(perPax.adult || 0) * pc.adults) + (Number(perPax.child || 0) * pc.children) + (Number(perPax.infant || 0) * pc.infants)
-                                                                            : (Number(opt.fare || 0) * Math.max(1, (pc.adults + pc.children + pc.infants)));
+                                                            {optionsForSelectedDate.length > 0 && (
+                                                                <>
+                                                                    <div className="text-sm font-medium mb-2">Bạn đã chọn</div>
+                                                                    <RadioGroup value={selectedOptionId} onValueChange={setSelectedOptionId}>
+                                                                        <div className="space-y-2">
+                                                                            {optionsForSelectedDate.map((opt) => {
+                                                                                const pc = paxCountsFromOrder(order || ({} as any));
+                                                                                const perPax = (opt as any).perPax || null;
+                                                                                const previewTotal = perPax
+                                                                                    ? (Number(perPax.adult || 0) * pc.adults) + (Number(perPax.child || 0) * pc.children) + (Number(perPax.infant || 0) * pc.infants)
+                                                                                    : (Number(opt.fare || 0) * Math.max(1, (pc.adults + pc.children + pc.infants)));
+                                                                                return (
+                                                                                    <label key={opt.id} className={`flex items-center justify-between rounded p-2 cursor-pointer`}>
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <RadioGroupItem value={opt.id} />
+                                                                                            <div>
+                                                                                                <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {opt.time}</div>
+                                                                                                {(opt as any).labelDate && <div className="text-xs text-muted-foreground">Ngày {(opt as any).labelDate}</div>}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div className="text-right">
+                                                                                            <div className="text-sm">Phí mới <span className='font-bold'>(chưa kèm thuế)</span>{formatPrice(previewTotal)}</div>
+                                                                                            {booking?.type !== 'bus' && typeof (opt as any).seatsAvailable !== 'undefined' && <div className="text-xs">{(opt as any).seatsAvailable} chỗ</div>}
+                                                                                        </div>
+                                                                                    </label>
+                                                                                );
+                                                                            })}
+                                                                        </div>
+                                                                    </RadioGroup>
+                                                                </>
+                                                            )}
+                                                            <Separator className="my-3" />
+                                                            <div className="text-sm text-muted-foreground mb-3">Chỉ hiển thị ngày còn đủ chỗ theo số khách của đơn</div>
+                                                            <div className="space-y-2">
+                                                                {loadingOptions ? (
+                                                                    <div className="text-sm text-muted-foreground border rounded p-3">Đang tải danh sách ngày, xin đợi...</div>
+                                                                ) : Object.keys(groupedOptions).length ? (
+                                                                    Object.keys(groupedOptions).sort().map((date) => {
+                                                                        const opts = groupedOptions[date];
+                                                                        const seats = opts[0]?.seatsAvailable ?? '-';
+                                                                        const selected = selectedDateLabel === date;
                                                                         return (
-                                                                            <label key={opt.id} className={`flex items-center justify-between rounded p-2 cursor-pointer`}>
-                                                                                <div className="flex items-center gap-3">
-                                                                                    <RadioGroupItem value={opt.id} />
-                                                                                    <div>
-                                                                                        <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {opt.time}</div>
-                                                                                        {(opt as any).labelDate && <div className="text-xs text-muted-foreground">Ngày {(opt as any).labelDate}</div>}
-                                                                                    </div>
+                                                                            <button
+                                                                                key={date}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setSelectedDateLabel(date);
+                                                                                    if (opts && opts.length) setSelectedOptionId(opts[0].id);
+                                                                                }}
+                                                                                className={`w-full flex items-center justify-between p-3 rounded border transition ${selected ? 'border-2 border-[hsl(var(--primary))] bg-primary/10' : 'hover:bg-[hsl(var(--primary))/0.03]'}`}
+                                                                            >
+                                                                                <div>
+                                                                                    <div className="font-medium">{date}</div>
                                                                                 </div>
                                                                                 <div className="text-right">
-                                                                                    <div className="text-sm">Phí mới  <span className='font-bold'>(chưa kèm thuế)</span>{formatPrice(previewTotal)}</div>
-                                                                                    {booking?.type !== 'bus' && typeof (opt as any).seatsAvailable !== 'undefined' && <div className="text-xs">{(opt as any).seatsAvailable} chỗ</div>}
+                                                                                    {booking?.type !== 'bus' && <div className="text-sm">{seats} chỗ</div>}
                                                                                 </div>
-                                                                            </label>
+                                                                            </button>
                                                                         );
-                                                                    })}
-                                                                </div>
-                                                            </RadioGroup>
+                                                                    })
+                                                                ) : (
+                                                                    <div className="text-sm text-muted-foreground border rounded p-3">Không có ngày phù hợp hoặc hết chỗ.</div>
+                                                                )}
+                                                            </div>
                                                         </>
                                                     )}
-                                                    <Separator className="my-3" />
-
-
-                                                    <div className="text-sm text-muted-foreground mb-3">Chỉ hiển thị ngày còn đủ chỗ theo số khách của đơn</div>
-                                                    <div className="space-y-2">
-                                                        {loadingOptions ? (
-                                                            <div className="text-sm text-muted-foreground border rounded p-3">Đang tải danh sách ngày, xin đợi...</div>
-                                                        ) : Object.keys(groupedOptions).length ? (
-                                                            Object.keys(groupedOptions).sort().map((date) => {
-                                                                // pick seatsAvailable from first option of that date
-                                                                const opts = groupedOptions[date];
-                                                                const seats = opts[0]?.seatsAvailable ?? '-';
-                                                                const selected = selectedDateLabel === date;
-                                                                return (
-                                                                    <button
-                                                                        key={date}
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setSelectedDateLabel(date);
-                                                                            // auto-select first time option for chosen date
-                                                                            if (opts && opts.length) setSelectedOptionId(opts[0].id);
-                                                                        }}
-                                                                        className={`w-full flex items-center justify-between p-3 rounded border transition ${selected ? 'border-2 border-[hsl(var(--primary))] bg-primary/10' : 'hover:bg-[hsl(var(--primary))/0.03]'}`}
-                                                                    >
-                                                                        <div>
-                                                                            <div className="font-medium">{date}</div>
-                                                                            {/* <div className="text-xs text-muted-foreground">Chọn ngày</div> */}
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            {/* hide seat count for bus orders */}
-                                                                            {booking?.type !== 'bus' && <div className="text-sm">{seats} chỗ</div>}
-                                                                        </div>
-                                                                    </button>
-                                                                );
-                                                            })
-                                                        ) : (
-                                                            <div className="text-sm text-muted-foreground border rounded p-3">Không có ngày phù hợp hoặc hết chỗ.</div>
-                                                        )}
-                                                    </div>
                                                 </div>
-
-
                                             </CardContent>
                                         </Card>
                                     </div>
@@ -1146,7 +1894,8 @@ export default function DoiLichPage() {
 
                                         <Button variant="outline" onClick={() => router.back()}>Hủy</Button>
                                         <Button onClick={handleConfirm}
-                                            disabled={!canChange || !selectedDateLabel || !selectedOption}
+                                            // disabled={!canChange || !selectedDateLabel || !selectedOption || ((booking.type === 'flight' || booking.type === 'bus') && selectedSeats.length === 0)}
+                                            disabled={!canChange || !selectedDateLabel || !selectedOptionId || ((booking.type === 'flight' || booking.type === 'bus') && selectedSeats.length === 0)}
                                         >
                                             <Ticket className="h-4 w-4 mr-1" />
                                             Xác nhận đổi lịch
@@ -1173,6 +1922,12 @@ export default function DoiLichPage() {
                                             <span>Giá chuyến mới</span>
                                             <span className="font-medium">{formatPrice(newTotal)}</span>
                                         </div>
+                                        {selectedSeatFees > 0 && (
+                                            <div className="flex items-center justify-between text-sm">
+                                                <span>Phí ghế đã chọn (đã cộng vào giá chuyến mới )</span>
+                                                <span className="font-medium text-orange-600">{formatPrice(selectedSeatFees)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex items-center justify-between text-sm">
                                             <span>Chênh lệch giá</span>
                                             <span className={fareDiff >= 0 ? 'font-medium text-orange-600' : 'font-medium text-green-600'}>
@@ -1184,9 +1939,9 @@ export default function DoiLichPage() {
                                             <span className="font-medium text-red-600">{formatPrice(penaltyAmount)}</span>
                                         </div>
                                         {/* <div className="flex items-center justify-between text-sm">
-                                            <span>Phí đổi lịch (tham khảo)</span>
-                                            <span className="font-medium">{formatPrice(changeFeePerPax)}</span>
-                                        </div> */}
+            <span>Phí đổi lịch (tham khảo)</span>
+            <span className="font-medium">{formatPrice(changeFeePerPax)}</span>
+        </div> */}
                                         <Separator />
                                         {extraPay > 0 ? (
                                             <div className="flex items-center justify-between">
@@ -1232,6 +1987,8 @@ export default function DoiLichPage() {
                                         const id = s.seatId || s.label;
                                         const isBooked = s.status !== 'available';
                                         const isSelected = selectedSeats.includes(id);
+
+
                                         return (
                                             <button
                                                 type="button"
@@ -1249,6 +2006,214 @@ export default function DoiLichPage() {
                                     })}
                                 </div>
                                 <div className="text-xs text-muted-foreground mt-2">Chọn tối đa {paxCountsFromOrder(order).seatCount} ghế. Ghế đỏ đã bị đặt.</div>
+                            </>
+                        )}
+                        {booking.type === 'flight' && selectedDateLabel && flightSeatMap.rows.length > 0 && (
+                            <>
+                                {/* Lưu ý mới */}
+                                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">  {/* Giữ nguyên text-xs cho lưu ý */}
+                                    <div className="font-bold mb-1">⚠️ Lưu ý khi đổi lịch</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Chỗ ngồi đã thanh toán ở chuyến bay cũ sẽ không được hoàn lại.</li>
+                                        <li>Bạn cần chọn lại ghế cho chuyến bay mới.</li>
+                                        <li>Nếu chọn ghế miễn phí, bạn sẽ không bị thu thêm.</li>
+                                    </ul>
+                                </div>
+                                <Separator className="my-3" />
+                                <div className="text-sm font-medium mb-2">Sơ đồ ghế ({selectedDateLabel})</div>
+
+                                {seatmapLoading ? (  // Thêm: Loading khi load seatmap
+                                    <div className="text-sm text-muted-foreground border rounded p-3">Đang tải sơ đồ ghế...</div>
+                                ) : (
+                                    <div className="shadow-lg rounded-2xl bg-white p-5">
+                                        {/* Header */}
+                                        <div className="mb-4">
+                                            <h2 className="text-sm font-semibold flex items-center gap-2">  {/* Giảm từ text-lg xuống text-sm */}
+                                                🪑 Sơ đồ chỗ ngồi
+                                            </h2>
+                                        </div>
+
+                                        {/* Empty state */}
+                                        {flightSeatMap.rows.length === 0 && (
+                                            <div className="text-center text-gray-500 text-xs py-6 border rounded-xl">  {/* Giảm từ text-sm xuống text-xs */}
+                                                Không có dữ liệu sơ đồ ghế
+                                            </div>
+                                        )}
+
+                                        {/* Cockpit */}
+                                        <div className="flex justify-center mb-3">
+                                            <div className="bg-gray-800 text-white text-[10px] font-semibold px-5 py-1.5 rounded-t-xl shadow-inner">  {/* Giảm từ text-xs xuống text-[10px] */}
+                                                ✈ Buồng lái
+                                            </div>
+                                        </div>
+
+                                        {/* Seat map */}
+                                        <div className="overflow-x-auto">
+
+                                            <div className="space-y-3 flex flex-col items-center min-w-max">
+                                                {flightSeatMap.rows.map((row: any) => {
+                                                    const letters = ['A', 'B', 'C', '_aisle', 'D', 'E', 'F', '_aisle', 'G', 'H', 'K'];
+                                                    // Map seats by letter for quick lookup
+                                                    const seatMap: Record<string, any> = {};
+                                                    row.seats.forEach((s: any) => {
+                                                        const letter = String(s.number || '').replace(/^\d+/, '') || '';
+                                                        seatMap[letter] = s;
+                                                    });
+
+                                                    // Detect if any seat in this row will render a top price badge (CH + explicit price)
+                                                    const rowHasTopBadge = row.seats.some((s: any) => {
+                                                        const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                                                        const hasCH = charsUp.includes('CH');
+                                                        const explicitPrice = Number(s.price || 0) > 0;
+                                                        return hasCH && explicitPrice;
+                                                    });
+
+                                                    return (
+                                                        // Added conditional padding-top when rowHasTopBadge to avoid price badge overlap
+                                                        <div key={row.row} className={`grid grid-cols-[44px_repeat(11,44px)] items-center gap-2 relative ${rowHasTopBadge ? 'pt-4' : ''}`}>
+                                                            {/* Row number column */}
+                                                            <div className="w-11 text-center font-bold text-xs">{row.row}</div>  {/* Giảm từ text-sm xuống text-xs */}
+
+                                                            {/* Seats + aisles columns */}
+                                                            {letters.map((col: string, idx) => {
+                                                                if (col === '_aisle') {
+                                                                    return (
+                                                                        <div key={idx} className="w-11 h-11 flex items-center justify-center">
+                                                                            <div className="w-4 h-11 bg-gray-100 border border-gray-300 rounded text-[10px] flex items-center justify-center text-gray-500">  {/* Giảm từ text-xs xuống text-[10px] */}
+                                                                                |
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }
+
+                                                                const s = seatMap[col];
+                                                                if (!s) {
+                                                                    // Empty seat placeholder (align grid)
+                                                                    return <div key={idx} className="w-11 h-11" />;
+                                                                }
+
+                                                                const isSelected = selectedSeats.includes(s.id);
+                                                                const unavailable = s.availability !== 'AVAILABLE';
+
+                                                                // Detect paid seats: MUST have "CH" AND a numeric price (parsed to s.price)
+                                                                const charsUp = (s.characteristics ?? []).map((c: string) => String(c).toUpperCase());
+                                                                const hasCH = charsUp.includes('CH');
+                                                                const explicitPrice = Number(s.price || 0) > 0;
+                                                                const isPaid = hasCH && explicitPrice; // Require BOTH
+                                                                const isFree = !isPaid && Number(s.price || 0) === 0;
+
+                                                                // Determine seat type badge
+                                                                let seatType = 'M';
+                                                                if (charsUp.includes('EXIT') || charsUp.includes('EXIT_ROW')) seatType = 'EX';
+                                                                else if (charsUp.includes('GALLEY') || charsUp.includes('GAL')) seatType = 'GAL';
+                                                                else if (charsUp.includes('AISLE') || ['C', 'D', 'F', 'G'].includes(col)) seatType = 'A';
+                                                                else if (charsUp.includes('WINDOW') || ['A', 'K', 'F'].includes(col)) seatType = 'W';
+
+                                                                const baseUnavailable = 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed';
+                                                                const baseSelected = 'bg-[hsl(var(--primary))] text-white shadow-md';
+                                                                const baseFree = 'bg-white border border-gray-300 hover:bg-gray-50 cursor-pointer';
+                                                                const baseOccupied = 'bg-red-200 text-red-400 border border-red-300 cursor-not-allowed';
+                                                                const basePaid = 'bg-yellow-50 border border-yellow-400 hover:bg-yellow-100 cursor-pointer ring-1 ring-yellow-200';
+                                                                const base = unavailable
+                                                                    ? baseUnavailable
+                                                                    : isSelected
+                                                                        ? baseSelected
+                                                                        : isPaid
+                                                                            ? basePaid
+                                                                            : baseFree;
+
+                                                                return (
+                                                                    <div key={idx} className="relative flex items-center justify-center">
+                                                                        <button
+                                                                            title={`${s.number} • ${seatType.toUpperCase()} • ${s.availability}${s.price ? ` • ${s.currency} ${s.price.toLocaleString()}` : isFree ? ' • Miễn phí' : ''}`}
+                                                                            onClick={() => toggleSeat(s.id)}
+                                                                            className={`${base} w-11 h-11 rounded-md text-[10px] flex flex-col items-center justify-center transition-all duration-150 relative`}
+                                                                        >
+                                                                            <span className="font-semibold text-[10px]">{s.number}</span>
+                                                                            {!isFree && s.price > 0 && s.availability === 'AVAILABLE' && (
+                                                                                <span className="text-[8px] text-yellow-700 mt-0.5"></span>
+                                                                            )}
+                                                                        </button>
+
+                                                                        {(hasCH && explicitPrice) && s.availability === 'AVAILABLE' && (
+                                                                            <div className="absolute -top-2 -right-2 bg-yellow-100 text-[8px] px-1 rounded border border-yellow-200 whitespace-nowrap z-10">  {/* Giảm từ text-[10px] xuống text-[8px] */}
+                                                                                {s.currency && s.currency !== 'VND'
+                                                                                    ? `${s.price.toLocaleString()} ${s.currency}`
+                                                                                    : formatPrice(s.price)}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {seatType && s.availability === 'AVAILABLE' && (
+                                                                            <div className="absolute -bottom-3 left-0 text-[8px] text-gray-500">  {/* Giảm từ text-[10px] xuống text-[8px] */}
+                                                                                <span className="inline-block px-0.5 py-0.5 bg-gray-100 rounded font-medium text-[8px]">  {/* Giảm px, py, và thêm text-[8px] */}
+                                                                                    {seatTypeLabel[seatType] ?? seatType}
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })}
+
+                                                            {/* Exit indicator for certain rows (if any seat has EXIT char) */}
+                                                            <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                                {row.seats.some((s: any) => (s.characteristics ?? []).some((c: string) => /EXIT/i.test(String(c)))) && (
+                                                                    <div className="bg-red-100 text-red-700 text-[8px] px-1 py-0.5 rounded border border-red-200">  {/* Giảm từ text-[10px] xuống text-[8px] */}
+                                                                        EXIT
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Legend */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[10px] text-gray-600 mt-6">  {/* Giảm từ text-xs xuống text-[10px] */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded bg-[hsl(var(--primary))] border border-[hsl(var(--primary))]"></div>
+                                                <div>Đang chọn</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border bg-white border-gray-300"></div>
+                                                <div>Ghế trống (AVAILABLE)</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded bg-yellow-50 border border-yellow-400 flex items-center justify-center text-[8px]"></div>  {/* Giảm text-[10px] xuống text-[8px] */}
+                                                <div>Ghế trả phí (CH hoặc có giá)</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded bg-gray-200 border border-gray-300"></div>
+                                                <div>Không khả dụng / Đã đặt</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[8px]">W</div>  {/* Giảm text-[10px] xuống text-[8px] */}
+                                                <div>Cửa sổ (Window)</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[8px]">A</div>  {/* Giảm text-[10px] xuống text-[8px] */}
+                                                <div>Hàng lối (Aisle)</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[8px]">EX</div>  {/* Giảm text-[10px] xuống text-[8px] */}
+                                                <div>Cửa thoát hiểm</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded border bg-white flex items-center justify-center text-[8px]">GAL</div>  {/* Giảm text-[10px] xuống text-[8px] */}
+                                                <div>Galley</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 rounded bg-red-200 border border-red-300"></div>
+                                                <div>Ghế đã đặt (Occupied)</div>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-[10px] text-gray-500 mt-2">  {/* Giảm từ text-xs xuống text-[10px] */}
+                                            Ghế miễn phí sẽ tự gán nếu còn đủ cho {(() => { const pc = paxCountsFromOrder(order); return pc.adults + pc.children; })()} khách. (em bé sẽ ngồi cùng người lớn)
+                                        </p>
+                                    </div>
+                                )}
+
                             </>
                         )}
                     </div>
@@ -1303,12 +2268,12 @@ export default function DoiLichPage() {
                             <RadioGroup value={payMethod} onValueChange={(v) => setPayMethod(v as any)}>
                                 <div className="flex gap-4 items-center">
                                     <label className="flex items-center gap-2">
-                                        <RadioGroupItem value="momo" />
-                                        <span>MoMo</span>
-                                    </label>
-                                    <label className="flex items-center gap-2">
                                         <RadioGroupItem value="zalopay" />
                                         <span>ZaloPay</span>
+                                    </label>
+                                    <label className="flex items-center gap-2">
+                                        <RadioGroupItem value="momo" />
+                                        <span>MoMo</span>
                                     </label>
                                 </div>
                             </RadioGroup>

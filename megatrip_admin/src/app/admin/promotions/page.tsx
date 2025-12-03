@@ -546,6 +546,17 @@ export default function Promotions() {
     };
 
     const handleEdit = (promotion: Promotion) => {
+        // Kiểm tra nếu promotion đã được sử dụng, không cho phép chỉnh sửa
+        // if (promotion.usedCount > 0) {
+        //     console.log('Promotion đã được sử dụng, không thể chỉnh sửa:', promotion.code, 'usedCount:', promotion.usedCount);
+        //     toast({
+        //         title: "Không thể chỉnh sửa",
+        //         description: `Khuyến mãi "${promotion.code}" đã được sử dụng ${promotion.usedCount} lần, không thể chỉnh sửa.`,
+        //         variant: "destructive",
+        //     });
+        //     return;
+        // }
+
         setSelectedPromotion(promotion);
         setFormData({
             code: promotion.code,
@@ -559,9 +570,9 @@ export default function Promotions() {
             validFrom: promotion.validFrom.slice(0, 16),
             validTo: promotion.validTo.slice(0, 16),
             active: promotion.active,
-            // defaults when editing an existing promotion (no stored flags) - keep requireCode true, autoApply false
-            requireCode: true,
-            autoApply: false,
+            // Set từ giá trị hiện tại của promotion, với fallback
+            requireCode: typeof promotion.requireCode !== "undefined" ? promotion.requireCode : true,
+            autoApply: typeof promotion.autoApply !== "undefined" ? promotion.autoApply : false,
         });
         setModalMode("edit");
         setModalOpen(true);
@@ -569,6 +580,17 @@ export default function Promotions() {
     };
 
     const handleDelete = (promotion: Promotion) => {
+        // Kiểm tra nếu promotion đã được sử dụng, không cho phép xóa
+        if (promotion.usedCount > 0) {
+            console.log('Promotion đã được sử dụng, không thể xóa:', promotion.code, 'usedCount:', promotion.usedCount);
+            toast({
+                title: "Không thể xóa",
+                description: `Khuyến mãi "${promotion.code}" đã được sử dụng ${promotion.usedCount} lần, không thể xóa.`,
+                variant: "destructive",
+            });
+            return;
+        }
+
         setPromotionToDelete(promotion);
         setDeleteModalOpen(true);
     };
@@ -703,6 +725,7 @@ export default function Promotions() {
     };
 
     const renderPromotionForm = () => {
+        const isDisabled = modalMode === "edit" && selectedPromotion && selectedPromotion.usedCount > 0;
         if (modalMode === "view" && selectedPromotion) {
             const status = getPromotionStatus(selectedPromotion);
             return (
@@ -794,6 +817,14 @@ export default function Promotions() {
 
         return (
             <div className="space-y-4">
+                {isDisabled && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                        <p className="text-sm text-yellow-800">
+                            <strong>Lưu ý:</strong> Khuyến mãi này đã được sử dụng {selectedPromotion.usedCount} lần, không thể chỉnh sửa.
+                        </p>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="code">Mã khuyến mãi *</Label>
@@ -803,7 +834,7 @@ export default function Promotions() {
                                 value={formData.code}
                                 onChange={(e) => handleFormChange("code", e.target.value.toUpperCase())}
                                 placeholder="SUMMER2024"
-                                disabled={!!formData.autoApply} // disabled when auto-apply
+                                disabled={!!formData.autoApply || isDisabled} // Thêm isDisabled
                                 className={`font-mono ${formErrors.code ? "border-red-500" : ""}`}
                             />
                             <Button
@@ -811,7 +842,7 @@ export default function Promotions() {
                                 variant="outline"
                                 onClick={generateCode}
                                 className="px-3"
-                                disabled={!!formData.autoApply}
+                                disabled={!!formData.autoApply || isDisabled} // Thêm isDisabled
                             >
                                 Tạo mã
                             </Button>
@@ -830,6 +861,7 @@ export default function Promotions() {
                             value={formData.title}
                             onChange={(e) => handleFormChange("title", e.target.value)}
                             placeholder="Giảm giá mùa hè"
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.title ? "border-red-500" : ""}
                         />
                         {formErrors.title && <p className="text-sm text-red-500 mt-1">{formErrors.title}</p>}
@@ -854,6 +886,7 @@ export default function Promotions() {
                                         handleFormChange("code", ""); // clear code when switching mode
                                     }
                                 }}
+                                disabled={isDisabled} // Thêm isDisabled
                             />
                             <Label htmlFor="requireCode">Yêu cầu nhập mã</Label>
                         </div>
@@ -873,6 +906,7 @@ export default function Promotions() {
                                         handleFormChange("requireCode", true);
                                     }
                                 }}
+                                disabled={isDisabled} // Thêm isDisabled
                             />
                             <Label htmlFor="autoApply">Auto-apply (tự động áp dụng)</Label>
                         </div>
@@ -896,13 +930,14 @@ export default function Promotions() {
                         onChange={(e) => handleFormChange("description", e.target.value)}
                         placeholder="Mô tả chi tiết về chương trình khuyến mãi"
                         rows={3}
+                        disabled={isDisabled} // Thêm isDisabled
                     />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="type">Loại giảm giá *</Label>
-                        <Select value={formData.type} onValueChange={(value) => handleFormChange("type", value)}>
+                        <Select value={formData.type} onValueChange={(value) => handleFormChange("type", value)} disabled={isDisabled}>
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
@@ -922,6 +957,7 @@ export default function Promotions() {
                             value={formData.value || ""}
                             onChange={(e) => handleFormChange("value", parseFloat(e.target.value) || 0)}
                             placeholder={formData.type === "percent" ? "10" : "100000"}
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.value ? "border-red-500" : ""}
                         />
                         {formErrors.value && <p className="text-sm text-red-500 mt-1">{formErrors.value}</p>}
@@ -937,6 +973,7 @@ export default function Promotions() {
                             value={formData.minSpend || ""}
                             onChange={(e) => handleFormChange("minSpend", parseFloat(e.target.value) || 0)}
                             placeholder="0"
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.minSpend ? "border-red-500" : ""}
                         />
                         {formErrors.minSpend && <p className="text-sm text-red-500 mt-1">{formErrors.minSpend}</p>}
@@ -950,6 +987,7 @@ export default function Promotions() {
                             value={formData.maxUses || ""}
                             onChange={(e) => handleFormChange("maxUses", parseInt(e.target.value) || 0)}
                             placeholder="0"
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.maxUses ? "border-red-500" : ""}
                         />
                         {formErrors.maxUses && <p className="text-sm text-red-500 mt-1">{formErrors.maxUses}</p>}
@@ -965,6 +1003,7 @@ export default function Promotions() {
                             type="datetime-local"
                             value={formData.validFrom}
                             onChange={(e) => handleFormChange("validFrom", e.target.value)}
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.validFrom ? "border-red-500" : ""}
                         />
                         {formErrors.validFrom && <p className="text-sm text-red-500 mt-1">{formErrors.validFrom}</p>}
@@ -976,6 +1015,7 @@ export default function Promotions() {
                             type="datetime-local"
                             value={formData.validTo}
                             onChange={(e) => handleFormChange("validTo", e.target.value)}
+                            disabled={isDisabled} // Thêm isDisabled
                             className={formErrors.validTo ? "border-red-500" : ""}
                         />
                         {formErrors.validTo && <p className="text-sm text-red-500 mt-1">{formErrors.validTo}</p>}
@@ -997,6 +1037,7 @@ export default function Promotions() {
                                             handleFormChange("appliesTo", formData.appliesTo.filter((s) => s !== option.value));
                                         }
                                     }}
+                                    disabled={isDisabled} // Thêm isDisabled
                                 />
                                 <Label htmlFor={option.value}>{option.label}</Label>
                             </div>
@@ -1006,7 +1047,7 @@ export default function Promotions() {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                    <Switch id="active" checked={formData.active} onCheckedChange={(checked) => handleFormChange("active", checked)} />
+                    <Switch id="active" checked={formData.active} onCheckedChange={(checked) => handleFormChange("active", checked)} disabled={isDisabled} />
                     <Label htmlFor="active">Kích hoạt ngay</Label>
                 </div>
             </div>
@@ -1021,10 +1062,10 @@ export default function Promotions() {
                     <p className="text-gray-600 mt-1">Quản lý mã giảm giá, voucher và chương trình khuyến mãi</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
+                    {/* <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Tạo khuyến mãi

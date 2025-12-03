@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ShoppingBag, Plus, Edit, Eye, Trash2, FileText, Printer, RefreshCw, DollarSign, Package, Truck, CheckCircle, XCircle, Clock, AlertTriangle, Download } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -405,7 +405,7 @@ export default function Orders() {
         paymentStatus: "all",
         orderStatus: "all",
         paymentMethod: "all",
-        type: "all" 
+        type: "all"
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
@@ -417,6 +417,7 @@ export default function Orders() {
     const [orderDetails, setOrderDetails] = useState(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [isSelectingCompletable, setIsSelectingCompletable] = useState(false);
+    const [isSelectingCancellable, setIsSelectingCancellable] = useState(false);
     const [refundData, setRefundData] = useState({
         amount: 0,
         reason: "",
@@ -430,6 +431,23 @@ export default function Orders() {
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
+    });
+    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkLoadingMessage, setBulkLoadingMessage] = useState("");
+
+
+    // Thêm query để fetch tất cả orders cho stats
+    const { data: allOrdersData } = useQuery({
+        queryKey: ['orders-all'],
+        queryFn: async () => {
+            const res = await fetch(`${API_BASE}/api/orders?page=1&pageSize=10000`); // Fetch nhiều để có đủ data
+            if (!res.ok) throw new Error('Failed to fetch all orders');
+            const json = await res.json();
+            return json.data.map((order: any) => ({
+                ...order,
+                id: order._id,
+            }));
+        },
     });
 
     // Fetch orders with API
@@ -458,45 +476,36 @@ export default function Orders() {
     //     },
     // });
     const { data: ordersData, isLoading, error, refetch } = useQuery({
-        queryKey: ['orders', searchQuery, filters], // Bỏ pagination khỏi queryKey vì fetch all
+        queryKey: ['orders', pagination.current, pagination.pageSize, searchQuery, filters], // Bao gồm pagination để refetch khi đổi page
         queryFn: async () => {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams({
+                page: pagination.current.toString(),
+                pageSize: pagination.pageSize.toString(),
+            });
             if (searchQuery) params.append('q', searchQuery);
-            params.append('limit', '0'); // Thêm param để fetch tất cả orders
+            if (filters.paymentStatus !== 'all') params.append('paymentStatus', filters.paymentStatus);
+            if (filters.orderStatus !== 'all') params.append('orderStatus', filters.orderStatus);
+            if (filters.paymentMethod !== 'all') params.append('paymentMethod', filters.paymentMethod);
 
             const res = await fetch(`${API_BASE}/api/orders?${params.toString()}`);
             if (!res.ok) throw new Error('Failed to fetch orders');
             const json = await res.json();
+
             // Map _id to id
-            let allData = json.data.map((order: any) => ({
+            let data = json.data.map((order: any) => ({
                 ...order,
                 id: order._id,
             }));
 
-            // Filter client-side theo type
+            // Filter client-side cho type (nếu backend chưa hỗ trợ)
             if (filters.type !== 'all') {
-                allData = allData.filter((order: any) =>
+                data = data.filter((order: any) =>
                     order.items && order.items.some((item: any) => item.type === filters.type)
                 );
             }
 
-            // Filter theo paymentStatus, orderStatus, paymentMethod
-            if (filters.paymentStatus !== 'all') {
-                allData = allData.filter((order: any) => order.paymentStatus === filters.paymentStatus);
-            }
-            if (filters.orderStatus !== 'all') {
-                allData = allData.filter((order: any) => order.orderStatus === filters.orderStatus);
-            }
-            if (filters.paymentMethod !== 'all') {
-                allData = allData.filter((order: any) => order.paymentMethod === filters.paymentMethod);
-            }
-
-            // Paginate client-side
-            const startIndex = (pagination.current - 1) * pagination.pageSize;
-            const endIndex = startIndex + pagination.pageSize;
-            const paginatedData = allData.slice(startIndex, endIndex);
-
-            return { data: paginatedData, pagination: { ...json.pagination, total: allData.length } };
+            // Backend trả pagination info (total, current, pageSize)
+            return { data, pagination: json.pagination || { total: data.length, current: pagination.current, pageSize: pagination.pageSize } };
         },
     });
     // Update order status mutation (mock implementation)
@@ -644,7 +653,7 @@ export default function Orders() {
     });
 
     const orders = ordersData?.data || [];
-    const total = ordersData?.pagination?.total || 0;
+    const total = allOrdersData?.length || 0;
 
     const getStatusInfo = (status: string, type: 'order' | 'payment') => {
         const statuses = type === 'order' ? orderStatuses : paymentStatuses;
@@ -796,10 +805,26 @@ export default function Orders() {
             sortable: true,
             render: (value, record: Order) => {
                 const snap = record.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = record.changeCalendar && record.dateChangeCalendar ? record.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toLocaleDateString('vi-VN') : '--';
-                return <div className="text-sm">{serviceDate}</div>;
+                const item = record.items?.[0];
+                let serviceDate = '';
+                if (item?.type === 'flight' && !record.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
+                    } else if (flights?.outbound) {
+                        serviceDate = flights.outbound.date;
+                    } else if (flights?.inbound) {
+                        serviceDate = flights.inbound.date;
+                    }
+                } else {
+                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                    serviceDate = record.changeCalendar && record.dateChangeCalendar ? record.dateChangeCalendar : originalServiceDateRaw;
+                    if (serviceDate) {
+                        const serviceDateObj = new Date(serviceDate);
+                        serviceDate = serviceDateObj.toISOString().slice(0, 10);
+                    }
+                }
+                return <div className="text-sm">{serviceDate || '--'}</div>;
             },
         },
     ];
@@ -833,8 +858,21 @@ export default function Orders() {
     const handleCompleteOrder = (order: Order) => {
         // Tính ngày sử dụng từ metadata
         const snap = order.metadata?.bookingDataSnapshot;
-        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        const item = order.items?.[0];
+        let serviceDateRaw = '';
+        if (item?.type === 'flight' && !order.changeCalendar) {
+            const flights = snap?.flights;
+            if (flights?.outbound && flights?.inbound) {
+                serviceDateRaw = flights.outbound.date; // Dùng outbound để check
+            } else if (flights?.outbound) {
+                serviceDateRaw = flights.outbound.date;
+            } else if (flights?.inbound) {
+                serviceDateRaw = flights.inbound.date;
+            }
+        } else {
+            const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+            serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        }
         const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
 
         // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
@@ -880,9 +918,78 @@ export default function Orders() {
         setRefundModalOpen(true);
     };
 
-    const handleCancelOrder = (order: Order) => {
-        setSelectedOrder(order);
-        setCancelModalOpen(true);
+    // Cập nhật handleCancelOrder: Tự động hoàn tiền nếu paid
+    const handleCancelOrder = async (order: Order) => {
+        // Dùng _id nếu có, fallback orderNumber
+        const orderId = order.id || order.orderNumber;
+        try {
+            const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    note: `Đơn hàng đã bị hủy bởi admin`,
+                }),
+            });
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to cancel order');
+            }
+            const data = await res.json();
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            toast({
+                title: "Hủy đơn hàng thành công",
+                description: `Đơn hàng ${order.orderNumber} đã được hủy và xử lý hoàn tiền nếu có.`,
+            });
+        } catch (error: any) {
+            toast({
+                title: "Lỗi khi hủy đơn hàng",
+                description: error.message,
+                variant: "destructive",
+            });
+        }
+    };
+
+    // Hàm bulk cancel order (gọi route cho từng order)
+    const handleBulkCancelOrder = async (keys: string[]) => {
+        let successCount = 0;
+        let errorCount = 0;
+        for (const key of keys) {
+            // key là index trong orders array, lấy order từ đó
+            const index = parseInt(key);
+            const order = orders[index];
+            if (!order) {
+                errorCount++;
+                continue;
+            }
+            const orderId = order.id || order.orderNumber;
+            try {
+                const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                    }),
+                });
+                if (res.ok) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                }
+            } catch (error) {
+                errorCount++;
+                console.error(`Failed to cancel order ${orderId}:`, error);
+            }
+        }
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
+        toast({
+            title: "Hoàn thành hủy đơn hàng loạt",
+            description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+            variant: errorCount > 0 ? "destructive" : "default",
+        });
     };
 
     const handleExportInvoice = (order: Order) => {
@@ -898,31 +1005,209 @@ export default function Orders() {
             description: `Hóa đơn ${order.orderNumber} đang được in`,
         });
     };
-     
+
+    // const getCompletableOrders = () => {
+    //     return orders
+    //         .map((order, index) => ({ order, index }))
+    //         .filter(({ order }) => {
+    //             // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+    //             const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
+
+    //             // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+    //             const snap = order.metadata?.bookingDataSnapshot;
+    //             const item = order.items?.[0];
+    //             let isServiceDateValid = false;
+
+    //             // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+    //             const today = new Date();
+    //             today.setHours(0, 0, 0, 0);
+    //             const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    //             if (item?.type === 'flight' && !order.changeCalendar) {
+    //                 const flights = snap?.flights;
+    //                 if (flights?.outbound && flights?.inbound) {
+    //                     // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều <= today
+    //                     const outboundDate = new Date(flights.outbound.date);
+    //                     const inboundDate = new Date(flights.inbound.date);
+    //                     const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+    //                     const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+    //                     isServiceDateValid = outboundOnly <= todayOnly && inboundOnly <= todayOnly;
+    //                 } else if (flights?.outbound) {
+    //                     // Chỉ outbound
+    //                     const serviceDate = new Date(flights.outbound.date);
+    //                     const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+    //                     isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //                 } else if (flights?.inbound) {
+    //                     // Chỉ inbound
+    //                     const serviceDate = new Date(flights.inbound.date);
+    //                     const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+    //                     isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //                 }
+    //             } else {
+    //                 // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+    //                 let serviceDateRaw = '';
+    //                 if (item?.type === 'flight' && !order.changeCalendar) {
+    //                     // Đã xử lý ở trên, không vào đây
+    //                 } else {
+    //                     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    //                     serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+    //                 }
+    //                 const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+    //                 const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+    //                 isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+    //             }
+
+    //             return isValidStatus && isServiceDateValid;
+    //         })
+    //         .map(({ order }) => order.id);
+    // };
+
+    // ...existing code...
+
     const getCompletableOrders = () => {
-        return orders
-            .map((order, index) => ({ order, index }))
-            .filter(({ order }) => {
-                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
-                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
+        // Ưu tiên dùng allOrdersData (toàn bộ data), fallback về orders (pagination hiện tại)
+        const dataToCheck = allOrdersData || orders;
+
+        return dataToCheck
+            .filter((order) => {
+                // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+                const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
 
                 // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
                 const snap = order.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                const item = order.items?.[0];
+                let isServiceDateValid = false;
+
+                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
-                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
                 const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                if (item?.type === 'flight' && !order.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều <= today
+                        const outboundDate = new Date(flights.outbound.date);
+                        const inboundDate = new Date(flights.inbound.date);
+                        const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+                        const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+                        isServiceDateValid = outboundOnly <= todayOnly && inboundOnly <= todayOnly;
+                    } else if (flights?.outbound) {
+                        // Chỉ outbound
+                        const serviceDate = new Date(flights.outbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                    } else if (flights?.inbound) {
+                        // Chỉ inbound
+                        const serviceDate = new Date(flights.inbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                    }
+                } else {
+                    // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+                    let serviceDateRaw = '';
+                    if (item?.type === 'flight' && !order.changeCalendar) {
+                        // Đã xử lý ở trên, không vào đây
+                    } else {
+                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                        serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                    }
+                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                    isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly;
+                }
 
                 return isValidStatus && isServiceDateValid;
             })
-            .map(({ index }) => index.toString());
+            .map((order) => order.id);
     };
 
+    const getCancellableOrders = () => {
+        // Ưu tiên dùng allOrdersData (toàn bộ data), fallback về orders (pagination hiện tại)
+        const dataToCheck = allOrdersData || orders;
+
+        return dataToCheck
+            .filter((order) => {
+                // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
+                const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
+
+                // Kiểm tra ngày sử dụng (chọn đơn chưa qua ngày hiện tại: serviceDate > today)
+                const snap = order.metadata?.bookingDataSnapshot;
+                const item = order.items?.[0];
+                let isServiceDateValid = false;
+
+                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+                if (item?.type === 'flight' && !order.changeCalendar) {
+                    const flights = snap?.flights;
+                    if (flights?.outbound && flights?.inbound) {
+                        // Flight có cả outbound và inbound: Kiểm tra cả 2 ngày đều > today
+                        const outboundDate = new Date(flights.outbound.date);
+                        const inboundDate = new Date(flights.inbound.date);
+                        const outboundOnly = new Date(outboundDate.getFullYear(), outboundDate.getMonth(), outboundDate.getDate());
+                        const inboundOnly = new Date(inboundDate.getFullYear(), inboundDate.getMonth(), inboundDate.getDate());
+                        isServiceDateValid = outboundOnly > todayOnly && inboundOnly > todayOnly;
+                    } else if (flights?.outbound) {
+                        // Chỉ outbound
+                        const serviceDate = new Date(flights.outbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = serviceDateOnly > todayOnly;
+                    } else if (flights?.inbound) {
+                        // Chỉ inbound
+                        const serviceDate = new Date(flights.inbound.date);
+                        const serviceDateOnly = new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate());
+                        isServiceDateValid = serviceDateOnly > todayOnly;
+                    }
+                } else {
+                    // Logic cho tour/bus: Dùng serviceDateRaw như cũ
+                    let serviceDateRaw = '';
+                    if (item?.type === 'flight' && !order.changeCalendar) {
+                        // Đã xử lý ở trên, không vào đây
+                    } else {
+                        const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                        serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                    }
+                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                    isServiceDateValid = serviceDateOnly && serviceDateOnly > todayOnly;
+                }
+
+                return isValidStatus && isServiceDateValid;
+            })
+            .map((order) => order.id);
+    };
+
+
+    const handleSelectCancellable = () => {
+        if (isSelectingCompletable) {
+            toast({
+                title: "Không thể chọn",
+                description: "Phải hủy chọn đơn hoàn thành trước khi chuyển sang chọn các đơn hủy",
+                variant: "destructive",
+            });
+            return;
+        }
+        if (isSelectingCancellable) {
+            setSelectedOrders([]);
+            setIsSelectingCancellable(false);
+        } else {
+            setSelectedOrders(getCancellableOrders());
+            setIsSelectingCancellable(true);
+        }
+    };
+     
     const handleSelectCompletable = () => {
+        if (isSelectingCancellable) {
+            toast({
+                title: "Không thể chọn",
+                description: "Phải hủy chọn đơn hủy trước khi chuyển sang chọn các đơn hoàn thành",
+                variant: "destructive",
+            });
+            return;
+        }
         if (isSelectingCompletable) {
             setSelectedOrders([]);
             setIsSelectingCompletable(false);
@@ -931,82 +1216,414 @@ export default function Orders() {
             setIsSelectingCompletable(true);
         }
     };
-    const bulkActions = [
-        // {
-        //     label: "Xác nhận",
-        //     action: (keys: string[]) => {
-        //         keys.forEach(id => {
-        //             updateOrderMutation.mutate({ id, status: "confirmed" });
-        //         });
-        //     },
-        //     icon: <CheckCircle className="w-4 h-4 mr-2" />,
-        // },
 
-        //ở đây cần 1 button để lọc những đơn nào có thể hoàn thành 
-        // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
-        {
-            label: "Hoàn thành",
-            action: (keys: string[]) => {
-                console.log("Bulk hoàn thành: keys =", keys); // Thêm log
-                keys.forEach(id => {
-                    const index = parseInt(id); // Chuyển id (string index) thành number
-                    const order = orders[index]; // Truy cập trực tiếp bằng index
-                    console.log("Order found:", order); // Thêm log
-                    if (!order) return;
 
-                    // Tính ngày sử dụng từ metadata
-                    const snap = order.metadata?.bookingDataSnapshot;
-                    const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                    const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                    const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+    // Hàm tính hoàn tiền (dựa trên metadata, ví dụ cho flight)
+    const calculateRefundAmount = (order: Order) => {
+        if (order.paymentStatus !== "paid") return 0;
+        // Với flight: Trừ phạt (penalty) từ metadata.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees
+        const penalties = order.metadata?.bookingDataSnapshot?.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees || [];
+        const penaltyAmount = penalties.reduce((sum, fee) => sum + parseFloat(fee.amount || 0), 0);
+        // Hoàn tiền = Tổng - Phạt (hoặc 0 nếu phạt > tổng)
+        return Math.max(0, order.total - penaltyAmount);
+    };
 
-                    console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate); // Thêm log
 
-                    // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
+    // const bulkActions = [
+    //     // {
+    //     //     label: "Xác nhận",
+    //     //     action: (keys: string[]) => {
+    //     //         keys.forEach(id => {
+    //     //             updateOrderMutation.mutate({ id, status: "confirmed" });
+    //     //         });
+    //     //     },
+    //     //     icon: <CheckCircle className="w-4 h-4 mr-2" />,
+    //     // },
 
-                    // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
-                    const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                    const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                    const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+    //     //ở đây cần 1 button để lọc những đơn nào có thể hoàn thành 
+    //     // bấm 1 cái nó sẽ đánh dấu check vào những row nào mà có thể hoàn thành nha 
+    //     {
+    //         label: "Hoàn thành",
+    //         action: async (keys: string[]) => { // keys giờ là array của id
+    //             setBulkLoading(true);
+    //             setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+    //             try {
+    //                 console.log("Bulk hoàn thành: keys =", keys);
+    //                 for (const id of keys) { // Thay đổi: dùng id trực tiếp
+    //                     const order = orders.find(o => o.id === id); // Tìm order bằng id
+    //                     console.log("Order found:", order);
+    //                     if (!order) continue;
 
-                    console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
-                    console.log("Is past service date:", isPastServiceDate);
+    //                     // Tính ngày sử dụng từ metadata
+    //                     const snap = order.metadata?.bookingDataSnapshot;
+    //                     const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+    //                     const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+    //                     const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
 
-                    // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
-                    if (!isPastServiceDate) {
-                        console.log("Ngày chưa đến, không cập nhật"); // Thêm log
-                        toast({
-                            title: "Không thể hoàn thành",
-                            description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
-                            variant: "destructive",
-                        });
-                        return; // Bỏ qua đơn này, không cập nhật
-                    }
+    //                     console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
 
-                    console.log("Cập nhật đơn hàng:", id); // Thêm log
-                    // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
-                    updateOrderMutation.mutate({
-                        id: order.id, // Dùng order.id thật
-                        status: "completed",
-                        note: "Đơn hàng đã hoàn thành"
-                    });
-                });
-            },
-            icon: <Package className="w-4 h-4 mr-2" />,
-        },
-        {
-            label: "Hủy đơn",
-            action: (keys: string[]) => {
-                keys.forEach(id => {
-                    updateOrderMutation.mutate({ id, status: "cancelled" });
-                });
-            },
-            icon: <XCircle className="w-4 h-4 mr-2" />,
-            variant: "destructive" as const,
-        },
-    ];
+    //                     // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+    //                     const today = new Date();
+    //                     today.setHours(0, 0, 0, 0);
+
+    //                     // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+    //                     const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+    //                     const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    //                     const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+    //                     console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+    //                     console.log("Is past service date:", isPastServiceDate);
+
+    //                     // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+    //                     if (!isPastServiceDate) {
+    //                         console.log("Ngày chưa đến, không cập nhật");
+    //                         toast({
+    //                             title: "Không thể hoàn thành",
+    //                             description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+    //                             variant: "destructive",
+    //                         });
+    //                         continue; // Bỏ qua đơn này, không cập nhật
+    //                     }
+
+    //                     console.log("Cập nhật đơn hàng:", order.id);
+    //                     // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+    //                     await updateOrderMutation.mutateAsync({
+    //                         id: order.id,
+    //                         status: "completed",
+    //                         note: "Đơn hàng đã hoàn thành"
+    //                     });
+    //                 }
+    //                 toast({
+    //                     title: "Hoàn thành thành công",
+    //                     description: "Đã hoàn thành các đơn hàng được chọn.",
+    //                 });
+    //             } catch (error) {
+    //                 console.error("Bulk complete error:", error); // Thêm log để debug
+    //                 toast({
+    //                     title: "Lỗi khi hoàn thành",
+    //                     description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
+    //                     variant: "destructive",
+    //                 });
+    //             } finally {
+    //                 setBulkLoading(false);
+    //             }
+    //         },
+    //         icon: <Package className="w-4 h-4 mr-2" />,
+    //     },
+    //     {
+    //         label: "Hủy đơn",
+    //         action: async (keys: string[]) => { // keys giờ là array của id
+    //             setBulkLoading(true);
+    //             setBulkLoadingMessage("Đang hủy đơn hàng...");
+    //             try {
+    //                 let successCount = 0;
+    //                 let errorCount = 0;
+    //                 for (const id of keys) { // Thay đổi: dùng id trực tiếp
+    //                     const order = orders.find(o => o.id === id); // Tìm order bằng id
+    //                     if (!order) {
+    //                         errorCount++;
+    //                         continue;
+    //                     }
+    //                     const orderId = order.id || order.orderNumber;
+    //                     try {
+    //                         const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+    //                             method: 'PUT',
+    //                             headers: {
+    //                                 'Content-Type': 'application/json',
+    //                             },
+    //                             body: JSON.stringify({
+    //                                 note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+    //                             }),
+    //                         });
+    //                         if (res.ok) {
+    //                             successCount++;
+    //                         } else {
+    //                             errorCount++;
+    //                         }
+    //                     } catch (error) {
+    //                         errorCount++;
+    //                         console.error(`Failed to cancel order ${orderId}:`, error);
+    //                     }
+    //                 }
+    //                 queryClient.invalidateQueries({ queryKey: ['orders'] });
+    //                 toast({
+    //                     title: "Hoàn thành hủy đơn hàng loạt",
+    //                     description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+    //                     variant: errorCount > 0 ? "destructive" : "default",
+    //                 });
+    //             } catch (error) {
+    //                 toast({
+    //                     title: "Lỗi khi hủy đơn hàng",
+    //                     description: "Có lỗi xảy ra khi hủy đơn hàng.",
+    //                     variant: "destructive",
+    //                 });
+    //             } finally {
+    //                 setBulkLoading(false);
+    //             }
+    //         },
+    //         icon: <XCircle className="w-4 h-4 mr-2" />,
+    //         variant: "destructive" as const,
+    //     },
+    // ];
+
+    
+    const bulkActions = useMemo(() => {
+        if (isSelectingCompletable) {
+            return [
+                {
+                    label: "Hoàn thành",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+                        try {
+                            console.log("Bulk hoàn thành: keys =", keys);
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                console.log("Order found:", order);
+                                if (!order) continue;
+
+                                // Tính ngày sử dụng từ metadata
+                                const snap = order.metadata?.bookingDataSnapshot;
+                                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+                                console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+
+                                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+
+                                // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                                console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                                console.log("Is past service date:", isPastServiceDate);
+
+                                // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                                if (!isPastServiceDate) {
+                                    console.log("Ngày chưa đến, không cập nhật");
+                                    toast({
+                                        title: "Không thể hoàn thành",
+                                        description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                        variant: "destructive",
+                                    });
+                                    continue; // Bỏ qua đơn này, không cập nhật
+                                }
+
+                                console.log("Cập nhật đơn hàng:", order.id);
+                                // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+                                await updateOrderMutation.mutateAsync({
+                                    id: order.id,
+                                    status: "completed",
+                                    note: "Đơn hàng đã hoàn thành"
+                                });
+                            }
+                            toast({
+                                title: "Hoàn thành thành công",
+                                description: "Đã hoàn thành các đơn hàng được chọn.",
+                            });
+                        } catch (error) {
+                            console.error("Bulk complete error:", error); // Thêm log để debug
+                            toast({
+                                title: "Lỗi khi hoàn thành",
+                                description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <Package className="w-4 h-4 mr-2" />,
+                },
+            ];
+        } else if (isSelectingCancellable) {
+            return [
+                {
+                    label: "Hủy đơn",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hủy đơn hàng...");
+                        try {
+                            let successCount = 0;
+                            let errorCount = 0;
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                if (!order) {
+                                    errorCount++;
+                                    continue;
+                                }
+                                const orderId = order.id || order.orderNumber;
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                                        }),
+                                    });
+                                    if (res.ok) {
+                                        successCount++;
+                                    } else {
+                                        errorCount++;
+                                    }
+                                } catch (error) {
+                                    errorCount++;
+                                    console.error(`Failed to cancel order ${orderId}:`, error);
+                                }
+                            }
+                            queryClient.invalidateQueries({ queryKey: ['orders'] });
+                            toast({
+                                title: "Hoàn thành hủy đơn hàng loạt",
+                                description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+                                variant: errorCount > 0 ? "destructive" : "default",
+                            });
+                        } catch (error) {
+                            toast({
+                                title: "Lỗi khi hủy đơn hàng",
+                                description: "Có lỗi xảy ra khi hủy đơn hàng.",
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <XCircle className="w-4 h-4 mr-2" />,
+                    variant: "destructive" as const,
+                },
+            ];
+        } else {
+            return [
+                {
+                    label: "Hoàn thành",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hoàn thành đơn hàng...");
+                        try {
+                            console.log("Bulk hoàn thành: keys =", keys);
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                console.log("Order found:", order);
+                                if (!order) continue;
+
+                                // Tính ngày sử dụng từ metadata
+                                const snap = order.metadata?.bookingDataSnapshot;
+                                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+                                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+                                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+
+                                console.log("Service date raw:", serviceDateRaw, "Parsed:", serviceDate);
+
+                                // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+
+                                // So sánh chỉ ngày (không bao gồm giờ), để cho phép hoàn thành nếu dịch vụ diễn ra trong ngày
+                                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+                                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                const isPastServiceDate = !serviceDateOnly || serviceDateOnly <= todayOnly;
+
+                                console.log("Service date only:", serviceDateOnly, "Today only:", todayOnly);
+                                console.log("Is past service date:", isPastServiceDate);
+
+                                // Kiểm tra nếu ngày sử dụng chưa đến (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+                                if (!isPastServiceDate) {
+                                    console.log("Ngày chưa đến, không cập nhật");
+                                    toast({
+                                        title: "Không thể hoàn thành",
+                                        description: `Đơn hàng ${order.orderNumber} chưa đến ngày sử dụng, không thể đánh dấu hoàn thành`,
+                                        variant: "destructive",
+                                    });
+                                    continue; // Bỏ qua đơn này, không cập nhật
+                                }
+
+                                console.log("Cập nhật đơn hàng:", order.id);
+                                // Nếu đã qua hoặc đang trong ngày, tiến hành cập nhật
+                                await updateOrderMutation.mutateAsync({
+                                    id: order.id,
+                                    status: "completed",
+                                    note: "Đơn hàng đã hoàn thành"
+                                });
+                            }
+                            toast({
+                                title: "Hoàn thành thành công",
+                                description: "Đã hoàn thành các đơn hàng được chọn.",
+                            });
+                        } catch (error) {
+                            console.error("Bulk complete error:", error); // Thêm log để debug
+                            toast({
+                                title: "Lỗi khi hoàn thành",
+                                description: error.message || "Có lỗi xảy ra khi hoàn thành đơn hàng.", // Hiển thị lỗi cụ thể
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <Package className="w-4 h-4 mr-2" />,
+                },
+                {
+                    label: "Hủy đơn",
+                    action: async (keys: string[]) => { // keys giờ là array của id
+                        setBulkLoading(true);
+                        setBulkLoadingMessage("Đang hủy đơn hàng...");
+                        try {
+                            let successCount = 0;
+                            let errorCount = 0;
+                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
+                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                if (!order) {
+                                    errorCount++;
+                                    continue;
+                                }
+                                const orderId = order.id || order.orderNumber;
+                                try {
+                                    const res = await fetch(`${API_BASE}/api/orders/${orderId}/cancel`, {
+                                        method: 'PUT',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            note: `Đơn hàng đã bị hủy hàng loạt bởi admin`,
+                                        }),
+                                    });
+                                    if (res.ok) {
+                                        successCount++;
+                                    } else {
+                                        errorCount++;
+                                    }
+                                } catch (error) {
+                                    errorCount++;
+                                    console.error(`Failed to cancel order ${orderId}:`, error);
+                                }
+                            }
+                            queryClient.invalidateQueries({ queryKey: ['orders'] });
+                            toast({
+                                title: "Hoàn thành hủy đơn hàng loạt",
+                                description: `Thành công: ${successCount}, Lỗi: ${errorCount}`,
+                                variant: errorCount > 0 ? "destructive" : "default",
+                            });
+                        } catch (error) {
+                            toast({
+                                title: "Lỗi khi hủy đơn hàng",
+                                description: "Có lỗi xảy ra khi hủy đơn hàng.",
+                                variant: "destructive",
+                            });
+                        } finally {
+                            setBulkLoading(false);
+                        }
+                    },
+                    icon: <XCircle className="w-4 h-4 mr-2" />,
+                    variant: "destructive" as const,
+                },
+            ];
+        }
+    }, [isSelectingCompletable, isSelectingCancellable, orders, updateOrderMutation, queryClient, toast]);
+
 
     const actions = [
         {
@@ -1020,51 +1637,60 @@ export default function Orders() {
         //     icon: <CheckCircle className="mr-2 h-4 w-4" />,
         //     condition: (order: Order) => order.orderStatus === "pending",
         // },
-        {
-            label: "Hoàn thành",
-            action: handleCompleteOrder,
-            icon: <Package className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => {
-                // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
-                const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
 
-                // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
-                const snap = order.metadata?.bookingDataSnapshot;
-                const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
-                const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
 
-                return isValidStatus && isServiceDateValid;
-            },
-        },
-        {
-            label: "Hoàn tiền",
-            action: handleRefund,
-            icon: <DollarSign className="mr-2 h-4 w-4" />,
-            condition: (order: Order) => order.paymentStatus === "paid" && order.orderStatus !== "cancelled",
-        },
-        {
-            label: "Hủy đơn",
-            action: handleCancelOrder,
-            icon: <XCircle className="mr-2 h-4 w-4" />,
-            variant: "destructive" as const,
-            condition: (order: Order) => order.orderStatus !== "completed" && order.orderStatus !== "cancelled",
-        },
-        {
-            label: "Xuất hóa đơn",
-            action: handleExportInvoice,
-            icon: <Download className="mr-2 h-4 w-4" />,
-        },
-        {
-            label: "In hóa đơn",
-            action: handlePrintInvoice,
-            icon: <Printer className="mr-2 h-4 w-4" />,
-        },
+        // {
+        //     label: "Hoàn thành",
+        //     action: handleCompleteOrder,
+        //     icon: <Package className="mr-2 h-4 w-4" />,
+        //     condition: (order: Order) => {
+        //         // Kiểm tra trạng thái đơn hàng (loại trừ "completed" để tránh nhầm lẫn)
+        //         const isValidStatus = (order.orderStatus === "confirmed" || order.orderStatus === "processing") && order.orderStatus !== "completed";
+
+        //         // Kiểm tra ngày sử dụng (theo logic thực tế: cho phép nếu dịch vụ đã diễn ra trong ngày)
+        //         const snap = order.metadata?.bookingDataSnapshot;
+        //         const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
+        //         const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar ? order.dateChangeCalendar : originalServiceDateRaw;
+        //         const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
+        //         const today = new Date();
+        //         today.setHours(0, 0, 0, 0);
+        //         const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
+        //         const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        //         const isServiceDateValid = !serviceDateOnly || serviceDateOnly <= todayOnly; // Thay đổi từ < thành <=
+
+        //         return isValidStatus && isServiceDateValid;
+        //     },
+        // },
+
+
+        // {
+        //     label: "Hoàn tiền",
+        //     action: handleRefund,
+        //     icon: <DollarSign className="mr-2 h-4 w-4" />,
+        //     condition: (order: Order) => order.paymentStatus === "paid" && order.orderStatus !== "cancelled",
+        // },
+
+
+        // {
+        //     label: "Hủy đơn",
+        //     action: handleCancelOrder,
+        //     icon: <XCircle className="mr-2 h-4 w-4" />,
+        //     variant: "destructive" as const,
+        //     condition: (order: Order) => order.orderStatus !== "completed" && order.orderStatus !== "cancelled",
+        //     tooltip: "Hủy toàn bộ đơn hàng, chuyển trạng thái vé và hoàn tiền tự động nếu đã thanh toán.",
+        // },
+
+
+        // {
+        //     label: "Xuất hóa đơn",
+        //     action: handleExportInvoice,
+        //     icon: <Download className="mr-2 h-4 w-4" />,
+        // },
+        // {
+        //     label: "In hóa đơn",
+        //     action: handlePrintInvoice,
+        //     icon: <Printer className="mr-2 h-4 w-4" />,
+        // },
     ];
     function getPassengerTypeLabel(type: string) {
         switch (type) {
@@ -1129,12 +1755,12 @@ export default function Orders() {
                             Xác nhận
                         </Button>
                     )}
-                    {selectedOrder.paymentStatus === "paid" && selectedOrder.orderStatus !== "cancelled" && (
+                    {/* {selectedOrder.paymentStatus === "paid" && selectedOrder.orderStatus !== "cancelled" && (
                         <Button size="sm" variant="outline" onClick={() => handleRefund(selectedOrder)}>
                             <DollarSign className="w-4 h-4 mr-2" />
                             Hoàn tiền
                         </Button>
-                    )}
+                    )} */}
                     <Button size="sm" variant="outline" onClick={() => handleExportInvoice(selectedOrder)}>
                         <FileText className="w-4 h-4 mr-2" />
                         Xuất PDF
@@ -1243,7 +1869,7 @@ export default function Orders() {
                     <div className="mt-2 space-y-2">
                         <div className="flex justify-between">
                             <span>Phương thức:</span>
-                            <span>{paymentMethods.find(m => m.value === selectedOrder.paymentMethod)?.label}</span>
+                            <span>Banking</span>
                         </div>
                         {selectedOrder.transId && (
                             <div className="flex justify-between">
@@ -1265,6 +1891,8 @@ export default function Orders() {
                         )}
                     </div>
                 </div>
+              
+
                 {/* Ticket Information */}
                 {loadingDetails ? (
                     <div className="text-center">Đang tải thông tin vé...</div>
@@ -1272,49 +1900,102 @@ export default function Orders() {
                     <div>
                         <Label className="text-sm font-medium text-gray-700">Thông tin vé</Label>
                         <div className="mt-2 space-y-4">
-                            {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
-                                <div>
-                                    <h4 className="font-semibold">Vé cũ</h4>
-                                    <div className="space-y-2">
-                                        {orderDetails.oldTickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
-                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                <div>
-                                                    <div className="font-medium">{ticket.ticketNumber}</div>
-                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
-                                                </div>
-                                                <div className="text-sm">
-                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                    <Badge className="ml-2 bg-gray-100 text-gray-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                </div>
+                            {selectedOrder.changeCalendar && selectedOrder.orderStatus !== 'cancelled' ? (
+                                <>
+                                    {/* Đơn đổi lịch chưa hủy: Hiển thị Vé cũ và Vé đã đổi */}
+                                    {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold">Vé cũ</h4>
+                                            <div className="space-y-2">
+                                                {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                                    <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-medium">{ticket.ticketNumber}</div>
+                                                            <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                        </div>
+                                                        <div className="text-sm">
+                                                            <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                            <Badge className="ml-2 bg-red-100 text-red-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            {orderDetails.tickets && orderDetails.tickets.length > 0 && (
-                                <div>
-                                    <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
-                                    <div className="space-y-2">
-                                        {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid' || ticket.status === 'cancelled').map((ticket) => (
-                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
-                                                <div>
-                                                    <div className="font-medium">{ticket.ticketNumber}</div>
-                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
-                                                </div>
-                                                <div className="text-sm">
-                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
-                                                    <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
-                                                </div>
+                                        </div>
+                                    )}
+                                    {orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold">Vé đã đổi</h4>
+                                            <div className="space-y-2">
+                                                {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid').map((ticket) => (
+                                                    <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                        <div>
+                                                            <div className="font-medium">{ticket.ticketNumber}</div>
+                                                            <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                        </div>
+                                                        <div className="text-sm">
+                                                            <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                            <Badge className="ml-2 bg-blue-100 text-blue-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        ))}
+                                        </div>
+                                    )}
+                                </>
+                            ) : selectedOrder.orderStatus === 'cancelled' ? (
+                                /* Đơn hủy (bao gồm vừa đổi lịch vừa hủy): Hiển thị Vé đã hủy */
+                                        (() => {
+                                            const allCancelledTickets = [...(orderDetails.tickets || []), ...(orderDetails.oldTickets || [])].filter((ticket) => ticket.status === 'cancelled');
+                                            const uniqueTickets = allCancelledTickets.filter((ticket, index, self) => self.findIndex(t => t.ticketNumber === ticket.ticketNumber) === index);
+                                            return (
+                                                <div>
+                                                    <h4 className="font-semibold">Vé đã hủy</h4>
+                                                    <div className="space-y-2">
+                                                        {uniqueTickets.map((ticket) => (
+                                                            <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                                <div>
+                                                                    <div className="font-medium">{ticket.ticketNumber}</div>
+                                                                    <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                                </div>
+                                                                <div className="text-sm">
+                                                                    <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                                    <Badge className="ml-2 bg-red-100 text-red-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()
+                            ) : (
+                                /* Đơn không đổi lịch và không hủy: Hiển thị Vé bình thường */
+                                orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold">Vé</h4>
+                                        <div className="space-y-2">
+                                            {orderDetails.tickets.filter((ticket) => ticket.status === 'paid').map((ticket) => (
+                                                <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
+                                                    <div>
+                                                        <div className="font-medium">{ticket.ticketNumber}</div>
+                                                        <div className="text-sm text-muted-foreground">{ticket.passenger?.name || ''}</div>
+                                                    </div>
+                                                    <div className="text-sm">
+                                                        <Badge variant="secondary">{getPassengerTypeLabel(ticket.ticketType)}</Badge>
+                                                        <Badge className="ml-2 bg-green-100 text-green-700">{getTicketStatusLabel(ticket.status)}</Badge>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )
                             )}
                         </div>
                     </div>
                 )}
 
-               
+                
+
+
 
                 {/* Change Calendar Information */}
                 {selectedOrder.changeCalendar && selectedOrder.inforChangeCalendar && (
@@ -1337,10 +2018,10 @@ export default function Orders() {
                                 <span>Chênh lệch:</span>
                                 <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.inforChangeCalendar.diff)} ₫</span>
                             </div>
-                            <div className="flex justify-between">
+                            {/* <div className="flex justify-between">
                                 <span>Mã giao dịch đổi:</span>
                                 <span>{selectedOrder.inforChangeCalendar.transId}</span>
-                            </div>
+                            </div> */}
                             <div className="flex justify-between">
                                 <span>Mã đổi lịch:</span>
                                 <span>{selectedOrder.inforChangeCalendar.codeChange}</span>
@@ -1395,7 +2076,7 @@ export default function Orders() {
                                     </div>
                                 </div>
                             )}
-                            {selectedOrder.metadata.bookingDataSnapshot.pricing && (
+                            {/* {selectedOrder.metadata.bookingDataSnapshot.pricing && (
                                 <div>
                                     <h4 className="font-medium">Giá chi tiết</h4>
                                     <div className="space-y-1 text-sm">
@@ -1406,7 +2087,7 @@ export default function Orders() {
                                         <div>Tổng: {new Intl.NumberFormat('vi-VN').format(selectedOrder.metadata.bookingDataSnapshot.pricing.total)} ₫</div>
                                     </div>
                                 </div>
-                            )}
+                            )} */}
                         </div>
                     </div>
                 )}
@@ -1478,25 +2159,25 @@ export default function Orders() {
                     <p className="text-gray-600 mt-1">Quản lý đơn hàng, thanh toán và trạng thái đơn</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tổng đơn hàng</p>
-                                <p className="text-2xl font-bold">{total || 0}</p>
+                                <p className="text-2xl font-bold">{total}</p>
                             </div>
                             <ShoppingBag className="w-8 h-8 text-primary" />
                         </div>
@@ -1508,7 +2189,20 @@ export default function Orders() {
                             <div>
                                 <p className="text-sm text-gray-600">Chờ xử lý</p>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o: Order) => o.orderStatus === "pending").length}
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "pending").length || 0}
+                                </p>
+                            </div>
+                            <Clock className="w-8 h-8 text-yellow-500" />
+                        </div>
+                    </CardContent>
+                </Card>
+                <Card>
+                    <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600">Đã xác nhận</p>
+                                <p className="text-2xl font-bold">
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "confirmed").length || 0}
                                 </p>
                             </div>
                             <Clock className="w-8 h-8 text-yellow-500" />
@@ -1521,7 +2215,7 @@ export default function Orders() {
                             <div>
                                 <p className="text-sm text-gray-600">Hoàn thành</p>
                                 <p className="text-2xl font-bold">
-                                    {orders.filter((o: Order) => o.orderStatus === "completed").length}
+                                    {allOrdersData?.filter((o: Order) => o.orderStatus === "completed").length || 0}
                                 </p>
                             </div>
                             <CheckCircle className="w-8 h-8 text-green-500" />
@@ -1538,9 +2232,9 @@ export default function Orders() {
                                         notation: 'compact',
                                         compactDisplay: 'short'
                                     }).format(
-                                        orders
-                                            .filter((o: Order) => o.paymentStatus === "paid")
-                                            .reduce((sum: number, o: Order) => sum + o.total, 0)
+                                        allOrdersData
+                                            ?.filter((o: Order) => o.paymentStatus === "paid")
+                                            .reduce((sum: number, o: Order) => sum + o.total, 0) || 0
                                     )} ₫
                                 </p>
                             </div>
@@ -1556,15 +2250,43 @@ export default function Orders() {
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle>Danh sách đơn hàng</CardTitle>
-                            <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái</CardDescription>
+                            {(() => {
+                                const completableCount = getCompletableOrders().length;
+                                const cancellableCount = getCancellableOrders().length;
+                                return (
+                                    <>
+                                        {completableCount > 0 && (
+                                            <p className="text-sm text-gray-600">Số lượng đơn có thể đánh dấu hoàn thành: {completableCount}</p>
+                                        )}
+                                        {cancellableCount > 0 && (
+                                            <p className="text-sm text-gray-600">Số lượng đơn có thể hủy: {cancellableCount}</p>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                            <CardDescription>Quản lý đơn hàng, thanh toán và trạng thái
+
+                            </CardDescription>
+
+                            {/* <div className="mt-2 text-sm text-gray-500">
+                                <p><strong>Đơn có thể hoàn thành:</strong> Các đơn có trạng thái "Đã xác nhận" hoặc "Đang xử lý" và ngày sử dụng đã qua hoặc đang trong ngày.</p>
+                                <p><strong>Đơn có thể hủy:</strong> Các đơn có trạng thái khác "Hoàn thành" và "Đã hủy" và ngày sử dụng chưa qua.</p>
+                            </div> */}
                         </div>
                         <div className="flex items-center space-x-2">
                             <Button
                                 variant="outline"
                                 onClick={handleSelectCompletable}
                             >
-                                {isSelectingCompletable ? "Hủy chọn đơn có thể hoàn thành" : "Chọn đơn có thể hoàn thành"}
+                                {isSelectingCompletable ? "Hủy chọn đơn đánh dấu hoàn thành" : "Chọn đơn đánh dấu hoàn thành"}
                             </Button>
+                            <Button
+                                variant="outline"
+                                onClick={handleSelectCancellable}
+                            >
+                                {isSelectingCancellable ? "Hủy chọn đơn có thể hủy" : "Chọn đơn có thể hủy"}
+                            </Button>
+
                             <Select value={filters.type} onValueChange={(value) => setFilters(prev => ({ ...prev, type: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
@@ -1602,7 +2324,7 @@ export default function Orders() {
                                     ))}
                                 </SelectContent>
                             </Select>
-                            <Select value={filters.paymentMethod} onValueChange={(value) => setFilters(prev => ({ ...prev, paymentMethod: value }))}>
+                            {/* <Select value={filters.paymentMethod} onValueChange={(value) => setFilters(prev => ({ ...prev, paymentMethod: value }))}>
                                 <SelectTrigger className="w-40">
                                     <SelectValue />
                                 </SelectTrigger>
@@ -1614,7 +2336,7 @@ export default function Orders() {
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
-                            </Select>
+                            </Select> */}
                         </div>
                     </div>
                 </CardHeader>
@@ -1622,6 +2344,7 @@ export default function Orders() {
                     <DataTable
                         columns={columns}
                         data={orders}
+                        rowKey="id"
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
@@ -1631,10 +2354,13 @@ export default function Orders() {
                             setPagination({ current: page, pageSize })
                         }
                         onSearch={setSearchQuery}
-                        rowSelection={{
+                        rowSelection={isSelectingCompletable || isSelectingCancellable ? {
                             selectedRowKeys: selectedOrders,
                             onChange: setSelectedOrders,
-                        }}
+                            getCheckboxProps: (record) => ({
+                                disabled: isSelectingCompletable ? !getCompletableOrders().includes(record.id) : !getCancellableOrders().includes(record.id),
+                            }),
+                        } : undefined}
                         bulkActions={bulkActions}
                         actions={actions}
                         exportable
@@ -1782,6 +2508,22 @@ export default function Orders() {
                 }}
                 confirmText="Hủy đơn hàng"
             />
+            {/* // Thêm modal loading ở cuối component, trước </div> cuối */}
+            {bulkLoading && (
+                <ModalForm
+                    open={bulkLoading}
+                    onOpenChange={() => { }} // Không cho đóng
+                    title="Đang xử lý"
+                    description={bulkLoadingMessage}
+                    mode="view"
+                    size="small"
+                >
+                    <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+                        <span className="ml-2">Vui lòng đợi...</span>
+                    </div>
+                </ModalForm>
+            )}
         </div>
     );
 }

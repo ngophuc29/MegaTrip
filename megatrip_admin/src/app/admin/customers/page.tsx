@@ -7,21 +7,22 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { Checkbox } from "../../components/ui/checkbox";
 import { DataTable, Column } from "../../components/DataTable";
 import { ModalForm } from "../../components/ModalForm";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { ImageUploader } from "../../components/ImageUploader";
+// image/avatar upload removed from admin
 import { useToast } from "../../components/ui/use-toast";
+import api from '../../../apis/auth';
 
 interface Customer {
     id: string;
     name: string;
     email: string;
     phone: string;
+    // avatar removed from admin list
     avatar?: string;
     type: "VIP" | "Normal";
     status: "active" | "blocked";
@@ -42,6 +43,7 @@ interface CustomerFormData {
     notes: string;
     status: "active" | "blocked";
     type: "VIP" | "Normal";
+    // avatar removed from admin form
     avatar?: string;
     sendInviteEmail?: boolean;
 }
@@ -55,6 +57,7 @@ interface CustomerFilters {
 const mockCustomers: Customer[] = [
     {
         id: "cus_001",
+        key: "cus_001",
         name: "Nguyễn Văn An",
         email: "an.nguyen@example.com",
         phone: "0901234567",
@@ -70,6 +73,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_002",
+        key: "cus_002",
         name: "Trần Thị Bình",
         email: "binh.tran@example.com",
         phone: "0912345678",
@@ -85,6 +89,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_003",
+        key: "cus_003",
         name: "Lê Minh Châu",
         email: "chau.le@example.com",
         phone: "0923456789",
@@ -100,6 +105,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_004",
+        key: "cus_004",
         name: "Phạm Quốc Đạt",
         email: "dat.pham@example.com",
         phone: "0934567890",
@@ -115,6 +121,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_005",
+        key: "cus_005",
         name: "Hoàng Thị Mai",
         email: "mai.hoang@example.com",
         phone: "0945678901",
@@ -130,6 +137,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_006",
+        key: "cus_006",
         name: "Vũ Văn Hùng",
         email: "hung.vu@example.com",
         phone: "0956789012",
@@ -145,6 +153,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_007",
+        key: "cus_007",
         name: "Đỗ Thị Lan",
         email: "lan.do@example.com",
         phone: "0967890123",
@@ -160,6 +169,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_008",
+        key: "cus_008",
         name: "Bùi Minh Tuấn",
         email: "tuan.bui@example.com",
         phone: "0978901234",
@@ -175,6 +185,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_009",
+        key: "cus_009",
         name: "Ngô Thị Hà",
         email: "ha.ngo@example.com",
         phone: "0989012345",
@@ -190,6 +201,7 @@ const mockCustomers: Customer[] = [
     },
     {
         id: "cus_010",
+        key: "cus_010",
         name: "Trương Văn Long",
         email: "long.truong@example.com",
         phone: "0990123456",
@@ -238,53 +250,96 @@ export default function Customers() {
         pageSize: 10,
     });
 
-    // Fetch customers with mock data
+    // Fetch customers from API (filter role === 'user')
     const { data: customersData, isLoading, error, refetch } = useQuery({
         queryKey: ['customers', pagination.current, pagination.pageSize, searchQuery, filters],
         queryFn: async () => {
-            const filteredCustomers = mockCustomers.filter((customer) => {
-                const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    customer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    customer.phone.includes(searchQuery);
-                const matchesStatus = filters.status === 'all' || customer.status === filters.status;
-                const matchesType = filters.type === 'all' || customer.type === filters.type;
-                return matchesSearch && matchesStatus && matchesType;
-            });
+            const res: any = await api.listUsers({ page: pagination.current, limit: pagination.pageSize, q: searchQuery });
+            // res should be { users, total, page, limit } or { data: { users, total } }
+            const dataObj = res?.data || res || {};
+            const usersRaw = dataObj.users || [];
+            const users = usersRaw.filter((u: any) => u.role === 'user');
+            const total = dataObj.total || 0;
 
-            const start = (pagination.current - 1) * pagination.pageSize;
-            const end = start + pagination.pageSize;
-            const paginatedCustomers = filteredCustomers.slice(start, end);
-
-            return {
-                data: paginatedCustomers,
-                pagination: {
-                    total: filteredCustomers.length,
-                    current: pagination.current,
-                    pageSize: pagination.pageSize,
-                },
-            };
-        },
+            // fetch aggregated order stats for displayed users
+            try {
+                const ids = users.map((u: any) => String(u._id || u.id));
+                const statsRes: any = ids.length ? await api.getUserOrderStats(ids) : null;
+                // const statsMap = statsRes?.data?.data || statsRes?.data || {};
+                // console.log("b:", statsMap);
+                return {
+                    data: users.map((u: any) => {
+                        const idStr = String(u._id || u.id);
+                        const s = statsRes && statsRes[idStr] ? statsRes[idStr] : null;
+                        return {
+                            key: idStr,
+                            id: idStr,
+                            name: u.name || '',
+                            email: u.email || '',
+                            phone: u.phone || '',
+                            avatar: (u.avatar || '') as string,
+                            type: 'Normal' as any,
+                            status: u.isVerified ? 'active' as any : 'blocked' as any,
+                            isVerified: Boolean(u.isVerified),
+                            registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
+                            totalOrders: s ? (s.totalOrders || 0) : 0,
+                            totalSpent: s ? (s.totalSpent || 0) : 0,
+                            lastOrderAt: s ? s.lastOrderAt : undefined,
+                            address: u.address || '',
+                            notes: ''
+                        };
+                    }),
+                    pagination: {
+                        total,
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                    }
+                };
+            } catch (e) {
+                // if stats fetch fails, return users with zeroed stats
+                return {
+                    data: users.map((u: any) => ({
+                        key: String(u._id || u.id),
+                        id: String(u._id || u.id),
+                        name: u.name || '',
+                        email: u.email || '',
+                        phone: u.phone || '',
+                        avatar: (u.avatar || '') as string,
+                        type: 'Normal' as any,
+                        status: u.isVerified ? 'active' as any : 'blocked' as any,
+                        isVerified: Boolean(u.isVerified),
+                        registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
+                        totalOrders: 0,
+                        totalSpent: 0,
+                        lastOrderAt: undefined,
+                        address: u.address || '',
+                        notes: ''
+                    })),
+                    pagination: {
+                        total,
+                        current: pagination.current,
+                        pageSize: pagination.pageSize,
+                    }
+                };
+            }
+        }
     });
 
-    // Create customer mutation (mock implementation)
+    // Create customer (API)
     const createCustomerMutation = useMutation({
         mutationFn: async (data: CustomerFormData) => {
-            const newCustomer: Customer = {
-                id: `cus_${Date.now()}`,
+            const payload: any = {
                 name: data.name,
                 email: data.email,
+                password: data.password || Math.random().toString(36).slice(-8),
+                role: 'user',
                 phone: data.phone,
-                avatar: data.avatar || "/avatars/default.jpg",
-                type: data.type,
-                status: data.status,
-                registeredAt: new Date().toISOString(),
-                totalOrders: 0,
-                totalSpent: 0,
-                address: data.address || undefined,
-                notes: data.notes || undefined,
+                address: data.address,
+                // admin can set status via formData.status (active => isVerified=true)
+                isVerified: data.status === 'active',
             };
-            mockCustomers.push(newCustomer); // Add to mock data
-            return newCustomer;
+            const res: any = await api.adminCreateUser(payload);
+            return res;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -298,7 +353,7 @@ export default function Customers() {
         onError: (error: any) => {
             toast({
                 title: "Lỗi khi thêm khách hàng",
-                description: error.message,
+                description: error.message || String(error),
                 variant: "destructive",
             });
         },
@@ -307,16 +362,15 @@ export default function Customers() {
     // Update customer mutation (mock implementation)
     const updateCustomerMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: Partial<CustomerFormData> }) => {
-            const index = mockCustomers.findIndex(customer => customer.id === id);
-            if (index === -1) throw new Error('Customer not found');
-            mockCustomers[index] = {
-                ...mockCustomers[index],
-                ...data,
-                avatar: data.avatar || mockCustomers[index].avatar,
-                address: data.address || mockCustomers[index].address,
-                notes: data.notes || mockCustomers[index].notes,
-            };
-            return mockCustomers[index];
+            const payload: any = {};
+            if (data.name !== undefined) payload.name = data.name;
+            if (data.phone !== undefined) payload.phone = data.phone;
+            if (data.address !== undefined) payload.address = data.address;
+            if (data.password) payload.password = data.password;
+            // map form status to isVerified if provided
+            if (data.status !== undefined) payload.isVerified = data.status === 'active';
+            const res: any = await api.adminUpdateUser(id, payload);
+            return res;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -336,13 +390,11 @@ export default function Customers() {
         },
     });
 
-    // Delete customer mutation (mock implementation)
+    // Delete customer (API)
     const deleteCustomerMutation = useMutation({
         mutationFn: async (id: string) => {
-            const index = mockCustomers.findIndex(customer => customer.id === id);
-            if (index === -1) throw new Error('Customer not found');
-            const deletedCustomer = mockCustomers.splice(index, 1)[0];
-            return deletedCustomer;
+            const res: any = await api.adminDeleteUser(id);
+            return res;
         },
         onSuccess: (_, customerId) => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -371,28 +423,28 @@ export default function Customers() {
         onError: (error: any) => {
             toast({
                 title: "Lỗi khi xóa khách hàng",
-                description: error.message,
+                description: error.message || String(error),
                 variant: "destructive",
             });
         },
     });
 
-    // Bulk operations mutation (mock implementation)
+    // Bulk operations mutation (delete supported via API; block/unblock not implemented server-side)
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-            ids.forEach(id => {
-                const index = mockCustomers.findIndex(customer => customer.id === id);
-                if (index !== -1) {
-                    if (action === 'delete') {
-                        mockCustomers.splice(index, 1);
-                    } else if (action === 'unblock') {
-                        mockCustomers[index].status = 'active';
-                    } else if (action === 'block') {
-                        mockCustomers[index].status = 'blocked';
-                    }
-                }
-            });
-            return { success: true };
+            if (action === 'delete') {
+                await Promise.all(ids.map(id => api.adminDeleteUser(id)));
+                return { success: true };
+            }
+            if (action === 'block') {
+                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: false })));
+                return { success: true };
+            }
+            if (action === 'unblock') {
+                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: true })));
+                return { success: true };
+            }
+            throw new Error('Hành động không hợp lệ');
         },
         onSuccess: (_, { action, ids }) => {
             queryClient.invalidateQueries({ queryKey: ['customers'] });
@@ -406,7 +458,7 @@ export default function Customers() {
         onError: (error: any) => {
             toast({
                 title: "Lỗi khi thực hiện thao tác",
-                description: error.message,
+                description: error.message || String(error),
                 variant: "destructive",
             });
         },
@@ -470,19 +522,6 @@ export default function Customers() {
 
     const columns: Column[] = [
         {
-            key: "avatar",
-            title: "",
-            width: "w-12",
-            render: (_, record: Customer) => (
-                <Avatar className="w-8 h-8">
-                    <AvatarImage src={record.avatar} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                        {record.name.charAt(0)}
-                    </AvatarFallback>
-                </Avatar>
-            ),
-        },
-        {
             key: "id",
             title: "Mã KH",
             sortable: true,
@@ -538,12 +577,12 @@ export default function Customers() {
             key: "status",
             title: "Trạng thái",
             sortable: true,
-            render: (value) => (
-                <Badge className={value === "active"
+            render: (value, record: any) => (
+                <Badge className={record.isVerified
                     ? "bg-green-100 text-green-800 hover:bg-green-100"
                     : "bg-red-100 text-red-800 hover:bg-red-100"
                 }>
-                    {value === "active" ? "Hoạt động" : "Bị khóa"}
+                    {record.isVerified ? "Hoạt động" : "Bị khóa"}
                 </Badge>
             ),
         },
@@ -565,7 +604,6 @@ export default function Customers() {
             notes: customer.notes || "",
             status: customer.status,
             type: customer.type,
-            avatar: customer.avatar,
             sendInviteEmail: false
         });
         setModalMode("edit");
@@ -625,7 +663,7 @@ export default function Customers() {
                 bulkActionMutation.mutate({ action: 'block', ids: keys });
             },
             icon: <Ban className="w-4 h-4 mr-2" />,
-            variant: "secondary" as const,
+            variant: "default" as const,
         },
         {
             label: "Xóa",
@@ -679,12 +717,6 @@ export default function Customers() {
             return (
                 <div className="space-y-6">
                     <div className="flex items-center space-x-4">
-                        <Avatar className="w-16 h-16">
-                            <AvatarImage src={selectedCustomer.avatar} />
-                            <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                                {selectedCustomer.name.charAt(0)}
-                            </AvatarFallback>
-                        </Avatar>
                         <div>
                             <h3 className="text-lg font-semibold">{selectedCustomer.name}</h3>
                             <p className="text-gray-500">{selectedCustomer.email}</p>
@@ -751,30 +783,19 @@ export default function Customers() {
                         </div>
                     )}
 
-                    <div>
+                    {/* <div>
                         <Label className="text-sm font-medium text-gray-700">Đơn hàng gần đây</Label>
                         <div className="mt-2 text-sm text-gray-500">
                             Chức năng này sẽ được triển khai khi module Đơn hàng hoàn thành
                         </div>
-                    </div>
+                    </div> */}
                 </div>
             );
         }
 
         return (
             <div className="space-y-4">
-                <div>
-                    <Label>Ảnh đại diện</Label>
-                    <div className="mt-2">
-                        <ImageUploader
-                            maxFiles={1}
-                            maxSizeMB={2}
-                            initialFiles={formData.avatar ? [formData.avatar] : []}
-                            onChange={(files) => handleFormChange('avatar', files[0] || '')}
-                            hint="Kích thước tối đa 2MB, JPG/PNG"
-                        />
-                    </div>
-                </div>
+                {/* Avatar upload removed from admin form */}
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -855,7 +876,7 @@ export default function Customers() {
                         {formErrors.password && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.password}</p>
                         )}
-                        <div className="flex items-center space-x-2 mt-2">
+                        {/* <div className="flex items-center space-x-2 mt-2">
                             <Checkbox
                                 id="sendInvite"
                                 checked={formData.sendInviteEmail}
@@ -864,7 +885,7 @@ export default function Customers() {
                             <Label htmlFor="sendInvite" className="text-sm">
                                 Gửi email mời đăng nhập
                             </Label>
-                        </div>
+                        </div> */}
                     </div>
                 )}
 
@@ -933,11 +954,11 @@ export default function Customers() {
         <div className="p-6 space-y-6 bg-gray-50">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Quản lý khách hàng</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Quản lý người dùng</h1>
                     <p className="text-gray-600 mt-1">Quản lý thông tin và hoạt động của khách hàng</p>
                 </div>
                 <div className="flex items-center space-x-3">
-                    <Button
+                    {/* <Button
                         variant="outline"
                         onClick={() => refetch()}
                         disabled={isLoading}
@@ -945,7 +966,7 @@ export default function Customers() {
                     >
                         <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                         Làm mới
-                    </Button>
+                    </Button> */}
                     <Button onClick={handleAdd} className="bg-primary hover:bg-primary-600">
                         <Plus className="w-4 h-4 mr-2" />
                         Thêm khách hàng
@@ -1085,7 +1106,6 @@ export default function Customers() {
                 typingText="DELETE"
                 onConfirm={confirmDelete}
                 confirmText="Xóa khách hàng"
-                loading={deleteCustomerMutation.isPending}
             />
         </div>
     );

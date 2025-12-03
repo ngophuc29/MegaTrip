@@ -320,7 +320,7 @@ export default function KhuyenMai() {
                     </div>
 
                     {/* Featured Promotions */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {featuredPromotions.map((promo) => (
                             <Card key={promo.id} className="overflow-hidden hover:shadow-lg transition-shadow border-red-200">
                                 <div
@@ -350,7 +350,7 @@ export default function KhuyenMai() {
                                 </CardContent>
                             </Card>
                         ))}
-                    </div>
+                    </div> */}
                 </div>
             </section>
 

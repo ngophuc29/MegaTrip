@@ -279,7 +279,7 @@ export function DataTable({
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Nhập tên tour ..."
+              placeholder="Nhập tên để tìm kiếm..."
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               className="pl-10"
@@ -296,7 +296,7 @@ export function DataTable({
           </Button> */}
         </div>
 
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           {exportable && (
             <Button
               variant="outline"
@@ -308,7 +308,7 @@ export function DataTable({
               Xuất
             </Button>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Bulk Actions */}
@@ -366,9 +366,10 @@ export function DataTable({
                     checked={allSelected ? true : someSelected ? "indeterminate" : false}
                     onCheckedChange={(checked) => {
                       if (checked) {
-                        rowSelection.onChange(
-                          data.map((_, index) => index.toString())
+                        const keys = data.map((record, idx) =>
+                          String(record[rowKey] ?? record.id ?? record.key ?? idx)
                         );
+                        rowSelection.onChange(keys);
                       } else {
                         rowSelection.onChange([]);
                       }
@@ -438,14 +439,13 @@ export function DataTable({
                     <TableCell>
                       <Checkbox
                         checked={rowSelection.selectedRowKeys.includes(
-                          index.toString()
+                          String(record[rowKey] ?? record.id ?? record.key ?? index)
                         )}
                         onCheckedChange={(checked) => {
+                          const recordKey = String(record[rowKey] ?? record.id ?? record.key ?? index);
                           const newSelection = checked
-                            ? [...rowSelection.selectedRowKeys, index.toString()]
-                            : rowSelection.selectedRowKeys.filter(
-                              (key) => key !== index.toString()
-                            );
+                            ? [...rowSelection.selectedRowKeys, recordKey]
+                            : rowSelection.selectedRowKeys.filter((key) => key !== recordKey);
                           rowSelection.onChange(newSelection);
                         }}
                         {...rowSelection.getCheckboxProps?.(record)}

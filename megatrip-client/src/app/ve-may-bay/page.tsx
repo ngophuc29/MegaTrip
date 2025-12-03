@@ -186,6 +186,7 @@ export default function VeMayBay() {
         to: 'Hà Nội (HAN)'
     });
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingFlights, setIsLoadingFlights] = useState(false);
     const [apiFlights, setApiFlights] = useState<any[]>([]); // mapped flights returned from Amadeus (legacy single-leg pointer)
     // Per-leg results for roundtrip flows (cached separately by leg)
     const [outboundFlights, setOutboundFlights] = useState<any[]>([]);
@@ -796,6 +797,7 @@ export default function VeMayBay() {
                             setHasSearched(true);
                             setShowPromotions(false);
                             setIsLoading(false);
+                            setIsLoadingFlights(false);
                             setCacheExpired(false);
                             return;
                         }
@@ -807,6 +809,7 @@ export default function VeMayBay() {
                         setShowPromotions(false);
                         setIsLoading(false);
                         setCacheExpired(true);
+                        setIsLoadingFlights(false); // Thêm: load xong
                         return;
                     }
 
@@ -835,6 +838,7 @@ export default function VeMayBay() {
                             setShowPromotions(false);
                             setIsLoading(false);
                             setCacheExpired(false);
+                            setIsLoadingFlights(false); // Thêm: load xong
                             return;
                         }
                         setOutboundFlights(outboundList);
@@ -844,6 +848,7 @@ export default function VeMayBay() {
                         setShowPromotions(false);
                         setIsLoading(false);
                         setCacheExpired(true);
+                        setIsLoadingFlights(false); // Thêm: load xong
                         return;
                     }
                 }
@@ -912,6 +917,7 @@ export default function VeMayBay() {
                 }
                 setHasSearched(true);
                 setShowPromotions(false);
+                setIsLoadingFlights(false);
                 setIsLoading(false);
             }
 
@@ -979,6 +985,7 @@ export default function VeMayBay() {
                 setShowPromotions(false);
                 setIsLoading(false);
                 setCacheExpired(false);
+                setIsLoadingFlights(false); // Thêm: load xong
                 return;
             }
             try { removeCache(cacheKey); } catch { }
@@ -987,6 +994,7 @@ export default function VeMayBay() {
             setShowPromotions(false);
             setIsLoading(false);
             setCacheExpired(true);
+            setIsLoadingFlights(false); // Thêm: load xong
             return;
         }
 
@@ -1008,33 +1016,59 @@ export default function VeMayBay() {
     // Decide which set of flights to show:
     // - If roundtripMode: show outboundFlights when choosing outbound, inboundFlights when choosing inbound.
     // - Otherwise behave as before (apiFlights or generated/sample).
+    // let legFlights: any[] = [];
+    // if (roundtripMode) {
+    //     legFlights = tripStep === 'outbound' ? (outboundFlights.length ? outboundFlights : apiFlights) : (inboundFlights.length ? inboundFlights : []);
+    //     // fallback to generated/sample if no API flights for this leg
+    //     if (!legFlights || legFlights.length === 0) {
+    //         legFlights = selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights;
+    //     }
+    // } else {
+    //     legFlights = apiFlights && apiFlights.length > 0 ? apiFlights : (selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights);
+    // }
+
+    // const allFlights = legFlights;
+
     let legFlights: any[] = [];
     if (roundtripMode) {
-        legFlights = tripStep === 'outbound' ? (outboundFlights.length ? outboundFlights : apiFlights) : (inboundFlights.length ? inboundFlights : []);
-        // fallback to generated/sample if no API flights for this leg
-        if (!legFlights || legFlights.length === 0) {
-            legFlights = selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights;
-        }
+        legFlights = tripStep === 'outbound' ? (outboundFlights.length ? outboundFlights : []) : (inboundFlights.length ? inboundFlights : []);
     } else {
-        legFlights = apiFlights && apiFlights.length > 0 ? apiFlights : (selectedRoute ? [...routeFlights, ...sampleFlights] : sampleFlights);
+        legFlights = apiFlights && apiFlights.length > 0 ? apiFlights : [];
     }
 
-    const allFlights = legFlights;
-
+    const allFlights = legFlights; // Chỉ dùng data từ API, không có fake data
+    const [selectedDepartureTime, setSelectedDepartureTime] = useState<string>('');
     const filteredFlights = allFlights.filter(flight => {
         const price = Number(flight?.price) || 0;
         const matchesPrice = price >= priceRange[0] && price <= priceRange[1];
         const matchesAirline = selectedAirlines.length === 0 || selectedAirlines.includes(flight.airline);
+
+        // Filter by departure time
+        let matchesTime = true;
+        if (selectedDepartureTime) {
+            const [start, end] = selectedDepartureTime.split('-').map(t => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m; // Convert to minutes
+            });
+            const flightTime = flight.departure?.time;
+            if (flightTime) {
+                const [h, m] = flightTime.split(':').map(Number);
+                const flightMinutes = h * 60 + m;
+                matchesTime = flightMinutes >= start && flightMinutes < end;
+            } else {
+                matchesTime = false;
+            }
+        }
 
         // If route is selected, prioritize matching routes
         if (selectedRoute) {
             const matchesRoute =
                 flight.departure.city === selectedRoute.from &&
                 flight.arrival.city === selectedRoute.to;
-            return matchesPrice && matchesAirline && matchesRoute;
+            return matchesPrice && matchesAirline && matchesTime && matchesRoute;
         }
 
-        return matchesPrice && matchesAirline;
+        return matchesPrice && matchesAirline && matchesTime;
     });
 
     const sortedFlights = [...filteredFlights].sort((a, b) => {
@@ -1085,6 +1119,7 @@ export default function VeMayBay() {
     const handleSearch = () => {
         setHasSearched(true);
         setShowPromotions(false);
+        setIsLoadingFlights(true); // Thêm: bắt đầu load
         setIsLoading(true);
         setTimeout(() => setIsLoading(false), 3000);
     };
@@ -1921,7 +1956,49 @@ export default function VeMayBay() {
     };
     // Thêm trạng thái mới
     const [pendingExpandFlight, setPendingExpandFlight] = useState<string | null>(null);
+    const [showEmptyDebounce, setShowEmptyDebounce] = useState(false);
+    useEffect(() => {
+        let t: any = null;
+        if (hasSearched && allFlights.length === 0) {
+            setShowEmptyDebounce(true);
+            t = setTimeout(() => setShowEmptyDebounce(false), 1500);
+        } else {
+            setShowEmptyDebounce(false);
+        }
+        return () => { if (t) clearTimeout(t); };
+    }, [hasSearched, allFlights.length]);
 
+    // base API (config bằng NEXT_PUBLIC_API_BASE hoặc fallback)
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+    // Thêm state cho promotions
+    const [promotions, setPromotions] = useState<any[]>([]);
+    const [promotionsLoading, setPromotionsLoading] = useState(false);
+    const [promotionsError, setPromotionsError] = useState<string | null>(null);
+    
+    useEffect(() => {
+        // load promotions applicable to flights
+        const loadPromos = async () => {
+            try {
+                setPromotionsLoading(true);
+                setPromotionsError(null);
+                const url = `${API_BASE}/api/promotions?status=active&appliesTo=flights&page=1&pageSize=10`;
+                const r = await fetch(url);
+                if (!r.ok) {
+                    const text = await r.text().catch(() => '');
+                    throw new Error(`Server lỗi ${r.status}${text ? `: ${text}` : ''}`);
+                }
+                const json = await r.json();
+                const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+                setPromotions(list);
+            } catch (err: any) {
+                setPromotions([]);
+                setPromotionsError(String(err?.message || err || 'Không thể tải khuyến mãi'));
+            } finally {
+                setPromotionsLoading(false);
+            }
+        };
+        loadPromos();
+    }, [API_BASE]);
     return (
         <>
             {isLoading && (
@@ -1968,108 +2045,112 @@ export default function VeMayBay() {
                             </Button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Card className="bg-gradient-to-r from-red-500 to-pink-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">SAVE30</div>
-                                            <div className="text-sm opacity-90">Giảm 300K vé máy bay</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-red-600"
-                                            onClick={() => handleCopy('SAVE30')}
-                                        >
-                                            {copied['SAVE30'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">FIRSTFLIGHT</div>
-                                            <div className="text-sm opacity-90">Giảm 50K lần đầu đặt</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 15/01/2025</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-blue-600"
-                                            onClick={() => handleCopy('FIRSTFLIGHT')}
-                                        >
-                                            {copied['FIRSTFLIGHT'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="bg-gradient-to-r from-green-500 to-emerald-500 text-white">
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <div className="text-lg font-bold">WEEKEND20</div>
-                                            <div className="text-sm opacity-90">Giảm 20% cuối tuần</div>
-                                            <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="secondary"
-                                            className="text-green-600"
-                                            onClick={() => handleCopy('WEEKEND20')}
-                                        >
-                                            {copied['WEEKEND20'] ? 'Đã copy!' : 'Copy mã'}
-                                        </Button>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                            {promotionsLoading ? (
+                                [0, 1, 2].map(i => (
+                                    <Card key={i} className="animate-pulse">
+                                        <CardContent className="p-4">
+                                            <div className="h-6 w-24 bg-gray-200 rounded mb-2" />
+                                            <div className="h-4 w-40 bg-gray-200 rounded mb-2" />
+                                            <div className="h-3 w-20 bg-gray-200 rounded" />
+                                        </CardContent>
+                                    </Card>
+                                ))
+                            ) : promotionsError ? (
+                                <Card className="col-span-3 text-center">
+                                    <CardContent>
+                                        <div className="text-sm text-red-600 mb-2">Không tải được khuyến mãi</div>
+                                        <div className="text-xs text-[hsl(var(--muted-foreground))] mb-3">{promotionsError}</div>
+                                        <Button onClick={() => {
+                                            setPromotionsError(null);
+                                            setPromotionsLoading(true);
+                                            fetch(`${API_BASE}/api/promotions?status=active&appliesTo=flights&page=1&pageSize=10`)
+                                                .then(r => r.ok ? r.json() : Promise.reject(r))
+                                                .catch(e => setPromotionsError(String(e?.message || e)))
+                                                .finally(() => setPromotionsLoading(false));
+                                        }}>Thử lại</Button>
+                                    </CardContent>
+                                </Card>
+                            ) : promotions.length === 0 ? (
+                                <div className="col-span-3 text-sm text-[hsl(var(--muted-foreground))]">Hiện không có khuyến mãi cho chuyến bay</div>
+                            ) : (
+                                promotions.slice(0, 3).map((p: any, idx: number) => {
+                                    const colors = [
+                                        'from-red-500 to-pink-500',
+                                        'from-blue-500 to-cyan-500',
+                                        'from-green-500 to-emerald-500'
+                                    ];
+                                    const color = colors[idx % colors.length];
+                                    return (
+                                        <Card key={p.id || p._id || p.code} className={`bg-gradient-to-r ${color} text-white`}>
+                                            <CardContent className="p-4">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <div className="text-lg font-bold text-white"><span>Code  : </span> {p.code ?? `PROMO-${p._id?.slice?.(0, 6)}`}</div>
+                                                        <div className="text-sm opacity-90 text-white"><span>Tên : </span>{p.title}</div>
+                                                        {p.code && <div className="text-xs opacity-75 text-white">Áp dụng từ {formatPrice(p.minSpend || 0)} VND</div>}
+                                                        <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                    </div>
+                                                    {p.code ? (
+                                                        <Button size="sm" variant="secondary" className="text-red-600" onClick={() => {
+                                                            const code = p.code || '';
+                                                            if (code) handleCopy(code);
+                                                        }}>
+                                                            {copied[p.code] ? 'Đã copy!' : 'Copy mã'}
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="text-xs opacity-75 mt-1 text-white">
+                                                            Tự động áp dụng khi thanh toán từ {formatPrice(p.minSpend || 0)} VND
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                })
+                            )}
                         </div>
                     </div>
 
-                    {/* Popular Routes */}
-                    <div className="mb-8">
-                        <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">✈️ Tuyến bay phổ biến</h2>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Hà Nội', '1.690.000₫')}>
-                                <CardContent className="p-4 text-center">
-                                    <div className="text-sm font-medium">TP.HCM → Hà Nội</div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.690.000₫</div>
-                                    <Badge variant="secondary" className="mt-2 text-xs">Phổ biến</Badge>
-                                </CardContent>
-                            </Card>
+                    {/* Popular Routes
+                    // <div className="mb-8">
+                    //     <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">✈️ Tuyến bay phổ biến</h2>
+                    //     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    //         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Hà Nội', '1.690.000₫')}>
+                    //             <CardContent className="p-4 text-center">
+                    //                 <div className="text-sm font-medium">TP.HCM → Hà Nội</div>
+                    //                 <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.690.000₫</div>
+                    //                 <Badge variant="secondary" className="mt-2 text-xs">Phổ biến</Badge>
+                    //             </CardContent>
+                    //         </Card>
 
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Đà Nẵng', '1.590.000₫')}>
-                                <CardContent className="p-4 text-center">
-                                    <div className="text-sm font-medium">TP.HCM → Đà Nẵng</div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.590.000₫</div>
-                                    <Badge variant="secondary" className="mt-2 text-xs">Giá tốt</Badge>
-                                </CardContent>
-                            </Card>
+                    //         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Đà Nẵng', '1.590.000₫')}>
+                    //             <CardContent className="p-4 text-center">
+                    //                 <div className="text-sm font-medium">TP.HCM → Đà Nẵng</div>
+                    //                 <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.590.000₫</div>
+                    //                 <Badge variant="secondary" className="mt-2 text-xs">Giá tốt</Badge>
+                    //             </CardContent>
+                    //         </Card>
 
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('Hà Nội', 'Đà Nẵng', '1.490.000₫')}>
-                                <CardContent className="p-4 text-center">
-                                    <div className="text-sm font-medium">Hà Nội → Đà Nẵng</div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.490.000₫</div>
-                                    <Badge variant="secondary" className="mt-2 text-xs">Sale 30%</Badge>
-                                </CardContent>
-                            </Card>
+                    //         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('Hà Nội', 'Đà Nẵng', '1.490.000₫')}>
+                    //             <CardContent className="p-4 text-center">
+                    //                 <div className="text-sm font-medium">Hà Nội → Đà Nẵng</div>
+                    //                 <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.490.000₫</div>
+                    //                 <Badge variant="secondary" className="mt-2 text-xs">Sale 30%</Badge>
+                    //             </CardContent>
+                    //         </Card>
 
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Nha Trang', '1.390.000₫')}>
-                                <CardContent className="p-4 text-center">
-                                    <div className="text-sm font-medium">TP.HCM → Nha Trang</div>
-                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.390.000₫</div>
-                                    <Badge variant="secondary" className="mt-2 text-xs">Hot</Badge>
-                                </CardContent>
-                            </Card>
-                        </div>
-                    </div>
+                    //         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleRouteSelect('TP.HCM', 'Nha Trang', '1.390.000₫')}>
+                    //             <CardContent className="p-4 text-center">
+                    //                 <div className="text-sm font-medium">TP.HCM → Nha Trang</div>
+                    //                 <div className="text-xs text-[hsl(var(--muted-foreground))]">từ 1.390.000₫</div>
+                    //                 <Badge variant="secondary" className="mt-2 text-xs">Hot</Badge>
+                    //             </CardContent>
+                    //         </Card>
+                    //     </div>
+                    // </div>
 
                     {/* Great Deals */}
-                    <div className="mb-8">
+                    {/* <div className="mb-8">
                         <h2 className="text-xl font-bold mb-4 text-[hsl(var(--primary))]">🔥 Vé máy bay giá tốt</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <Card className="hover:shadow-md transition-shadow">
@@ -2132,7 +2213,7 @@ export default function VeMayBay() {
                                 </CardContent>
                             </Card>
                         </div>
-                    </div>
+                    </div>  */}
                 </div>
             </section>
 
@@ -2249,10 +2330,10 @@ export default function VeMayBay() {
                                             </div>
                                         </div>
 
-                                        <Separator />
+                                        {/* <Separator /> */}
 
                                         {/* Airlines */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Hãng hàng không</Label>
                                             <div className="space-y-3">
                                                 {airlines.map((airline) => (
@@ -2274,7 +2355,7 @@ export default function VeMayBay() {
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        </div> */}
 
                                         <Separator />
 
@@ -2282,17 +2363,45 @@ export default function VeMayBay() {
                                         <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Giờ khởi hành</Label>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <Button variant="outline" size="sm" className="text-xs">Sáng sớm<br />06:00 - 12:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Chiều<br />12:00 - 18:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Tối<br />18:00 - 24:00</Button>
-                                                <Button variant="outline" size="sm" className="text-xs">Đêm<br />00:00 - 06:00</Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '06:00-12:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '06:00-12:00' ? '' : '06:00-12:00')}
+                                                >
+                                                    Sáng sớm<br />06:00 - 12:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '12:00-18:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '12:00-18:00' ? '' : '12:00-18:00')}
+                                                >
+                                                    Chiều<br />12:00 - 18:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '18:00-24:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '18:00-24:00' ? '' : '18:00-24:00')}
+                                                >
+                                                    Tối<br />18:00 - 24:00
+                                                </Button>
+                                                <Button
+                                                    variant={selectedDepartureTime === '00:00-06:00' ? 'default' : 'outline'}
+                                                    size="sm"
+                                                    className="text-xs"
+                                                    onClick={() => setSelectedDepartureTime(selectedDepartureTime === '00:00-06:00' ? '' : '00:00-06:00')}
+                                                >
+                                                    Đêm<br />00:00 - 06:00
+                                                </Button>
                                             </div>
                                         </div>
 
                                         <Separator />
 
                                         {/* Quick Filters */}
-                                        <div>
+                                        {/* <div>
                                             <Label className="text-sm font-medium mb-3 block text-[hsl(var(--primary))]">Bộ lọc nhanh</Label>
                                             <div className="space-y-2">
                                                 <div className="flex items-center space-x-2">
@@ -2320,7 +2429,7 @@ export default function VeMayBay() {
                                                     </label>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </div> */}
                                     </CardContent>
                                 </Card>
                             )}
@@ -2402,7 +2511,9 @@ export default function VeMayBay() {
                                         <CardContent className="p-4 flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Kết quả tìm kiếm của bạn đã hết hạn</div>
-                                                <div className="text-sm text-[hsl(var(--muted-foreground))]">Vui lòng làm mới để xem giá và tình trạng sẵn có mới nhất.</div>
+                                                <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                    Vui lòng làm mới để xem giá và tình trạng sẵn có mới nhất.
+                                                </div>
                                             </div>
                                             <div>
                                                 <Button onClick={handleRefreshCachedResults}>Làm mới</Button>
@@ -2410,10 +2521,16 @@ export default function VeMayBay() {
                                         </CardContent>
                                     </Card>
                                 )}
+
+
+
+
                                 {isLoading ? (
                                     Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
-                                ) : (
-                                    sortedFlights.length === 0 && hasSearched ? (
+                                ) : allFlights.length === 0 ? (
+                                    showEmptyDebounce || isLoadingFlights ? (
+                                        Array.from({ length: 3 }).map((_, i) => <CardSkeleton key={i} />)
+                                    ) : hasSearched ? (
                                         <Card className="text-center py-12">
                                             <CardContent>
                                                 <Plane className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
@@ -2425,838 +2542,782 @@ export default function VeMayBay() {
                                             </CardContent>
                                         </Card>
                                     ) : (
-                                        // Nếu là roundtrip, custom render để chọn lần lượt outbound/inbound
-                                        roundtripMode ? (
-                                            sortedFlights
-                                                .filter(flight => {
-                                                    if (tripStep === 'outbound') {
-                                                        // Chỉ show các chuyến đi (theo selectedRoute)
-                                                        if (!selectedRoute) return true;
-                                                        return flight.departure.city === selectedRoute.from && flight.arrival.city === selectedRoute.to;
-                                                    } else {
-                                                        // Chỉ show các chuyến về (ngược lại)
-                                                        if (!selectedRoute) return true;
-                                                        return flight.departure.city === selectedRoute.to && flight.arrival.city === selectedRoute.from;
-                                                    }
-                                                })
-                                                .map(flight => (
-                                                    <Card key={flight.id} className={`hover:shadow-md transition-shadow ${((tripStep === 'outbound' && selectedOutbound?.id === flight.id) || (tripStep === 'inbound' && selectedInbound?.id === flight.id)) ? 'ring-2 ring-blue-500' : ''}`}
-                                                        ref={(el: any) => cardRefs.current.set(flight.id, el)}
-
-                                                    >
-                                                        <CardContent className="p-6">
-                                                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                                                                {/* Flight Info */}
-                                                                <div className="flex-1">
-                                                                    <div className="flex items-center gap-3 mb-3">
-                                                                        <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
-                                                                            <Plane className="h-4 w-4" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <div className="font-medium">{flight.airline}</div>
-                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">{flight.flightNumber} • {flight.aircraft}</div>
-                                                                        </div>
-                                                                        {flight.discount && (
-                                                                            <Badge variant="destructive">-{flight.discount}%</Badge>
-                                                                        )}
-                                                                        {flight.amenities.priority && (
-                                                                            <Badge className="bg-purple-100 text-purple-800">Priority</Badge>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-6">
-                                                                        <div className="text-center">
-                                                                            <div className="font-bold text-lg">{flight.departure.time}</div>
-                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">{flight.departure.airport}</div>
-                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">{flight.departure.city}</div>
-                                                                        </div>
-                                                                        <div className="flex-1 text-center">
-                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{flight.duration}</div>
-                                                                            <div className="flex items-center">
-                                                                                <div className="flex-1 h-px bg-gray-300"></div>
-                                                                                <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
-                                                                                <div className="flex-1 h-px bg-gray-300"></div>
-                                                                            </div>
-                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Bay thẳng</div>
-                                                                        </div>
-                                                                        <div className="text-center">
-                                                                            <div className="font-bold text-lg">{flight.arrival.time}</div>
-                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">{flight.arrival.airport}</div>
-                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">{flight.arrival.city}</div>
-                                                                        </div>
-                                                                    </div>
-                                                                    {/* Quick amenities */}
-                                                                    <div className="flex items-center gap-4 mt-3">
-                                                                        {flight.amenities.wifi.available && (
-                                                                            <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                <Wifi className="h-3 w-3" />
-                                                                                {flight.amenities.wifi.free ? 'WiFi miễn phí' : 'WiFi có phí'}
-                                                                            </div>
-                                                                        )}
-                                                                        {flight.amenities.meal.included && (
-                                                                            <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                <Utensils className="h-3 w-3" />
-                                                                                Bữa ăn
-                                                                            </div>
-                                                                        )}
-                                                                        <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                                                            <Luggage className="h-3 w-3" />
-                                                                            {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`}
-                                                                        </div>
-                                                                        {/* Quick amenities */}
-                                                                        <div className="flex items-center gap-3 mt-3 text-sm text-[hsl(var(--muted-foreground))]">
-                                                                            {/* Stops / direct */}
-                                                                            <div className="inline-flex items-center gap-1">
-                                                                                <span className="px-2 py-1 bg-slate-100 rounded text-xs">{flight.stopsText || 'Bay thẳng'}</span>
-                                                                            </div>
-
-                                                                            {/* Class / cabin */}
-                                                                            <div className="inline-flex items-center gap-1">
-                                                                                <span className="text-xs text-muted-foreground">Hạng</span>
-                                                                                <div className="px-2 py-0.5 bg-slate-50 rounded text-xs font-medium">{flight.class}</div>
-                                                                            </div>
-
-                                                                            {/* Baggage */}
-                                                                            <div className="inline-flex items-center gap-1">
-                                                                                <Luggage className="h-3 w-3" />
-                                                                                <div className="text-xs">
-                                                                                    {flight.baggage.checkin?.pieces ? `${flight.baggage.checkin.pieces} kiện` :
-                                                                                        flight.baggage.checkin?.weight ? `${flight.baggage.checkin.weight}${flight.baggage.checkin.unit ?? ''}` :
-                                                                                            'Ký gửi: -'}
-                                                                                </div>
-                                                                            </div>
-
-                                                                            {/* Cabin bag */}
-                                                                            <div className="inline-flex items-center gap-1">
-                                                                                <div className="text-xs">
-                                                                                    {flight.baggage?.handbag?.pieces ? `Xách tay: ${flight.baggage.handbag.pieces} kiện` :
-                                                                                        flight.baggage?.handbag?.weight ? `Xách tay: ${flight.baggage.handbag.weight}${flight.baggage.handbag.unit ?? ''}` :
-                                                                                            'Xách tay: Không có thông tin'}
-                                                                                </div>
-                                                                            </div>
-
-                                                                            {/* Seats available */}
-                                                                            <div className="ml-auto text-right text-xs">
-                                                                                <div>Số ghế: <span className="font-medium">{flight.availableSeats ?? '-'}</span></div>
-                                                                            </div>
-                                                                        </div>
+                                        <Card className="text-center py-12">
+                                            <CardContent>
+                                                <Plane className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
+                                                <h3 className="text-lg font-medium mb-2">Hãy nhập thông tin và tìm kiếm</h3>
+                                                <p className="text-[hsl(var(--muted-foreground))] mb-4">
+                                                    Sử dụng thanh tìm kiếm ở trên để tìm chuyến bay phù hợp
+                                                </p>
+                                            </CardContent>
+                                        </Card>
+                                    )
+                                ) : roundtripMode ? (
+                                    sortedFlights
+                                        .filter(flight => {
+                                            if (tripStep === 'outbound') {
+                                                if (!selectedRoute) return true;
+                                                return flight.departure.city === selectedRoute.from && flight.arrival.city === selectedRoute.to;
+                                            } else {
+                                                if (!selectedRoute) return true;
+                                                return flight.departure.city === selectedRoute.to && flight.arrival.city === selectedRoute.from;
+                                            }
+                                        })
+                                        .map(flight => (
+                                            <Card
+                                                key={flight.id}
+                                                className={`hover:shadow-md transition-shadow ${((tripStep === 'outbound' && selectedOutbound?.id === flight.id) || (tripStep === 'inbound' && selectedInbound?.id === flight.id)) ? 'ring-2 ring-blue-500' : ''}`}
+                                                ref={(el: any) => cardRefs.current.set(flight.id, el)}
+                                            >
+                                                <CardContent className="p-6">
+                                                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                                        {/* Flight Info */}
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-3 mb-3">
+                                                                <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center">
+                                                                    <Plane className="h-4 w-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-medium">{flight.airline}</div>
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                        {flight.flightNumber} • {flight.aircraft}
                                                                     </div>
                                                                 </div>
-                                                                {/* Price & Action */}
-                                                                <div className="lg:text-right space-y-2">
-                                                                    <div>
-                                                                        {flight.originalPrice && (
-                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))] line-through">
-                                                                                {formatPrice(flight.originalPrice)}
-                                                                            </div>
-                                                                        )}
-                                                                        <div className="text-xl font-bold text-[hsl(var(--primary))]">
-                                                                            {formatPrice(flight.price)}
-                                                                        </div>
-                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá cho 1 khách</div>
+                                                                {flight.discount && (
+                                                                    <Badge variant="destructive">-{flight.discount}%</Badge>
+                                                                )}
+                                                                {flight.amenities.priority && (
+                                                                    <Badge className="bg-purple-100 text-purple-800">Priority</Badge>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="flex items-center gap-6">
+                                                                <div className="text-center">
+                                                                    <div className="font-bold text-lg">{flight.departure.time}</div>
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                        {flight.departure.airport}
                                                                     </div>
-                                                                    <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
-                                                                        <Button
-                                                                            className="w-full lg:w-auto"
-                                                                            onClick={async () => {
-                                                                                const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
-                                                                                const signature = computeSignatureForPayload(flightOfferPayload);
-                                                                                const key = makePricingCacheKey(flightOfferPayload, flight.id);
-                                                                                setPricingLoadingFor(key, true);
-                                                                                const stored = loadCacheFromStorage();
-                                                                                const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
-                                                                                if (hasCachedAndMatchingSig) {
-                                                                                    populateFromCache(key);
-                                                                                } else {
-                                                                                    await handlePriceOfferSingle(flight); // Fix: Await fetch pricing/seatmap trước khi set selected, đảm bảo data đầy đủ cho modal
-                                                                                    populateFromCache(key);
-                                                                                }
-                                                                                setPricingLoadingFor(key, false);
-                                                                                if (tripStep === 'outbound') {
-                                                                                    setSelectedOutbound(flight);
-                                                                                    const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
-                                                                                    const returnDate = q['returnDate'] || q['return'];
-                                                                                    if (returnDate && inboundFlights.length === 0) {
-                                                                                        await fetchAmadeusOffers();
-                                                                                    }
-                                                                                    setTripStep('inbound');
-                                                                                    setExpandedFlight(null);
-                                                                                } else if (tripStep === 'inbound') {
-                                                                                    setSelectedInbound(flight);
-                                                                                    setShowReview(true);
-                                                                                    setExpandedFlight(null);
-                                                                                }
-                                                                            }}
-                                                                            disabled={
-                                                                                pricingLoadingByFlight[makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id)] ||
-                                                                                (tripStep === 'outbound' && selectedOutbound?.id === flight.id) ||
-                                                                                (tripStep === 'inbound' && selectedInbound?.id === flight.id)
-                                                                            }
-                                                                        >
-                                                                            {pricingLoadingByFlight[makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id)] ? 'Đang lấy thông tin...' :
-                                                                                tripStep === 'outbound'
-                                                                                    ? (selectedOutbound?.id === flight.id ? 'Đã chọn' : 'Chọn chuyến đi')
-                                                                                    : (selectedInbound?.id === flight.id ? 'Đã chọn' : 'Chọn chuyến về')}
-                                                                        </Button>
-
-                                                                        <Button
-                                                                            variant="ghost"
-                                                                            size="sm"
-                                                                            onClick={async () => {
-                                                                                const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
-                                                                                const signature = computeSignatureForPayload(flightOfferPayload);
-                                                                                const key = makePricingCacheKey(flightOfferPayload, flight.id);
-                                                                                const opening = expandedFlight !== flight.id;
-                                                                                if (opening) {
-                                                                                    setPendingExpandFlight(key); // Bắt đầu pending
-                                                                                    setPricingLoadingFor(key, true);
-                                                                                    const stored = loadCacheFromStorage();
-                                                                                    const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
-                                                                                    if (hasCachedAndMatchingSig) {
-                                                                                        populateFromCache(key);
-                                                                                        setExpandedFlight(flight.id);
-                                                                                        setPendingExpandFlight(null);
-                                                                                        setPricingLoadingFor(key, false);
-                                                                                        return;
-                                                                                    }
-                                                                                    // Fix: Luôn await fetch pricing/seatmap trước khi set expandedFlight, ngay cả khi có local amenities
-                                                                                    // Set minimal data tạm thời để UI có thể render skeleton/loading, nhưng chờ full data
-                                                                                    if (shouldUseLocalAmenities(flight)) {
-                                                                                        const minimal = { data: flight.raw ?? flightOfferPayload };
-                                                                                        setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
-                                                                                        setSignaturesByFlight(prev => ({ ...prev, [key]: signature }));
-                                                                                    }
-                                                                                    const res = await handlePriceOfferSingle(flight);
-                                                                                    if (res) {
-                                                                                        populateFromCache(res.key);
-                                                                                    }
-                                                                                    setExpandedFlight(flight.id);
-                                                                                    setPendingExpandFlight(null);
-                                                                                    setPricingLoadingFor(key, false);
-                                                                                } else {
-                                                                                    setExpandedFlight(null);
-                                                                                    setPendingExpandFlight(null);
-                                                                                }
-                                                                            }}
-                                                                            className="w-full lg:w-auto text-xs"
-                                                                        >
-                                                                            Chi tiết
-                                                                            {expandedFlight === flight.id ?
-                                                                                <ChevronUp className="ml-1 h-3 w-3" /> :
-                                                                                <ChevronDown className="ml-1 h-3 w-3" />
-                                                                            }
-                                                                        </Button>
-
+                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                        {flight.departure.city}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex-1 text-center">
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))] mb-1">
+                                                                        {flight.duration}
+                                                                    </div>
+                                                                    <div className="flex items-center">
+                                                                        <div className="flex-1 h-px bg-gray-300"></div>
+                                                                        <ArrowRight className="h-4 w-4 mx-2 text-gray-400" />
+                                                                        <div className="flex-1 h-px bg-gray-300"></div>
+                                                                    </div>
+                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                                                                        Bay thẳng
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-center">
+                                                                    <div className="font-bold text-lg">{flight.arrival.time}</div>
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                        {flight.arrival.airport}
+                                                                    </div>
+                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                        {flight.arrival.city}
                                                                     </div>
                                                                 </div>
                                                             </div>
-                                                            {/* Expandable Details with Tabs */}
-                                                            {expandedFlight === flight.id && (
-                                                                <>
-                                                                    <Separator className="my-4" />
-                                                                    {(() => {
+
+                                                            {/* Quick amenities */}
+                                                            <div className="flex items-center gap-4 mt-3">
+                                                                {flight.amenities.wifi.available && (
+                                                                    <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                        <Wifi className="h-3 w-3" />
+                                                                        {flight.amenities.wifi.free ? 'WiFi miễn phí' : 'WiFi có phí'}
+                                                                    </div>
+                                                                )}
+                                                                {flight.amenities.meal.included && (
+                                                                    <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                        <Utensils className="h-3 w-3" />
+                                                                        Bữa ăn
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex items-center gap-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                    <Luggage className="h-3 w-3" />
+                                                                    {flight.baggage.checkin.weight} • {flight.baggage.checkin.pieces ?? `kiện`}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-3 mt-3 text-sm text-[hsl(var(--muted-foreground))]">
+                                                                <div className="inline-flex items-center gap-1">
+                                                                    <span className="px-2 py-1 bg-slate-100 rounded text-xs">
+                                                                        {flight.stopsText || 'Bay thẳng'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="inline-flex items-center gap-1">
+                                                                    <span className="text-xs text-muted-foreground">Hạng</span>
+                                                                    <div className="px-2 py-0.5 bg-slate-50 rounded text-xs font-medium">
+                                                                        {flight.class}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="inline-flex items-center gap-1">
+                                                                    <Luggage className="h-3 w-3" />
+                                                                    <div className="text-xs">
+                                                                        {flight.baggage.checkin?.pieces
+                                                                            ? `${flight.baggage.checkin.pieces} kiện`
+                                                                            : flight.baggage.checkin?.weight
+                                                                                ? `${flight.baggage.checkin.weight}${flight.baggage.checkin.unit ?? ''}`
+                                                                                : 'Ký gửi: -'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="inline-flex items-center gap-1">
+                                                                    <div className="text-xs">
+                                                                        {flight.baggage?.handbag?.pieces
+                                                                            ? `Xách tay: ${flight.baggage.handbag.pieces} kiện`
+                                                                            : flight.baggage?.handbag?.weight
+                                                                                ? `Xách tay: ${flight.baggage.handbag.weight}${flight.baggage.handbag.unit ?? ''}`
+                                                                                : 'Xách tay: Không có thông tin'}
+                                                                    </div>
+                                                                </div>
+                                                                <div className="ml-auto text-right text-xs">
+                                                                    <div>
+                                                                        Số ghế: <span className="font-medium">{flight.availableSeats ?? '-'}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Price & Action */}
+                                                        <div className="lg:text-right space-y-2">
+                                                            <div>
+                                                                {flight.originalPrice && (
+                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))] line-through">
+                                                                        {formatPrice(flight.originalPrice)}
+                                                                    </div>
+                                                                )}
+                                                                <div className="text-xl font-bold text-[hsl(var(--primary))]">
+                                                                    {formatPrice(flight.price)}
+                                                                </div>
+                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                    Giá cho 1 khách
+                                                                </div>
+                                                            </div>
+                                                            <div className="space-y-1 text-[hsl(var(--muted-foreground))]">
+                                                                <Button
+                                                                    className="w-full lg:w-auto"
+                                                                    onClick={async () => {
                                                                         const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
+                                                                        const signature = computeSignatureForPayload(flightOfferPayload);
                                                                         const key = makePricingCacheKey(flightOfferPayload, flight.id);
-                                                                        const isPricingLoading = Boolean(pricingLoadingByFlight[key]);
-                                                                        return isPricingLoading ? (
-                                                                            <div className="my-2">
-                                                                                <CardSkeleton />
-                                                                            </div>
-                                                                        ) : (
-                                                                            <Tabs defaultValue="details" className="w-full">
-                                                                                <TabsList className="grid w-full grid-cols-5">
-                                                                                    <TabsTrigger
-                                                                                        value="details"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                        }}
-                                                                                    >
-                                                                                        Chi tiết
-                                                                                    </TabsTrigger>
-                                                                                    <TabsTrigger
-                                                                                        value="benefits"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                        }}
-                                                                                    >
-                                                                                        Lợi ích đi kèm
-                                                                                    </TabsTrigger>
-                                                                                    <TabsTrigger
-                                                                                        value="refund"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                        }}
-                                                                                    >
-                                                                                        Hoàn vé
-                                                                                    </TabsTrigger>
-                                                                                    <TabsTrigger
-                                                                                        value="change"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                        }}
-                                                                                    >
-                                                                                        Đổi lịch
-                                                                                    </TabsTrigger>
-                                                                                    <TabsTrigger
-                                                                                        value="detailsCharge"
-                                                                                        onClick={(e) => {
-                                                                                            e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                        }}
-                                                                                    >
-                                                                                        Chi tiết vé
-                                                                                    </TabsTrigger>
-                                                                                </TabsList>
-                                                                                <div className="mt-4">
-                                                                                    <TabsContent value="details" className="space-y-4">
-                                                                                        {(() => {
-                                                                                            const pricing = pricingByFlight[key] ?? {};
-                                                                                            const seatmap = seatmapByFlight?.[key] ?? seatmapData ?? {};
-                                                                                            const offerFromPricing = pricing?.data?.flightOffers?.[0] ?? (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing ?? null);
-                                                                                            const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
-                                                                                            const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
-                                                                                            const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                                                        setPricingLoadingFor(key, true);
+                                                                        const stored = loadCacheFromStorage();
+                                                                        const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
+                                                                        if (hasCachedAndMatchingSig) {
+                                                                            populateFromCache(key);
+                                                                        } else {
+                                                                            await handlePriceOfferSingle(flight);
+                                                                            populateFromCache(key);
+                                                                        }
+                                                                        setPricingLoadingFor(key, false);
+                                                                        if (tripStep === 'outbound') {
+                                                                            setSelectedOutbound(flight);
+                                                                            const q = searchParams ? Object.fromEntries(searchParams.entries()) : {};
+                                                                            const returnDate = q['returnDate'] || q['return'];
+                                                                            if (returnDate && inboundFlights.length === 0) {
+                                                                                await fetchAmadeusOffers();
+                                                                            }
+                                                                            setTripStep('inbound');
+                                                                            setExpandedFlight(null);
+                                                                        } else if (tripStep === 'inbound') {
+                                                                            setSelectedInbound(flight);
+                                                                            setShowReview(true);
+                                                                            setExpandedFlight(null);
+                                                                        }
+                                                                    }}
+                                                                    disabled={
+                                                                        pricingLoadingByFlight[makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id)] ||
+                                                                        (tripStep === 'outbound' && selectedOutbound?.id === flight.id) ||
+                                                                        (tripStep === 'inbound' && selectedInbound?.id === flight.id)
+                                                                    }
+                                                                >
+                                                                    {pricingLoadingByFlight[makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id)]
+                                                                        ? 'Đang lấy thông tin...'
+                                                                        : tripStep === 'outbound'
+                                                                            ? selectedOutbound?.id === flight.id
+                                                                                ? 'Đã chọn'
+                                                                                : 'Chọn chuyến đi'
+                                                                            : selectedInbound?.id === flight.id
+                                                                                ? 'Đã chọn'
+                                                                                : 'Chọn chuyến về'}
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    onClick={async () => {
+                                                                        const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
+                                                                        const signature = computeSignatureForPayload(flightOfferPayload);
+                                                                        const key = makePricingCacheKey(flightOfferPayload, flight.id);
+                                                                        const opening = expandedFlight !== flight.id;
+                                                                        if (opening) {
+                                                                            setPendingExpandFlight(key);
+                                                                            setPricingLoadingFor(key, true);
+                                                                            const stored = loadCacheFromStorage();
+                                                                            const hasCachedAndMatchingSig = stored && stored.pricing && stored.pricing[key] && stored.signatures && signature && stored.signatures[key] === signature;
+                                                                            if (hasCachedAndMatchingSig) {
+                                                                                populateFromCache(key);
+                                                                                setExpandedFlight(flight.id);
+                                                                                setPendingExpandFlight(null);
+                                                                                setPricingLoadingFor(key, false);
+                                                                                return;
+                                                                            }
+                                                                            if (shouldUseLocalAmenities(flight)) {
+                                                                                const minimal = { data: flight.raw ?? flightOfferPayload };
+                                                                                setPricingByFlight(prev => ({ ...prev, [key]: minimal }));
+                                                                                setSignaturesByFlight(prev => ({ ...prev, [key]: signature }));
+                                                                            }
+                                                                            const res = await handlePriceOfferSingle(flight);
+                                                                            if (res) {
+                                                                                populateFromCache(res.key);
+                                                                            }
+                                                                            setExpandedFlight(flight.id);
+                                                                            setPendingExpandFlight(null);
+                                                                            setPricingLoadingFor(key, false);
+                                                                        } else {
+                                                                            setExpandedFlight(null);
+                                                                            setPendingExpandFlight(null);
+                                                                        }
+                                                                    }}
+                                                                    className="w-full lg:w-auto text-xs"
+                                                                >
+                                                                    Chi tiết
+                                                                    {expandedFlight === flight.id ? (
+                                                                        <ChevronUp className="ml-1 h-3 w-3" />
+                                                                    ) : (
+                                                                        <ChevronDown className="ml-1 h-3 w-3" />
+                                                                    )}
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                                                                            const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;
-                                                                                            const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0];
-                                                                                            const checkedQty = fareSeg?.includedCheckedBags?.quantity ?? flight.baggage?.checkin?.pieces;
-                                                                                            const checkedWeight = fareSeg?.includedCheckedBags?.weight ?? flight.baggage?.checkin?.weight;
-                                                                                            const cabinQty = fareSeg?.includedCabinBags?.quantity ?? flight.baggage?.handbag?.pieces;
-
-                                                                                            const cabAmenities = seatmap?.aircraftCabinAmenities || {};
-                                                                                            const wifiRaw = cabAmenities?.wifi ?? cabAmenities?.seat?.wifi ?? flight.amenities?.wifi;
-                                                                                            const wifiInfo = wifiRaw ? (typeof wifiRaw === 'object' ? wifiRaw : { available: !!wifiRaw }) : { available: false };
-
-                                                                                            const mealRaw = cabAmenities?.food ?? cabAmenities?.seat?.food ?? flight.amenities?.meal;
-                                                                                            const mealInfo = mealRaw ? (typeof mealRaw === 'object' ? mealRaw : { available: !!mealRaw }) : { included: false, available: false };
-
-                                                                                            const entertainmentRaw = cabAmenities?.seat?.medias ?? cabAmenities?.medias ?? flight.amenities?.entertainment;
-                                                                                            const entertainmentInfo = entertainmentRaw ? (Array.isArray(entertainmentRaw) ? { available: entertainmentRaw.length > 0, screens: entertainmentRaw.length } : (typeof entertainmentRaw === 'object' ? entertainmentRaw : { available: !!entertainmentRaw })) : { available: false };
-
-                                                                                            const powerRaw = cabAmenities?.power ?? flight.amenities?.power;
-                                                                                            const powerInfo = powerRaw ? (typeof powerRaw === 'object' ? powerRaw : { available: !!powerRaw }) : { available: false };
-
-                                                                                            const includedFareRules = getIncluded(pricing, 'detailed-fare-rules');
-                                                                                            const includedBags = getIncluded(pricing, 'bags');
-                                                                                            const creditCardFees = getIncluded(pricing, 'credit-card-fees');
-
-                                                                                            const segment = offerFromPricing?.itineraries?.[0]?.segments?.[0] ?? {};
-                                                                                            const lastTicketingDate = offerFromPricing?.lastTicketingDate ?? offerFromPricing?.lastTicketingDate ?? null;
-                                                                                            const fareTypes = offerFromPricing?.pricingOptions?.fareType ?? offerFromPricing?.pricingOptions?.fareType ?? [];
-                                                                                            const validatingAirlines = offerFromPricing?.validatingAirlineCodes ?? offerFromPricing?.validatingAirlineCodes ?? [];
-                                                                                            const bookingRequirements = pricing?.data?.bookingRequirements ?? pricing?.bookingRequirements ?? offerFromPricing?.bookingRequirements ?? null;
-
-                                                                                            const fareRuleSnippet = (() => {
-                                                                                                try {
-                                                                                                    if (!includedFareRules) return null;
-                                                                                                    const firstKey = Object.keys(includedFareRules)[0];
-                                                                                                    const rule = includedFareRules[firstKey];
-                                                                                                    const desc = rule?.fareNotes?.descriptions?.[0]?.text ?? rule?.fareNotes?.descriptions?.[0]?.text;
-                                                                                                    return desc ? (String(desc).slice(0, 1000) + (String(desc).length > 1000 ? '…' : '')) : rule?.name ?? null;
-                                                                                                } catch (e) {
-                                                                                                    return null;
-                                                                                                }
-                                                                                            })();
-
-                                                                                            return (
-                                                                                                <div className="space-y-4">
-                                                                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                                                                        <div>
-                                                                                                            <h4 className="font-medium mb-3">Hành lý</h4>
-                                                                                                            <div className="space-y-2 text-sm">
-                                                                                                                <div className="flex items-center gap-2">
-                                                                                                                    <Luggage className="h-4 w-4 text-blue-500" />
-                                                                                                                    <div>
-                                                                                                                        <div className="font-medium">Xách tay</div>
-                                                                                                                        <div className="text-muted-foreground">
-                                                                                                                            {cabinQty ?? (flight.baggage?.handbag?.pieces ?? '-')}{flight.baggage?.handbag?.unit ?? ''}
-                                                                                                                        </div>
-                                                                                                                    </div>
+                                                    {/* Expandable Details with Tabs */}
+                                                    {expandedFlight === flight.id && (
+                                                        <>
+                                                            <Separator className="my-4" />
+                                                            {(() => {
+                                                                const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOfferForPage(flight);
+                                                                const key = makePricingCacheKey(flightOfferPayload, flight.id);
+                                                                const isPricingLoading = Boolean(pricingLoadingByFlight[key]);
+                                                                return isPricingLoading ? (
+                                                                    <div className="my-2">
+                                                                        <CardSkeleton />
+                                                                    </div>
+                                                                ) : (
+                                                                    <Tabs defaultValue="details" className="w-full">
+                                                                        <TabsList className="grid w-full grid-cols-5">
+                                                                            <TabsTrigger
+                                                                                value="details"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            >
+                                                                                Chi tiết
+                                                                            </TabsTrigger>
+                                                                            <TabsTrigger
+                                                                                value="benefits"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            >
+                                                                                Lợi ích đi kèm
+                                                                            </TabsTrigger>
+                                                                            <TabsTrigger
+                                                                                value="refund"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            >
+                                                                                Hoàn vé
+                                                                            </TabsTrigger>
+                                                                            <TabsTrigger
+                                                                                value="change"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            >
+                                                                                Đổi lịch
+                                                                            </TabsTrigger>
+                                                                            <TabsTrigger
+                                                                                value="detailsCharge"
+                                                                                onClick={(e) => e.stopPropagation()}
+                                                                            >
+                                                                                Chi tiết vé
+                                                                            </TabsTrigger>
+                                                                        </TabsList>
+                                                                        <div className="mt-4">
+                                                                            <TabsContent value="details" className="space-y-4">
+                                                                                {(() => {
+                                                                                    const pricing = pricingByFlight[key] ?? {};
+                                                                                    const seatmap = seatmapByFlight?.[key] ?? seatmapData ?? {};
+                                                                                    const offerFromPricing = pricing?.data?.flightOffers?.[0] ?? (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing ?? null);
+                                                                                    const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
+                                                                                    const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
+                                                                                    const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                                                                    const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;
+                                                                                    const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0];
+                                                                                    const checkedQty = fareSeg?.includedCheckedBags?.quantity ?? flight.baggage?.checkin?.pieces;
+                                                                                    const checkedWeight = fareSeg?.includedCheckedBags?.weight ?? flight.baggage?.checkin?.weight;
+                                                                                    const cabinQty = fareSeg?.includedCabinBags?.quantity ?? flight.baggage?.handbag?.pieces;
+                                                                                    const cabAmenities = seatmap?.aircraftCabinAmenities || {};
+                                                                                    const wifiRaw = cabAmenities?.wifi ?? cabAmenities?.seat?.wifi ?? flight.amenities?.wifi;
+                                                                                    const wifiInfo = wifiRaw ? (typeof wifiRaw === 'object' ? wifiRaw : { available: !!wifiRaw }) : { available: false };
+                                                                                    const mealRaw = cabAmenities?.food ?? cabAmenities?.seat?.food ?? flight.amenities?.meal;
+                                                                                    const mealInfo = mealRaw ? (typeof mealRaw === 'object' ? mealRaw : { available: !!mealRaw }) : { included: false, available: false };
+                                                                                    const entertainmentRaw = cabAmenities?.seat?.medias ?? cabAmenities?.medias ?? flight.amenities?.entertainment;
+                                                                                    const entertainmentInfo = entertainmentRaw ? (Array.isArray(entertainmentRaw) ? { available: entertainmentRaw.length > 0, screens: entertainmentRaw.length } : (typeof entertainmentRaw === 'object' ? entertainmentRaw : { available: !!entertainmentRaw })) : { available: false };
+                                                                                    const powerRaw = cabAmenities?.power ?? flight.amenities?.power;
+                                                                                    const powerInfo = powerRaw ? (typeof powerRaw === 'object' ? powerRaw : { available: !!powerRaw }) : { available: false };
+                                                                                    const includedFareRules = getIncluded(pricing, 'detailed-fare-rules');
+                                                                                    const includedBags = getIncluded(pricing, 'bags');
+                                                                                    const creditCardFees = getIncluded(pricing, 'credit-card-fees');
+                                                                                    const segment = offerFromPricing?.itineraries?.[0]?.segments?.[0] ?? {};
+                                                                                    const lastTicketingDate = offerFromPricing?.lastTicketingDate ?? offerFromPricing?.lastTicketingDate ?? null;
+                                                                                    const fareTypes = offerFromPricing?.pricingOptions?.fareType ?? offerFromPricing?.pricingOptions?.fareType ?? [];
+                                                                                    const validatingAirlines = offerFromPricing?.validatingAirlineCodes ?? offerFromPricing?.validatingAirlineCodes ?? [];
+                                                                                    const bookingRequirements = pricing?.data?.bookingRequirements ?? pricing?.bookingRequirements ?? offerFromPricing?.bookingRequirements ?? null;
+                                                                                    const fareRuleSnippet = (() => {
+                                                                                        try {
+                                                                                            if (!includedFareRules) return null;
+                                                                                            const firstKey = Object.keys(includedFareRules)[0];
+                                                                                            const rule = includedFareRules[firstKey];
+                                                                                            const desc = rule?.fareNotes?.descriptions?.[0]?.text ?? rule?.fareNotes?.descriptions?.[0]?.text;
+                                                                                            return desc ? (String(desc).slice(0, 1000) + (String(desc).length > 1000 ? '…' : '')) : rule?.name ?? null;
+                                                                                        } catch (e) {
+                                                                                            return null;
+                                                                                        }
+                                                                                    })();
+                                                                                    return (
+                                                                                        <div className="space-y-4">
+                                                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                                                                <div>
+                                                                                                    <h4 className="font-medium mb-3">Hành lý</h4>
+                                                                                                    <div className="space-y-2 text-sm">
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <Luggage className="h-4 w-4 text-blue-500" />
+                                                                                                            <div>
+                                                                                                                <div className="font-medium">Xách tay</div>
+                                                                                                                <div className="text-muted-foreground">
+                                                                                                                    {cabinQty ?? (flight.baggage?.handbag?.pieces ?? '-')}{flight.baggage?.handbag?.unit ?? ''}
                                                                                                                 </div>
-                                                                                                                <div className="flex items-center gap-2">
-                                                                                                                    <Luggage className="h-4 w-4 text-green-500" />
-                                                                                                                    <div>
-                                                                                                                        <div className="font-medium">Ký gửi</div>
-                                                                                                                        <div className="text-muted-foreground">
-                                                                                                                            {checkedQty ?? checkedWeight ?? '-'}{checkedWeight ? (fareSeg?.includedCheckedBags?.weightUnit ?? flight.baggage?.checkin?.unit ?? '') : ''}
-                                                                                                                        </div>
-                                                                                                                    </div>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <Luggage className="h-4 w-4 text-green-500" />
+                                                                                                            <div>
+                                                                                                                <div className="font-medium">Ký gửi</div>
+                                                                                                                <div className="text-muted-foreground">
+                                                                                                                    {checkedQty ?? checkedWeight ?? '-'}{checkedWeight ? (fareSeg?.includedCheckedBags?.weightUnit ?? flight.baggage?.checkin?.unit ?? '') : ''}
                                                                                                                 </div>
-                                                                                                                {includedBags && (
-                                                                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
-                                                                                                                        Gói hành lý thêm có thể đặt:
-                                                                                                                        <div className="mt-1">
-                                                                                                                            {Object.keys(includedBags).map((k) => {
-                                                                                                                                const b = includedBags[k];
-                                                                                                                                return (
-                                                                                                                                    <div key={k}>
-                                                                                                                                        {b.name} • {b.quantity ?? '-'} • {b.price?.amount ? `${Number(b.price.amount).toLocaleString()} ${b.price.currencyCode ?? ''}` : 'Miễn phí'}
-                                                                                                                                    </div>
-                                                                                                                                );
-                                                                                                                            })}
-                                                                                                                        </div>
-                                                                                                                    </div>
-                                                                                                                )}
                                                                                                             </div>
                                                                                                         </div>
-
-                                                                                                        <div>
-                                                                                                            <h4 className="font-medium mb-3">Tiện ích</h4>
-                                                                                                            <div className="space-y-2 text-sm">
-                                                                                                                <div className="flex items-center gap-2">
-                                                                                                                    <Wifi className="h-4 w-4" />
-                                                                                                                    <div>
-                                                                                                                        {wifiInfo.available ? (
-                                                                                                                            wifiInfo.free === true || wifiInfo.included === true ? (
-                                                                                                                                <div className="text-muted-foreground">WiFi: Miễn phí</div>
-                                                                                                                            ) : wifiInfo.price ? (
-                                                                                                                                <div className="text-muted-foreground">WiFi: {String(wifiInfo.price)}</div>
-                                                                                                                            ) : (
-                                                                                                                                <div className="text-muted-foreground">WiFi: Có phí</div>
-                                                                                                                            )
-                                                                                                                        ) : <span className="text-muted-foreground">Không có WiFi</span>}
-                                                                                                                    </div>
+                                                                                                        {includedBags && (
+                                                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">
+                                                                                                                Gói hành lý thêm có thể đặt:
+                                                                                                                <div className="mt-1">
+                                                                                                                    {Object.keys(includedBags).map((k) => {
+                                                                                                                        const b = includedBags[k];
+                                                                                                                        return (
+                                                                                                                            <div key={k}>
+                                                                                                                                {b.name} • {b.quantity ?? '-'} • {b.price?.amount ? `${Number(b.price.amount).toLocaleString()} ${b.price.currencyCode ?? ''}` : 'Miễn phí'}
+                                                                                                                            </div>
+                                                                                                                        );
+                                                                                                                    })}
                                                                                                                 </div>
-                                                                                                                <div className="flex items-center gap-2">
-                                                                                                                    <Utensils className="h-4 w-4" />
-                                                                                                                    <div>
-                                                                                                                        {mealInfo.available || mealInfo.included ? (
-                                                                                                                            mealInfo.included === true || mealInfo.free === true ? (
-                                                                                                                                <div className="text-muted-foreground">Bữa ăn miễn phí{mealInfo.type ? ` • ${mealInfo.type}` : ''}</div>
-                                                                                                                            ) : mealInfo.price ? (
-                                                                                                                                <div className="text-muted-foreground">Bữa ăn có phí • {String(mealInfo.price)}</div>
-                                                                                                                            ) : (
-                                                                                                                                <div className="text-muted-foreground">Bữa ăn có phí</div>
-                                                                                                                            )
-                                                                                                                        ) : <span className="text-muted-foreground">Không có thông tin bữa ăn</span>}
-                                                                                                                    </div>
-                                                                                                                </div>
-                                                                                                                {entertainmentInfo.available && (
-                                                                                                                    <div className="flex items-center gap-2">
-                                                                                                                        <Tv className="h-4 w-4" />
-                                                                                                                        <div className="text-muted-foreground">Giải trí • {entertainmentInfo.screens ?? '-'}</div>
-                                                                                                                    </div>
-                                                                                                                )}
-                                                                                                                {powerInfo.available && (
-                                                                                                                    <div className="flex items-center gap-2">
-                                                                                                                        <Battery className="h-4 w-4" />
-                                                                                                                        <div className="text-muted-foreground">{powerInfo.powerType ?? (powerInfo.available ? 'Có ổ sạc' : '')}</div>
-                                                                                                                    </div>
-                                                                                                                )}
                                                                                                             </div>
-                                                                                                        </div>
-
-                                                                                                        <div>
-                                                                                                            <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
-                                                                                                            <div className="space-y-2 text-sm">
-                                                                                                                <div><span className="font-medium">Máy bay:
-                                                                                                                </span>
-                                                                                                                    {/* {seatmap?.aircraft?.code ?? segment?.aircraft?.code ?? flight.aircraft} */}
-                                                                                                                    {flight.flightNumber} • {flight.aircraft}
-                                                                                                                </div>
-                                                                                                                <div><span className="font-medium">Hạng vé:</span> {(traveler?.fareOption) ?? flight.class}</div>
-                                                                                                                <div><span className="font-medium">Còn lại:</span> {offerFromPricing?.numberOfBookableSeats ?? flight.availableSeats ?? (seatmap?.availableSeatsCounters?.[0]?.value) ?? '-'} ghế</div>
-                                                                                                                {segment?.co2Emissions && (
-                                                                                                                    <div><span className="font-medium">CO₂ (ước tính):</span> {segment.co2Emissions.map((c: any) => `${c.weight}${c.weightUnit} (${c.cabin ?? '-'})`).join(', ')}</div>
-                                                                                                                )}
-                                                                                                                {lastTicketingDate && <div><span className="font-medium">Last ticketing:</span> {lastTicketingDate}</div>}
-                                                                                                                {fareTypes.length > 0 && <div><span className="font-medium">Fare type:</span> {fareTypes.join(', ')}</div>}
-                                                                                                                {validatingAirlines.length > 0 && <div><span className="font-medium">Validating:</span> {validatingAirlines.join(', ')}</div>}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    </div>
-
-                                                                                                    {/* {fareRuleSnippet && (
-                                                                                                        <div>
-                                                                                                            <h4 className="font-medium mb-2">Tóm tắt điều khoản vé</h4>
-                                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))] whitespace-pre-wrap">
-                                                                                                                {fareRuleSnippet}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    )} */}
-
-                                                                                                    {bookingRequirements && (
-                                                                                                        <div>
-                                                                                                            <h4 className="font-medium mb-2">Yêu cầu đặt chỗ</h4>
-                                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                                                                                {bookingRequirements.emailAddressRequired ? <div>Yêu cầu email</div> : null}
-                                                                                                                {bookingRequirements.mobilePhoneNumberRequired ? <div>Yêu cầu số điện thoại</div> : null}
-                                                                                                                {Array.isArray(bookingRequirements.travelerRequirements) && bookingRequirements.travelerRequirements.length > 0 && (
-                                                                                                                    <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                        Một số hành khách cần ngày sinh: {bookingRequirements.travelerRequirements.map((r: any) => r.travelerId).join(', ')}
-                                                                                                                    </div>
-                                                                                                                )}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    )}
-                                                                                                </div>
-                                                                                            );
-                                                                                        })()}
-                                                                                    </TabsContent>
-
-                                                                                    <TabsContent value="benefits" className="space-y-3">
-                                                                                        <div className="space-y-3">
-                                                                                            {(() => {
-                                                                                                const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
-                                                                                                const p = pricingByFlight[key] ?? {};
-                                                                                                const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
-                                                                                                const anyRefundable = detectAnyRefundable(p, offer, flight);
-                                                                                                const changeable = detectChangeable(p, offer);
-
-                                                                                                return (
-                                                                                                    <>
-                                                                                                        <div className="flex items-center gap-3">
-                                                                                                            {anyRefundable ? <Shield className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-red-500" />}
-                                                                                                            <div className="text-sm font-medium">
-                                                                                                                {anyRefundable ? 'Có thể hoàn vé' : 'Không thể hoàn vé'}
-                                                                                                            </div>
-                                                                                                        </div>
-
-                                                                                                        <div className="flex items-center gap-3">
-                                                                                                            {changeable ? <RefreshCw className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-red-500" />}
-                                                                                                            <div className="text-sm font-medium">
-                                                                                                                {changeable ? 'Có thể đổi lịch' : 'Không thể đổi lịch'}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    </>
-                                                                                                );
-                                                                                            })()}
-                                                                                        </div>
-                                                                                    </TabsContent>
-
-                                                                                    <TabsContent value="refund" className="space-y-3">
-                                                                                        {(() => {
-                                                                                            const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
-                                                                                            const p = pricingByFlight[key] ?? {};
-                                                                                            const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : p?.data ?? p ?? null);
-                                                                                            const travelerPricings = offer?.travelerPricings ?? [];
-                                                                                            const policy = p?.data?.policies ?? p?.policies ?? flight.policies ?? {};
-                                                                                            const anyRefundable = detectAnyRefundable(p, offer, flight);
-                                                                                            const refundDeadlineText = (() => {
-                                                                                                const keys = [
-                                                                                                    "refundBeforeDays",
-                                                                                                    "refundableBeforeDays",
-                                                                                                    "refundableBeforeHours",
-                                                                                                    "refundDeadlineHours",
-                                                                                                    "refundBeforeHours",
-                                                                                                ];
-                                                                                                for (const k of keys) {
-                                                                                                    const v = policy?.[k];
-                                                                                                    if (v != null) {
-                                                                                                        const num = Number(v);
-                                                                                                        if (isFinite(num)) {
-                                                                                                            if (k.toLowerCase().includes("hour")) {
-                                                                                                                const days = Math.ceil(num / 24);
-                                                                                                                return `Hoàn trước khoảng ${num} giờ (~${days} ngày)`;
-                                                                                                            }
-                                                                                                            return `Hoàn trước ${num} ngày`;
-                                                                                                        }
-                                                                                                    }
-                                                                                                }
-                                                                                                return "Hoàn trước 24 giờ (mặc định nếu hãng không cung cấp thông tin cụ thể)";
-                                                                                            })();
-
-                                                                                            return (
-                                                                                                <div className="space-y-4">
-                                                                                                    {/* Trạng thái hoàn vé */}
-                                                                                                    <div className="flex items-center gap-2" style={{ marginBottom: '-7px' }}>
-                                                                                                        {anyRefundable || policy?.cancellable ? (
-                                                                                                            <Shield className="h-5 w-5 text-green-500" />
-                                                                                                        ) : (
-                                                                                                            <X className="h-5 w-5 text-red-500" />
                                                                                                         )}
-                                                                                                        <span className="text-base font-semibold">
-                                                                                                            {anyRefundable || policy?.cancellable
-                                                                                                                ? "Có thể hoàn vé"
-                                                                                                                : "Không thể hoàn vé"}
-                                                                                                        </span>
                                                                                                     </div>
-
-                                                                                                    {/* Tabs dạng vertical */}
-                                                                                                    <Tabs defaultValue="policy" className="w-full">
-                                                                                                        <div className="flex gap-6">
-                                                                                                            <TabsList className="flex flex-col w-64 gap-3 bg-transparent border-none shadow-none p-0" style={{ marginTop: '74px' }}>
-                                                                                                                <TabsTrigger
-                                                                                                                    value="policy"
-                                                                                                                    className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
-                                                                                                                    onClick={(e) => {
-                                                                                                                        e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                                                    }}
-                                                                                                                >
-                                                                                                                    Chính sách hoàn vé của bạn
-                                                                                                                </TabsTrigger>
-                                                                                                                <TabsTrigger
-                                                                                                                    value="estimate"
-                                                                                                                    className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
-                                                                                                                    onClick={(e) => {
-                                                                                                                        e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                                                    }}
-                                                                                                                >
-                                                                                                                    Giá trị hoàn lại ước tính
-                                                                                                                </TabsTrigger>
-                                                                                                                <TabsTrigger
-                                                                                                                    value="procedure"
-                                                                                                                    className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
-                                                                                                                    onClick={(e) => {
-                                                                                                                        e.stopPropagation(); // NGĂN EVENT BUBBLING
-                                                                                                                    }}
-                                                                                                                >
-                                                                                                                    Quy trình hoàn lại vé
-                                                                                                                </TabsTrigger>
-                                                                                                            </TabsList>
-                                                                                                            <div className="flex-1">
-                                                                                                                <TabsContent value="policy" className="space-y-2 text-sm">
-                                                                                                                    <div className="text-[hsl(var(--muted-foreground))] space-y-2">
-                                                                                                                        <div>Hoàn vé được áp dụng cho:</div>
-                                                                                                                        <ul className="list-disc pl-5 space-y-1">
-                                                                                                                            <li>Tự hủy (thay đổi kế hoạch)</li>
-                                                                                                                            <li>Đau ốm (bao gồm dương tính COVID-19)</li>
-                                                                                                                            <li>Hãng hàng không hủy chuyến bay</li>
-                                                                                                                            <li>Hãng hàng không dời lịch</li>
-                                                                                                                            <li>Đặt trùng chuyến</li>
-                                                                                                                            <li>Mang thai</li>
-                                                                                                                            <li>Hành khách tử vong</li>
-                                                                                                                        </ul>
-                                                                                                                        <div className="mt-2">
-                                                                                                                            Ghi chú hãng/điều khoản:{" "}
-                                                                                                                            {policy?.notes ?? "Không có thông tin bổ sung"}
-                                                                                                                        </div>
-                                                                                                                    </div>
-                                                                                                                </TabsContent>
-
-                                                                                                                <TabsContent value="estimate" className="space-y-3 text-sm">
-                                                                                                                    {travelerPricings.length === 0 ? (
-                                                                                                                        <div className="text-[hsl(var(--muted-foreground))]">
-                                                                                                                            Chưa có dữ liệu giá. Bấm "Chọn chuyến bay" để kiểm giá.
-                                                                                                                        </div>
+                                                                                                </div>
+                                                                                                <div>
+                                                                                                    <h4 className="font-medium mb-3">Tiện ích</h4>
+                                                                                                    <div className="space-y-2 text-sm">
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <Wifi className="h-4 w-4" />
+                                                                                                            <div>
+                                                                                                                {wifiInfo.available ? (
+                                                                                                                    wifiInfo.free === true || wifiInfo.included === true ? (
+                                                                                                                        <div className="text-muted-foreground">WiFi: Miễn phí</div>
+                                                                                                                    ) : wifiInfo.price ? (
+                                                                                                                        <div className="text-muted-foreground">WiFi: {String(wifiInfo.price)}</div>
                                                                                                                     ) : (
-                                                                                                                        <div className="space-y-3">
-                                                                                                                            <div className="text-[hsl(var(--muted-foreground))] font-medium">
-                                                                                                                                Giá trị hoàn lại ước tính theo từng loại hành khách:
-                                                                                                                            </div>
-                                                                                                                            <div className="space-y-2">
-                                                                                                                                {travelerPricings.map((t: any, idx: number) => {
-                                                                                                                                    const pr = parseRefundable(t);
-                                                                                                                                    return (
-                                                                                                                                        <div key={idx} className="p-3 border rounded-lg shadow-sm bg-white">
-                                                                                                                                            <div className="flex items-center justify-between">
-                                                                                                                                                <span className="font-semibold">
-                                                                                                                                                    {t.travelerType ?? `Hành khách ${idx + 1}`}
-                                                                                                                                                    {t.travelerId ? ` (${t.travelerId})` : ""}
-                                                                                                                                                </span>
-                                                                                                                                                {t.fareOption && (
-                                                                                                                                                    <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                                                        {t.fareOption}
-                                                                                                                                                    </span>
-                                                                                                                                                )}
-                                                                                                                                            </div>
-                                                                                                                                            <div className="mt-2 text-sm">
-                                                                                                                                                • Giá được hoàn ước tính:{" "}
-                                                                                                                                                <span className="font-semibold">
-                                                                                                                                                    {pr.amount != null
-                                                                                                                                                        ? `${pr.amount.toLocaleString()} ${t?.price?.currency ?? offer?.price?.currency ?? "VND"}`
-                                                                                                                                                        : "-"}
-                                                                                                                                                </span>
-                                                                                                                                            </div>
-                                                                                                                                        </div>
-                                                                                                                                    );
-                                                                                                                                })}
-                                                                                                                            </div>
-                                                                                                                            <div className="space-y-1">
-                                                                                                                                <div className="text-sm">{refundDeadlineText}</div>
-                                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))] italic">
-                                                                                                                                    Lưu ý: đây là giá trị ước tính; phí xử lý và chính sách hãng có thể ảnh hưởng số thực tế được hoàn.
-                                                                                                                                </div>
-                                                                                                                            </div>
-                                                                                                                        </div>
-                                                                                                                    )}
-                                                                                                                </TabsContent>
-
-                                                                                                                <TabsContent value="procedure" className="space-y-3 text-sm">
-                                                                                                                    <div className="space-y-2">
-                                                                                                                        <div className="font-medium">Hướng dẫn quy trình hoàn vé</div>
-                                                                                                                        <ol className="list-decimal pl-5 space-y-2 text-[hsl(var(--muted-foreground))]">
-                                                                                                                            <li>Đăng nhập tài khoản hoặc mở email xác nhận.</li>
-                                                                                                                            <li>Kiểm tra chính sách hoàn vé trong “Chi tiết vé”.</li>
-                                                                                                                            <li>Liên hệ tổng đài hoặc trang "Quản lý đặt chỗ".</li>
-                                                                                                                            <li>Gửi lý do & chứng từ cần thiết (giấy khám, xác nhận hủy...).</li>
-                                                                                                                            <li>Chờ xử lý (thường 7–14 ngày làm việc).</li>
-                                                                                                                            <li>Nhận tiền hoàn qua phương thức thanh toán ban đầu hoặc theo thỏa thuận.</li>
-                                                                                                                        </ol>
-                                                                                                                    </div>
-                                                                                                                </TabsContent>
+                                                                                                                        <div className="text-muted-foreground">WiFi: Có phí</div>
+                                                                                                                    )
+                                                                                                                ) : <span className="text-muted-foreground">Không có WiFi</span>}
                                                                                                             </div>
                                                                                                         </div>
-                                                                                                    </Tabs>
-                                                                                                </div>
-                                                                                            );
-                                                                                        })()}
-                                                                                    </TabsContent>
-
-                                                                                    <TabsContent value="change" className="space-y-3">
-                                                                                        {(() => {
-                                                                                            const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
-                                                                                            const p = pricingByFlight[key] ?? {};
-                                                                                            const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
-                                                                                            const changeable = detectChangeable(p, offer);
-                                                                                            const changeFee = changeable ? '720.000 VND + Chênh lệch giá vé' : 'Không đổi lịch';
-
-                                                                                            return (
-                                                                                                <div className="space-y-4">
-                                                                                                    <div className="flex items-center gap-2">
-                                                                                                        {changeable ? (
-                                                                                                            <RefreshCw className="h-5 w-5 text-green-500" />
-                                                                                                        ) : (
-                                                                                                            <X className="h-5 w-5 text-red-500" />
+                                                                                                        <div className="flex items-center gap-2">
+                                                                                                            <Utensils className="h-4 w-4" />
+                                                                                                            <div>
+                                                                                                                {mealInfo.available || mealInfo.included ? (
+                                                                                                                    mealInfo.included === true || mealInfo.free === true ? (
+                                                                                                                        <div className="text-muted-foreground">Bữa ăn miễn phí{mealInfo.type ? ` • ${mealInfo.type}` : ''}</div>
+                                                                                                                    ) : mealInfo.price ? (
+                                                                                                                        <div className="text-muted-foreground">Bữa ăn có phí • {String(mealInfo.price)}</div>
+                                                                                                                    ) : (
+                                                                                                                        <div className="text-muted-foreground">Bữa ăn có phí</div>
+                                                                                                                    )
+                                                                                                                ) : <span className="text-muted-foreground">Không có thông tin bữa ăn</span>}
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        {entertainmentInfo.available && (
+                                                                                                            <div className="flex items-center gap-2">
+                                                                                                                <Tv className="h-4 w-4" />
+                                                                                                                <div className="text-muted-foreground">Giải trí • {entertainmentInfo.screens ?? '-'}</div>
+                                                                                                            </div>
                                                                                                         )}
-                                                                                                        <span className="text-base font-semibold">
-                                                                                                            {changeable ? 'Có thể đổi lịch' : 'Không thể đổi lịch'}
-                                                                                                        </span>
-                                                                                                    </div>
-                                                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                                                                        <div>Phí đổi lịch: {changeFee}</div>
-                                                                                                        {changeable && (
-                                                                                                            <div className="mt-2">
-                                                                                                                Lưu ý:
-                                                                                                                <ul className="list-disc pl-5 space-y-1">
-                                                                                                                    <li>Phí đổi là 720.000 VND (30 USD) mỗi hành khách, có thể giảm cho trẻ em/em bé.</li>
-                                                                                                                    <li>Chênh lệch giá vé sẽ được thu thêm nếu hành trình mới có giá cao hơn.</li>
-                                                                                                                    <li>Liên hệ hãng để xác nhận thời hạn đổi và điều kiện cụ thể.</li>
-                                                                                                                </ul>
+                                                                                                        {powerInfo.available && (
+                                                                                                            <div className="flex items-center gap-2">
+                                                                                                                <Battery className="h-4 w-4" />
+                                                                                                                <div className="text-muted-foreground">{powerInfo.powerType ?? (powerInfo.available ? 'Có ổ sạc' : '')}</div>
                                                                                                             </div>
                                                                                                         )}
                                                                                                     </div>
                                                                                                 </div>
-                                                                                            );
-                                                                                        })()}
-                                                                                    </TabsContent>
-
-                                                                                    <TabsContent value="detailsCharge" className="space-y-3">
-                                                                                        {(() => {
-                                                                                            const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
-                                                                                            const p = pricingByFlight[key] ?? {};
-                                                                                            const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null)) ?? p ?? null;
-                                                                                            const travelerPricings = offer?.travelerPricings ?? offer?.travelerPricings ?? [];
-                                                                                            const offerPrice = offer?.price ?? null;
-                                                                                            const fees = offerPrice?.fees ?? offer?.price?.fees ?? [];
-                                                                                            const includedCCFees = getIncluded(p, 'credit-card-fees');
-
-                                                                                            if (!offer || travelerPricings.length === 0) {
-                                                                                                return (
-                                                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
-                                                                                                        Chưa có thông tin chi tiết giá. Vui lòng bấm "Chọn chuyến bay" để kiểm giá.
+                                                                                                <div>
+                                                                                                    <h4 className="font-medium mb-3">Thông tin chuyến bay</h4>
+                                                                                                    <div className="space-y-2 text-sm">
+                                                                                                        <div><span className="font-medium">Máy bay:</span> {flight.flightNumber} • {flight.aircraft}</div>
+                                                                                                        <div><span className="font-medium">Hạng vé:</span> {(traveler?.fareOption) ?? flight.class}</div>
+                                                                                                        <div><span className="font-medium">Còn lại:</span> {offerFromPricing?.numberOfBookableSeats ?? flight.availableSeats ?? (seatmap?.availableSeatsCounters?.[0]?.value) ?? '-'} ghế</div>
+                                                                                                        {segment?.co2Emissions && (
+                                                                                                            <div><span className="font-medium">CO₂ (ước tính):</span> {segment.co2Emissions.map((c: any) => `${c.weight}${c.weightUnit} (${c.cabin ?? '-'})`).join(', ')}</div>
+                                                                                                        )}
+                                                                                                        {lastTicketingDate && <div><span className="font-medium">Last ticketing:</span> {lastTicketingDate}</div>}
+                                                                                                        {fareTypes.length > 0 && <div><span className="font-medium">Fare type:</span> {fareTypes.join(', ')}</div>}
+                                                                                                        {validatingAirlines.length > 0 && <div><span className="font-medium">Validating:</span> {validatingAirlines.join(', ')}</div>}
                                                                                                     </div>
-                                                                                                );
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            {bookingRequirements && (
+                                                                                                <div>
+                                                                                                    <h4 className="font-medium mb-2">Yêu cầu đặt chỗ</h4>
+                                                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                                                        {bookingRequirements.emailAddressRequired ? <div>Yêu cầu email</div> : null}
+                                                                                                        {bookingRequirements.mobilePhoneNumberRequired ? <div>Yêu cầu số điện thoại</div> : null}
+                                                                                                        {Array.isArray(bookingRequirements.travelerRequirements) && bookingRequirements.travelerRequirements.length > 0 && (
+                                                                                                            <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                Một số hành khách cần ngày sinh: {bookingRequirements.travelerRequirements.map((r: any) => r.travelerId).join(', ')}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    );
+                                                                                })()}
+                                                                            </TabsContent>
+                                                                            <TabsContent value="benefits" className="space-y-3">
+                                                                                <div className="space-y-3">
+                                                                                    {(() => {
+                                                                                        const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
+                                                                                        const p = pricingByFlight[key] ?? {};
+                                                                                        const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
+                                                                                        const anyRefundable = detectAnyRefundable(p, offer, flight);
+                                                                                        const changeable = detectChangeable(p, offer);
+                                                                                        return (
+                                                                                            <>
+                                                                                                <div className="flex items-center gap-3">
+                                                                                                    {anyRefundable ? <Shield className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-red-500" />}
+                                                                                                    <div className="text-sm font-medium">
+                                                                                                        {anyRefundable ? 'Có thể hoàn vé' : 'Không thể hoàn vé'}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                                <div className="flex items-center gap-3">
+                                                                                                    {changeable ? <RefreshCw className="h-5 w-5 text-green-500" /> : <X className="h-5 w-5 text-red-500" />}
+                                                                                                    <div className="text-sm font-medium">
+                                                                                                        {changeable ? 'Có thể đổi lịch' : 'Không thể đổi lịch'}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </>
+                                                                                        );
+                                                                                    })()}
+                                                                                </div>
+                                                                            </TabsContent>
+                                                                            <TabsContent value="refund" className="space-y-3">
+                                                                                {(() => {
+                                                                                    const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
+                                                                                    const p = pricingByFlight[key] ?? {};
+                                                                                    const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : p?.data ?? p ?? null);
+                                                                                    const travelerPricings = offer?.travelerPricings ?? [];
+                                                                                    const policy = p?.data?.policies ?? p?.policies ?? flight.policies ?? {};
+                                                                                    const anyRefundable = detectAnyRefundable(p, offer, flight);
+                                                                                    const refundDeadlineText = (() => {
+                                                                                        const keys = [
+                                                                                            "refundBeforeDays",
+                                                                                            "refundableBeforeDays",
+                                                                                            "refundableBeforeHours",
+                                                                                            "refundDeadlineHours",
+                                                                                            "refundBeforeHours",
+                                                                                        ];
+                                                                                        for (const k of keys) {
+                                                                                            const v = policy?.[k];
+                                                                                            if (v != null) {
+                                                                                                const num = Number(v);
+                                                                                                if (isFinite(num)) {
+                                                                                                    if (k.toLowerCase().includes("hour")) {
+                                                                                                        const days = Math.ceil(num / 24);
+                                                                                                        return `Hoàn trước khoảng ${num} giờ (~${days} ngày)`;
+                                                                                                    }
+                                                                                                    return `Hoàn trước ${num} ngày`;
+                                                                                                }
                                                                                             }
-
-                                                                                            const currency = offer?.price?.currency ?? travelerPricings[0]?.price?.currency ?? '';
-
-                                                                                            return (
-                                                                                                <div className="space-y-3">
-                                                                                                    {/* {fees && fees.length > 0 && (
-                                                                                                        <div className="p-3 border rounded">
-                                                                                                            <div className="text-sm font-medium mb-2">Phí & lệ phí</div>
-                                                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                {fees.map((f: any, idx: number) => (
-                                                                                                                    <div key={idx}>{f.type ?? f.code ?? 'FEE'}: {f.amount ?? f.price ?? '-'} {currency}</div>
+                                                                                        }
+                                                                                        return "Hoàn trước 24 giờ (mặc định nếu hãng không cung cấp thông tin cụ thể)";
+                                                                                    })();
+                                                                                    return (
+                                                                                        <div className="space-y-4">
+                                                                                            <div className="flex items-center gap-2" style={{ marginBottom: '-7px' }}>
+                                                                                                {anyRefundable || policy?.cancellable ? (
+                                                                                                    <Shield className="h-5 w-5 text-green-500" />
+                                                                                                ) : (
+                                                                                                    <X className="h-5 w-5 text-red-500" />
+                                                                                                )}
+                                                                                                <span className="text-base font-semibold">
+                                                                                                    {anyRefundable || policy?.cancellable
+                                                                                                        ? "Có thể hoàn vé"
+                                                                                                        : "Không thể hoàn vé"}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <Tabs defaultValue="policy" className="w-full">
+                                                                                                <div className="flex gap-6">
+                                                                                                    <TabsList className="flex flex-col w-64 gap-3 bg-transparent border-none shadow-none p-0" style={{ marginTop: '74px' }}>
+                                                                                                        <TabsTrigger
+                                                                                                            value="policy"
+                                                                                                            className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
+                                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                                        >
+                                                                                                            Chính sách hoàn vé của bạn
+                                                                                                        </TabsTrigger>
+                                                                                                        <TabsTrigger
+                                                                                                            value="estimate"
+                                                                                                            className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
+                                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                                        >
+                                                                                                            Giá trị hoàn lại ước tính
+                                                                                                        </TabsTrigger>
+                                                                                                        <TabsTrigger
+                                                                                                            value="procedure"
+                                                                                                            className="w-full justify-start rounded-lg border text-left px-4 py-3 transition-colors data-[state=active]:border-blue-500 data-[state=active]:font-semibold data-[state=active]:text-black data-[state=active]:bg-white data-[state=inactive]:border-gray-200 data-[state=inactive]:text-gray-700 hover:bg-gray-50"
+                                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                                        >
+                                                                                                            Quy trình hoàn lại vé
+                                                                                                        </TabsTrigger>
+                                                                                                    </TabsList>
+                                                                                                    <div className="flex-1">
+                                                                                                        <TabsContent value="policy" className="space-y-2 text-sm">
+                                                                                                            <div className="text-[hsl(var(--muted-foreground))] space-y-2">
+                                                                                                                <div>Hoàn vé được áp dụng cho:</div>
+                                                                                                                <ul className="list-disc pl-5 space-y-1">
+                                                                                                                    <li>Tự hủy (thay đổi kế hoạch)</li>
+                                                                                                                    <li>Đau ốm (bao gồm dương tính COVID-19)</li>
+                                                                                                                    <li>Hãng hàng không hủy chuyến bay</li>
+                                                                                                                    <li>Hãng hàng không dời lịch</li>
+                                                                                                                    <li>Đặt trùng chuyến</li>
+                                                                                                                    <li>Mang thai</li>
+                                                                                                                    <li>Hành khách tử vong</li>
+                                                                                                                </ul>
+                                                                                                                <div className="mt-2">
+                                                                                                                    Ghi chú hãng/điều khoản:{" "}
+                                                                                                                    {policy?.notes ?? "Không có thông tin bổ sung"}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        </TabsContent>
+                                                                                                        <TabsContent value="estimate" className="space-y-3 text-sm">
+                                                                                                            {travelerPricings.length === 0 ? (
+                                                                                                                <div className="text-[hsl(var(--muted-foreground))]">
+                                                                                                                    Chưa có dữ liệu giá. Bấm "Chọn chuyến bay" để kiểm giá.
+                                                                                                                </div>
+                                                                                                            ) : (
+                                                                                                                <div className="space-y-3">
+                                                                                                                    <div className="text-[hsl(var(--muted-foreground))] font-medium">
+                                                                                                                        Giá trị hoàn lại ước tính theo từng loại hành khách:
+                                                                                                                    </div>
+                                                                                                                    <div className="space-y-2">
+                                                                                                                        {travelerPricings.map((t: any, idx: number) => {
+                                                                                                                            const pr = parseRefundable(t);
+                                                                                                                            return (
+                                                                                                                                <div key={idx} className="p-3 border rounded-lg shadow-sm bg-white">
+                                                                                                                                    <div className="flex items-center justify-between">
+                                                                                                                                        <span className="font-semibold">
+                                                                                                                                            {t.travelerType ?? `Hành khách ${idx + 1}`}
+                                                                                                                                            {t.travelerId ? ` (${t.travelerId})` : ""}
+                                                                                                                                        </span>
+                                                                                                                                        {t.fareOption && (
+                                                                                                                                            <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                                                {t.fareOption}
+                                                                                                                                            </span>
+                                                                                                                                        )}
+                                                                                                                                    </div>
+                                                                                                                                    <div className="mt-2 text-sm">
+                                                                                                                                        • Giá được hoàn ước tính:{" "}
+                                                                                                                                        <span className="font-semibold">
+                                                                                                                                            {pr.amount != null
+                                                                                                                                                ? `${pr.amount.toLocaleString()} ${t?.price?.currency ?? offer?.price?.currency ?? "VND"}`
+                                                                                                                                                : "-"}
+                                                                                                                                        </span>
+                                                                                                                                    </div>
+                                                                                                                                </div>
+                                                                                                                            );
+                                                                                                                        })}
+                                                                                                                    </div>
+                                                                                                                    <div className="space-y-1">
+                                                                                                                        <div className="text-sm">{refundDeadlineText}</div>
+                                                                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))] italic">
+                                                                                                                            Lưu ý: đây là giá trị ước tính; phí xử lý và chính sách hãng có thể ảnh hưởng số thực tế được hoàn.
+                                                                                                                        </div>
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </TabsContent>
+                                                                                                        <TabsContent value="procedure" className="space-y-3 text-sm">
+                                                                                                            <div className="space-y-2">
+                                                                                                                <div className="font-medium">Hướng dẫn quy trình hoàn vé</div>
+                                                                                                                <ol className="list-decimal pl-5 space-y-2 text-[hsl(var(--muted-foreground))]">
+                                                                                                                    <li>Đăng nhập tài khoản hoặc mở email xác nhận.</li>
+                                                                                                                    <li>Kiểm tra chính sách hoàn vé trong “Chi tiết vé”.</li>
+                                                                                                                    <li>Liên hệ tổng đài hoặc trang "Quản lý đặt chỗ".</li>
+                                                                                                                    <li>Gửi lý do & chứng từ cần thiết (giấy khám, xác nhận hủy...).</li>
+                                                                                                                    <li>Chờ xử lý (thường 7–14 ngày làm việc).</li>
+                                                                                                                    <li>Nhận tiền hoàn qua phương thức thanh toán ban đầu hoặc theo thỏa thuận.</li>
+                                                                                                                </ol>
+                                                                                                            </div>
+                                                                                                        </TabsContent>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            </Tabs>
+                                                                                        </div>
+                                                                                    );
+                                                                                })()}
+                                                                            </TabsContent>
+                                                                            <TabsContent value="change" className="space-y-3">
+                                                                                {(() => {
+                                                                                    const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
+                                                                                    const p = pricingByFlight[key] ?? {};
+                                                                                    const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null));
+                                                                                    const changeable = detectChangeable(p, offer);
+                                                                                    const changeFee = changeable ? '720.000 VND + Chênh lệch giá vé' : 'Không đổi lịch';
+                                                                                    return (
+                                                                                        <div className="space-y-4">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                {changeable ? (
+                                                                                                    <RefreshCw className="h-5 w-5 text-green-500" />
+                                                                                                ) : (
+                                                                                                    <X className="h-5 w-5 text-red-500" />
+                                                                                                )}
+                                                                                                <span className="text-base font-semibold">
+                                                                                                    {changeable ? 'Có thể đổi lịch' : 'Không thể đổi lịch'}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                                                <div>Phí đổi lịch: {changeFee}</div>
+                                                                                                {changeable && (
+                                                                                                    <div className="mt-2">
+                                                                                                        Lưu ý:
+                                                                                                        <ul className="list-disc pl-5 space-y-1">
+                                                                                                            <li>Phí đổi là 720.000 VND (30 USD) mỗi hành khách, có thể giảm cho trẻ em/em bé.</li>
+                                                                                                            <li>Chênh lệch giá vé sẽ được thu thêm nếu hành trình mới có giá cao hơn.</li>
+                                                                                                            <li>Liên hệ hãng để xác nhận thời hạn đổi và điều kiện cụ thể.</li>
+                                                                                                        </ul>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                })()}
+                                                                            </TabsContent>
+                                                                            <TabsContent value="detailsCharge" className="space-y-3">
+                                                                                {(() => {
+                                                                                    const key = makePricingCacheKey(flight.raw ? flight.raw : constructFallbackOfferForPage(flight), flight.id);
+                                                                                    const p = pricingByFlight[key] ?? {};
+                                                                                    const offer = p?.data?.flightOffers?.[0] ?? (Array.isArray(p?.data) ? p.data[0] : (p?.data ?? p ?? null)) ?? p ?? null;
+                                                                                    const travelerPricings = offer?.travelerPricings ?? offer?.travelerPricings ?? [];
+                                                                                    const offerPrice = offer?.price ?? null;
+                                                                                    const fees = offerPrice?.fees ?? offer?.price?.fees ?? [];
+                                                                                    const includedCCFees = getIncluded(p, 'credit-card-fees');
+                                                                                    if (!offer || travelerPricings.length === 0) {
+                                                                                        return (
+                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+                                                                                                Chưa có thông tin chi tiết giá. Vui lòng bấm "Chọn chuyến bay" để kiểm giá.
+                                                                                            </div>
+                                                                                        );
+                                                                                    }
+                                                                                    const currency = offer?.price?.currency ?? travelerPricings[0]?.price?.currency ?? '';
+                                                                                    return (
+                                                                                        <div className="space-y-3">
+                                                                                            {travelerPricings.map((t: any, i: number) => {
+                                                                                                const price = t?.price ?? {};
+                                                                                                const total = price?.total ?? price?.grandTotal ?? '-';
+                                                                                                const base = price?.base ?? '-';
+                                                                                                const taxes = price?.taxes ?? [];
+                                                                                                const refundableTaxes = price?.refundableTaxes ?? null;
+                                                                                                const fareDetails = t?.fareDetailsBySegment ?? [];
+                                                                                                return (
+                                                                                                    <div key={i} className="p-3 border rounded">
+                                                                                                        <div className="flex justify-between items-center">
+                                                                                                            <div className="text-sm font-medium">
+                                                                                                                {t.travelerType ?? `Hành khách ${i + 1}`} {t.travelerId ? `(${t.travelerId})` : ''}
+                                                                                                            </div>
+                                                                                                            <div className="text-sm text-[hsl(var(--muted-foreground))]">{t.fareOption ?? ''}</div>
+                                                                                                        </div>
+                                                                                                        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">Tổng</div>
+                                                                                                                <div className="font-semibold">
+                                                                                                                    {total !== '-' ? `${Number(total).toLocaleString()} ${currency}` : '-'}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá cơ sở</div>
+                                                                                                                <div>{base !== '-' ? `${Number(base).toLocaleString()} ${currency}` : '-'}</div>
+                                                                                                            </div>
+                                                                                                            <div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">Thuế & phí</div>
+                                                                                                                <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                    {taxes.length > 0 ? taxes.map((tx: any) => `${tx.code}:${tx.amount}`).join(', ') : '-'}
+                                                                                                                </div>
+                                                                                                            </div>
+                                                                                                        </div>
+                                                                                                        {refundableTaxes && (
+                                                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Refundable taxes: {refundableTaxes}</div>
+                                                                                                        )}
+                                                                                                        <div className="mt-3">
+                                                                                                            <div className="text-xs font-medium mb-1">Chi tiết theo segment</div>
+                                                                                                            <div className="space-y-1 text-xs text-[hsl(var(--muted-foreground))]">
+                                                                                                                {fareDetails.length === 0 && <div>Không có thông tin theo segment.</div>}
+                                                                                                                {fareDetails.map((fd: any, idx: number) => (
+                                                                                                                    <div key={idx} className="p-2 bg-gray-50 rounded">
+                                                                                                                        <div>Segment: <span className="font-medium">{fd.segmentId ?? fd.segment?.id ?? idx}</span></div>
+                                                                                                                        <div>Cabin: {fd.cabin ?? '-'}</div>
+                                                                                                                        <div>Fare basis: {fd.fareBasis ?? '-'}</div>
+                                                                                                                        <div>Class: {fd.class ?? fd.bookingClass ?? '-'}</div>
+                                                                                                                        <div>Included checked bags: {fd.includedCheckedBags?.quantity ?? fd.includedCheckedBags?.weight ?? '-'}</div>
+                                                                                                                    </div>
                                                                                                                 ))}
                                                                                                             </div>
                                                                                                         </div>
-                                                                                                    )}
-
-                                                                                                    {includedCCFees && (
-                                                                                                        <div className="p-3 border rounded">
-                                                                                                            <div className="text-sm font-medium mb-2">Phí thẻ tín dụng</div>
-                                                                                                            <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                {Object.keys(includedCCFees).map((k) => {
-                                                                                                                    const c = includedCCFees[k];
-                                                                                                                    return <div key={k}>{c.brand}: {c.amount} {c.currency}</div>;
-                                                                                                                })}
-                                                                                                            </div>
-                                                                                                        </div>
-                                                                                                    )} */}
-
-                                                                                                    {travelerPricings.map((t: any, i: number) => {
-                                                                                                        const price = t?.price ?? {};
-                                                                                                        const total = price?.total ?? price?.grandTotal ?? '-';
-                                                                                                        const base = price?.base ?? '-';
-                                                                                                        const taxes = price?.taxes ?? [];
-                                                                                                        const refundableTaxes = price?.refundableTaxes ?? null;
-                                                                                                        const fareDetails = t?.fareDetailsBySegment ?? [];
-
-                                                                                                        return (
-                                                                                                            <div key={i} className="p-3 border rounded">
-                                                                                                                <div className="flex justify-between items-center">
-                                                                                                                    <div className="text-sm font-medium">
-                                                                                                                        {t.travelerType ?? `Hành khách ${i + 1}`} {t.travelerId ? `(${t.travelerId})` : ''}
-                                                                                                                    </div>
-                                                                                                                    <div className="text-sm text-[hsl(var(--muted-foreground))]">{t.fareOption ?? ''}</div>
-                                                                                                                </div>
-
-                                                                                                                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
-                                                                                                                    <div>
-                                                                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Tổng</div>
-                                                                                                                        <div className="font-semibold">
-                                                                                                                            {total !== '-' ? `${Number(total).toLocaleString()} ${currency}` : '-'}
-                                                                                                                        </div>
-                                                                                                                    </div>
-                                                                                                                    <div>
-                                                                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Giá cơ sở</div>
-                                                                                                                        <div>{base !== '-' ? `${Number(base).toLocaleString()} ${currency}` : '-'}</div>
-                                                                                                                    </div>
-                                                                                                                    <div>
-                                                                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Thuế & phí</div>
-                                                                                                                        <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                            {taxes.length > 0 ? taxes.map((tx: any) => `${tx.code}:${tx.amount}`).join(', ') : '-'}
-                                                                                                                        </div>
-                                                                                                                    </div>
-                                                                                                                </div>
-
-                                                                                                                {refundableTaxes && (
-                                                                                                                    <div className="text-xs text-[hsl(var(--muted-foreground))] mt-2">Refundable taxes: {refundableTaxes}</div>
-                                                                                                                )}
-
-                                                                                                                <div className="mt-3">
-                                                                                                                    <div className="text-xs font-medium mb-1">Chi tiết theo segment</div>
-                                                                                                                    <div className="space-y-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                                                                                                        {fareDetails.length === 0 && <div>Không có thông tin theo segment.</div>}
-                                                                                                                        {fareDetails.map((fd: any, idx: number) => (
-                                                                                                                            <div key={idx} className="p-2 bg-gray-50 rounded">
-                                                                                                                                <div>Segment: <span className="font-medium">{fd.segmentId ?? fd.segment?.id ?? idx}</span></div>
-                                                                                                                                <div>Cabin: {fd.cabin ?? '-'}</div>
-                                                                                                                                <div>Fare basis: {fd.fareBasis ?? '-'}</div>
-                                                                                                                                <div>Class: {fd.class ?? fd.bookingClass ?? '-'}</div>
-                                                                                                                                <div>Included checked bags: {fd.includedCheckedBags?.quantity ?? fd.includedCheckedBags?.weight ?? '-'}</div>
-                                                                                                                            </div>
-                                                                                                                        ))}
-                                                                                                                    </div>
-                                                                                                                </div>
-                                                                                                            </div>
-                                                                                                        );
-                                                                                                    })}
-                                                                                                </div>
-                                                                                            );
-                                                                                        })()}
-                                                                                    </TabsContent>
-                                                                                </div>
-                                                                            </Tabs>
-                                                                        );
-                                                                    })()}
-                                                                </>
-                                                            )}
-                                                        </CardContent>
-                                                    </Card>
-                                                ))
-                                        ) : (
-                                            // Nếu không phải roundtrip, render mặc định
-                                            <FlightResults
-                                                isLoading={isLoading}
-                                                sortedFlights={sortedFlights}
-                                                hasSearched={hasSearched}
-                                                expandedFlight={expandedFlight}
-                                                setExpandedFlight={setExpandedFlight}
-                                                formatPrice={formatPrice}
-                                            />
-                                        )
-                                    )
+                                                                                                    </div>
+                                                                                                );
+                                                                                            })}
+                                                                                        </div>
+                                                                                    );
+                                                                                })()}
+                                                                            </TabsContent>
+                                                                        </div>
+                                                                    </Tabs>
+                                                                );
+                                                            })()}
+                                                        </>
+                                                    )}
+                                                </CardContent>
+                                            </Card>
+                                        ))
+                                ) : (
+                                    <FlightResults
+                                        isLoading={isLoading}
+                                        sortedFlights={sortedFlights}
+                                        hasSearched={hasSearched}
+                                        expandedFlight={expandedFlight}
+                                        setExpandedFlight={setExpandedFlight}
+                                        formatPrice={formatPrice}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -4713,7 +4774,6 @@ export default function VeMayBay() {
                     </div>
                 </div>
             )}
-
 
 
         </>

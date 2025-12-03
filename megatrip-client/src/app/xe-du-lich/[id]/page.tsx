@@ -33,7 +33,8 @@ import {
     Plus,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-
+// Thêm import
+import { toast } from 'sonner';
 // Sample bus data
 const busDetails = {
     id: 1,
@@ -315,6 +316,14 @@ export default function ChiTietXeDuLich() {
         setSelectedIndex(resolved === -1 ? (reqIdx === -1 ? 0 : reqIdx) : resolved);
     }, [targetDateStr, remoteBus?.raw?.departureDates?.length]);
 
+    // Thêm useEffect để clear selected seats khi chọn ngày khác
+    useEffect(() => {
+        setSelectedSeats([]);
+        setSeatSaved(false);
+        setSeatEditMode(false);
+        setActiveReplaceIndex(null);
+        setPrevSelectedSeats([]);
+    }, [selectedIndex]);
 
     // format using VN timezone to avoid local offset issues
     const dtDate = new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -597,6 +606,10 @@ export default function ChiTietXeDuLich() {
         });
     }, [selectedIndex, busSlotsMap, remoteBus]);
 
+    // Thêm function kiểm tra đăng nhập
+    const isLoggedIn = () => {
+        return !!localStorage.getItem('accessToken');
+    };
 
     return (
         <>
@@ -906,7 +919,7 @@ export default function ChiTietXeDuLich() {
                         </Card>
 
                         {/* Passenger Information */}
-                        <Card>
+                        {/* <Card>
                             <CardHeader>
                                 <CardTitle>Thông tin liên hệ</CardTitle>
                             </CardHeader>
@@ -952,7 +965,7 @@ export default function ChiTietXeDuLich() {
 
                                 </div>
                             </CardContent>
-                        </Card>
+                        </Card> */}
 
                         {/* Policies */}
                         <Card>
@@ -1024,7 +1037,7 @@ export default function ChiTietXeDuLich() {
                                         <div className="flex items-center justify-between">
                                             <div>
                                                 <div className="font-medium">Người lớn</div>
-                                                <div className="text-sm text-muted-foreground">≥ 12 tuổi</div>
+                                                <div className="text-sm text-muted-foreground">≥ 18 tuổi</div>
                                             </div>
                                             <div className="flex items-center space-x-2">
                                                 <Button
@@ -1271,6 +1284,17 @@ export default function ChiTietXeDuLich() {
                                         size="lg"
                                         disabled={isDeparturePast || (selectedSeats.length !== totalParticipants) || totalParticipants === 0 || seatEditMode}
                                         onClick={() => {
+                                            // Kiểm tra đăng nhập trước
+                                            if (!isLoggedIn()) {
+                                                toast.info('Bạn chưa đăng nhập. Đang chuyển sang trang đăng nhập...');
+                                                // Thêm delay 2.5 giây trước khi chuyển hướng
+                                                setTimeout(() => {
+                                                    router.push(`/dang-nhap?redirect=${encodeURIComponent(window.location.pathname)}`);
+                                                }, 2500); // 2.5 giây
+                                                return;
+                                            }
+
+                                            
                                             const adultUnitForCheckout = bus.adultPrice ?? 0;
                                             const childUnitForCheckout = (typeof bus.childPrice === 'number' && bus.childPrice > 0) ? bus.childPrice : Math.round(adultUnitForCheckout * 0.75);
                                             const basePrice = (participants.adults * adultUnitForCheckout) + (participants.children * childUnitForCheckout);
@@ -1282,7 +1306,8 @@ export default function ChiTietXeDuLich() {
                                             // const dateParamForCheckout = (departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString().split('T')[0] : (bus.date ?? ''));
                                             // const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
                                             const dateParamForCheckout = toLocalYMD(departureDatesArr[selectedIndex]) || (bus.date ?? '');
-                                            const departureDateIso = departureDatesArr[selectedIndex] ? departureDatesArr[selectedIndex].toISOString() : '';
+                                            // Fix: Use local YYYY-MM-DD for departureDateIso to match UI date
+                                            const departureDateIso = dateParamForCheckout;  // YYYY-MM-DD local
                                             // passengerInfo JSON (encode)
                                             // prepare passenger payloads (let URLSearchParams handle encoding)
                                             const leadPassengerInfo = {
@@ -1306,7 +1331,7 @@ export default function ChiTietXeDuLich() {
                                                 company: String(bus.company ?? ''),
                                                 route: bus.route,
                                                 date: dateParamForCheckout,
-                                                departureDateIso: departureDateIso,
+                                                departureDateIso: departureDateIso,  // Now YYYY-MM-DD
                                                 selectedIndex: String(selectedIndex),
                                                 time: `${displayDepartureTime} - ${displayArrivalTime}`,
                                                 seats: selectedSeats.join(','),
@@ -1330,7 +1355,8 @@ export default function ChiTietXeDuLich() {
                                                 currency: 'VND'
                                             });
                                             router.push(`/thanh-toan?${params.toString()}`);
-                                        }}>
+                                        }}
+                                    >
                                         Tiếp tục thanh toán
                                     </Button>
                                     <Button variant="outline" className="w-full">

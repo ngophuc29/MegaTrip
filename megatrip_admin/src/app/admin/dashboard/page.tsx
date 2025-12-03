@@ -171,15 +171,7 @@ export default function Dashboard() {
                         icon: ShoppingBag,
                         period: "so với tháng trước"
                     },
-                    {
-                        title: "Khách hàng mới",
-                        value: "1,284", // Placeholder
-                        unit: "người",
-                        change: "+8.1%",
-                        trend: "up",
-                        icon: Users,
-                        period: "trong tháng này"
-                    },
+                    
                     {
                         title: "Dịch vụ đang bán",
                         value: (dashboardData.totalProducts?.tours || 0) + (dashboardData.totalProducts?.buses || 0),
@@ -258,18 +250,18 @@ export default function Dashboard() {
                             <SelectItem value="30d">30 ngày qua</SelectItem>
                             <SelectItem value="90d">3 tháng qua</SelectItem>
                             <SelectItem value="1y">1 năm qua</SelectItem>
-                            <SelectItem value="today">Ngày hôm nay</SelectItem>  // Đổi thành "Ngày hôm nay"
+                            <SelectItem value="today">Ngày hôm nay</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm">
+                    {/* <Button variant="outline" size="sm">
                         <Download className="w-4 h-4 mr-2" />
                         Xuất báo cáo
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {kpiData.map((kpi, index) => (
                     <Card key={index} className="hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -389,13 +381,13 @@ export default function Dashboard() {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <div className="font-medium text-gray-900">{service.bookings} lượt đặt</div>
+                                        {/* <div className="font-medium text-gray-900">{service.bookings} lượt đặt</div>
                                         <div className="text-sm text-gray-500">{service.revenue} VNĐ</div>
                                         <div className={`text-xs flex items-center ${service.trend === "up" ? "text-green-600" : "text-red-600"
                                             }`}>
                                             {getTrendIcon(service.trend)}
                                             <span className="ml-1">{service.growth}</span>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 </div>
                             ))}
@@ -443,12 +435,12 @@ export default function Dashboard() {
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-4">
+                        {/* <div className="mt-4">
                             <Button variant="outline" className="w-full">
                                 <Eye className="w-4 h-4 mr-2" />
                                 Xem tất cả hoạt động
                             </Button>
-                        </div>
+                        </div> */}
                     </CardContent>
                 </Card>
             </div>
