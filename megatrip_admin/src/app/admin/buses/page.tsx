@@ -1593,7 +1593,7 @@ export default function Buses() {
 
     const handleSubmit = () => {
         let fieldsToValidate: string[] | undefined;
-        let changedFields: string[] = [];
+        const changedFields: string[] = [];
         if (modalMode === "edit" && originalBus) {
             // Calculate changed fields based on originalBus
             Object.keys(formData).forEach(key => {
