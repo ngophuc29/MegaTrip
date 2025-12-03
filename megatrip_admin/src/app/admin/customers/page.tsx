@@ -783,12 +783,12 @@ export default function Customers() {
                         </div>
                     )}
 
-                    <div>
+                    {/* <div>
                         <Label className="text-sm font-medium text-gray-700">Đơn hàng gần đây</Label>
                         <div className="mt-2 text-sm text-gray-500">
                             Chức năng này sẽ được triển khai khi module Đơn hàng hoàn thành
                         </div>
-                    </div>
+                    </div> */}
                 </div>
             );
         }

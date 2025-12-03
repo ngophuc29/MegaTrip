@@ -1592,11 +1592,11 @@ export default function Buses() {
 
     const handleSubmit = () => {
         let fieldsToValidate: string[] | undefined;
-        if (modalMode === "edit" && selectedBus) {
-            // Calculate changed fields
-            const changedFields: string[] = [];
+        let changedFields: string[] = [];
+        if (modalMode === "edit" && originalBus) {
+            // Calculate changed fields based on originalBus
             Object.keys(formData).forEach(key => {
-                const originalValue = (selectedBus as any)[key];
+                const originalValue = (originalBus as any)[key];
                 const newValue = (formData as any)[key];
                 if (JSON.stringify(originalValue) !== JSON.stringify(newValue)) {
                     changedFields.push(key);
@@ -1604,6 +1604,12 @@ export default function Buses() {
             });
             fieldsToValidate = changedFields;
             console.log('[handleSubmit] Changed fields:', changedFields);
+
+            // If no changes, do not proceed with validation or submission
+            if (changedFields.length === 0) {
+                toast({ title: "Không có thay đổi", description: "Không có trường nào được thay đổi để cập nhật." });
+                return;
+            }
         }
 
         const errors = validateForm(formData, modalMode, originalDepartureDates, fieldsToValidate);
@@ -2404,7 +2410,8 @@ export default function Buses() {
                 <div>
                     <Label>Loại xe *</Label>
                     <div className="mt-2">
-                        <Select value={selectedSubtypeId} onValueChange={(val) => {
+                        <Select value={selectedSubtypeId}
+                            onValueChange={(val) => {
                             setSelectedSubtypeId(val);
                             // find subtype by id to set formData.busType and seatsTotal
                             const subtypeSel = getAllSubtypes(loaixeData).find((s: any) => s.id === val);
@@ -2432,7 +2439,9 @@ export default function Buses() {
                                 handleFormChange('seatsTotal', 0);
                             }
                             setIsFormDirty(true);
-                        }}>
+                            }}
+                            disabled={hasBookings && modalMode === "edit"}
+                        >
                             <SelectTrigger>
                                 <SelectValue placeholder="Chọn loại xe (chọn 1 loại con)" />
                             </SelectTrigger>
@@ -2473,6 +2482,9 @@ export default function Buses() {
                         </Select>
                         {formErrors.busType && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.busType}</p>
+                        )}
+                        {hasBookings && modalMode === "edit" && (
+                            <p className="text-sm text-red-500 mt-1">Không thể thay đổi loại xe vì đã có người đặt chỗ.</p>
                         )}
                         <p className="text-sm text-gray-500 mt-2">Chọn 1 loại con; Tổng số ghế sẽ được đặt từ seat_capacity (nếu có). Ghế có sẵn giữ nguyên.</p>
                     </div>
@@ -2553,7 +2565,7 @@ export default function Buses() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -2576,7 +2588,7 @@ export default function Buses() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -2589,7 +2601,7 @@ export default function Buses() {
                             <Users className="w-8 h-8 text-orange-500" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
                 {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -2666,11 +2678,11 @@ export default function Buses() {
                     /> */}
                     <DataTable
                         columns={columns}
-                        data={filteredBuses}  // Sử dụng filteredBuses thay vì buses
+                        data={buses}  // Sử dụng buses trực tiếp từ API
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
-                            total: filteredBuses.length,  // Cập nhật total thành filteredBuses.length
+                            total: total,  // Sử dụng total từ API
                         }}
                         onPaginationChange={(page, pageSize) =>
                             setPagination({ current: page, pageSize })

@@ -329,7 +329,10 @@ export default function ChiTietTinTuc() {
                                 {related.map((ra) => (
                                     <Card key={ra.id} className="hover:shadow-md transition-shadow h-full flex flex-col">
                                         <div className="h-40 overflow-hidden">
-                                            <img src={ra.image || DEFAULT_PLACEHOLDER} alt={ra.title} className="w-full h-full object-cover rounded-lg" />
+                                            <Link prefetch={false} href={`/tin-tuc/${ra.id}`}>
+
+                                                <img src={ra.image || DEFAULT_PLACEHOLDER} alt={ra.title} className="w-full h-full object-cover rounded-lg" />
+                                            </Link>
                                         </div>
                                         <CardContent className="p-4 flex-1 flex flex-col justify-between space-y-3">
                                             <div>

@@ -62,7 +62,7 @@ const navigation = [
   { name: 'Quản lý khuyến mãi', href: '/admin/promotions', icon: Tag },
   { name: 'Quản lý đánh giá', href: '/admin/reviews', icon: Star },
   { name: 'Chăm sóc khách hàng', href: '/admin/support', icon: HeadphonesIcon },
-  { name: 'Cài đặt hệ thống', href: '/admin/system-settings', icon: Cog },
+  // { name: 'Cài đặt hệ thống', href: '/admin/system-settings', icon: Cog },
 ];
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
@@ -316,7 +316,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
               <div className="flex items-center space-x-4">
                 {/* Search */}
-                <div className="relative hidden md:block w-64">
+                {/* <div className="relative hidden md:block w-64">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search className="h-4 w-4 text-gray-400" />
                   </div>
@@ -325,7 +325,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                     placeholder="Tìm kiếm toàn cục..."
                     type="search"
                   />
-                </div>
+                </div> */}
 
                 {/* Quick Add Button */}
                 {/* <Button size="sm" className="bg-primary hover:bg-primary-600">
@@ -334,12 +334,12 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 </Button> */}
 
                 {/* Notifications */}
-                <Button variant="ghost" size="icon" className="relative">
+                {/* <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
                   <Badge className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 text-xs bg-red-500 text-white border-2 border-white">
                     5
                   </Badge>
-                </Button>
+                </Button> */}
 
                 {/* User menu */}
                 <DropdownMenu>

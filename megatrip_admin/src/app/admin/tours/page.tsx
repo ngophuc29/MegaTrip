@@ -343,6 +343,9 @@ export default function Tours() {
     // Thêm state loading cho updateVisibility (nếu chưa có)
     const [updatingVisibility, setUpdatingVisibility] = useState<string | null>(null);
     const [hasBookings, setHasBookings] = useState<boolean>(false);
+    // Add state for total stats
+    const [totalTours, setTotalTours] = useState(0);
+    const [totalVisible, setTotalVisible] = useState(0);
     // add compress helpers (insert near top of file after imports)
     async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
         return new Promise((resolve) => {
@@ -473,8 +476,22 @@ export default function Tours() {
             setIsLoading(true);
             setError(null);
             try {
-                // admin endpoint returns all tours (no isVisible filter)
-                const res = await fetch(`${API_BASE}/api/tours/admin`);
+                // Build query params for server-side filtering and pagination
+                const params = new URLSearchParams({
+                    page: pagination.current.toString(),
+                    pageSize: pagination.pageSize.toString(),
+                });
+                if (filters.visibility !== "all") {
+                    params.append("visibility", filters.visibility);
+                }
+                if (filters.category !== "all") {
+                    params.append("category", filters.category);
+                }
+                if (searchQuery.trim()) {
+                    params.append("search", searchQuery.trim());
+                }
+                // admin endpoint returns paginated and filtered tours
+                const res = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
                 if (!mounted) return;
                 if (!res.ok) {
                     console.warn("Fetch /api/tours/admin failed:", res.status);
@@ -483,10 +500,14 @@ export default function Tours() {
                 }
                 const body = await res.json().catch(() => null);
                 const data = body?.data || body;
-                if (Array.isArray(data) && data.length > 0) {
+                const total = body?.total || 0;
+                if (Array.isArray(data)) {
                     setTours(data.map(mapServerTour));
+                    setPagination(prev => ({ ...prev, total }));
                 } else {
-                    console.info("No tours returned from API — keeping mock data");
+                    console.info("No tours returned from API");
+                    setTours([]);
+                    setPagination(prev => ({ ...prev, total: 0 }));
                 }
             } catch (err) {
                 console.error("Error fetching admin tours:", err);
@@ -497,12 +518,12 @@ export default function Tours() {
         };
         load();
         return () => { mounted = false; };
-    }, []);
+    }, [pagination.current, pagination.pageSize, filters.visibility, filters.category, searchQuery]);
 
     const filteredTours = tours
         .filter((tour) => {
             // Debug: Log filter visibility (giữ lại để debug)
-            
+
 
             if (filters.visibility !== "all") {
                 const expected = filters.visibility === "true";
@@ -517,15 +538,17 @@ export default function Tours() {
         });
 
     const toursData = {
-        data: filteredTours.slice((pagination.current - 1) * pagination.pageSize, pagination.current * pagination.pageSize),
+        data: tours,  // Use tours directly
         pagination: {
-            total: filteredTours.length,
+            total: pagination.total,
         },
     };
 
     const refetch = () => {
-        setTours(mockTours);
-        toast({ title: "Dữ liệu đã được làm mới" });
+        // Trigger re-fetch by updating a dummy state or re-running useEffect
+        // Since useEffect depends on pagination, filters, searchQuery, we can force a re-run
+        setTours([]); // Temporarily clear to show loading
+        // The useEffect will re-run automatically due to dependencies
     };
 
     const toLocalInput = (d: Date) => {
@@ -1379,6 +1402,44 @@ export default function Tours() {
         const errors = validateForm(formData, modalMode, originalTour);
         setFormErrors(errors);
     }, [formData, modalMode, originalTour]);
+    // Add useEffect to fetch total stats
+
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                // Build query params for current filters and search
+                const params = new URLSearchParams({
+                    page: '1',
+                    pageSize: '1',
+                });
+                if (filters.visibility !== "all") {
+                    params.append("visibility", filters.visibility);
+                }
+                if (filters.category !== "all") {
+                    params.append("category", filters.category);
+                }
+                if (searchQuery.trim()) {
+                    params.append("search", searchQuery.trim());
+                }
+                // Fetch total tours (filtered)
+                const resTotal = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
+                if (resTotal.ok) {
+                    const body = await resTotal.json();
+                    setTotalTours(body.total || 0);
+                }
+                // Fetch total visible tours (filtered + visibility=true)
+                params.set("visibility", "true");
+                const resVisible = await fetch(`${API_BASE}/api/tours/admin?${params.toString()}`);
+                if (resVisible.ok) {
+                    const body = await resVisible.json();
+                    setTotalVisible(body.total || 0);
+                }
+            } catch (err) {
+                console.error('Error fetching stats:', err);
+            }
+        };
+        fetchStats();
+    }, [filters.visibility, filters.category, searchQuery]);
 
     const isValidVideoUrl = (url: string): boolean => {
         const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
@@ -3019,13 +3080,13 @@ export default function Tours() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Tổng tour</p>
-                                <p className="text-2xl font-bold">{total}</p>
+                                <p className="text-2xl font-bold">{totalTours}</p>
                             </div>
                             <MapPin className="w-8 h-8 text-primary" />
                         </div>
@@ -3036,15 +3097,13 @@ export default function Tours() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-600">Đang bán</p>
-                                <p className="text-2xl font-bold">
-                                    {tours.filter((t: Tour) => t.isVisible).length}
-                                </p>
+                                <p className="text-2xl font-bold">{totalVisible}</p>
                             </div>
                             <Eye className="w-8 h-8 text-green-500" />
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -3069,7 +3128,7 @@ export default function Tours() {
                             <Star className="w-8 h-8 text-yellow-500" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
             </div>
 
             {/* Main Table */}
@@ -3122,11 +3181,11 @@ export default function Tours() {
                     /> */}
                     <DataTable
                         columns={columns}
-                        data={filteredTours}  // Thay đổi từ tours thành filteredTours để áp dụng bộ lọc
+                        data={tours}  // Change from filteredTours to tours
                         pagination={{
                             current: pagination.current,
                             pageSize: pagination.pageSize,
-                            total: filteredTours.length,  // Cập nhật total thành filteredTours.length
+                            total: pagination.total,  // Use pagination.total from server
                         }}
                         onPaginationChange={(page, pageSize) => setPagination({ current: page, pageSize })}
                         onSearch={setSearchQuery}

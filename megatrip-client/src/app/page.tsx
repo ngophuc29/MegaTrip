@@ -722,11 +722,13 @@ export default function Index() {
               const categoryLabel = article.category === 'travel' ? labelsMap.travel : (labelsMap[article.category] || article.category);
               return (
                 <Card key={article.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                  <Link href={`/tin-tuc/${article.id}`}>  
                   <img
                     src={article.image}
                     alt={article.title}
                     className="w-full h-48 object-cover"
-                  />
+                    />
+                  </Link>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Badge variant="outline" className="text-xs">
@@ -738,9 +740,11 @@ export default function Index() {
                     {article.summary && (
                       <p className="text-sm text-muted-foreground mb-3 line-clamp-3">{article.summary}</p>
                     )}
-                    <Button variant="ghost" className="p-0 h-auto text-[hsl(var(--primary))]">
-                      Đọc thêm →
-                    </Button>
+                    <Link href={`/tin-tuc/${article.id}`}>
+                      <Button variant="ghost" className="p-0 h-auto text-[hsl(var(--primary))]">
+                        Đọc thêm →
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
               );

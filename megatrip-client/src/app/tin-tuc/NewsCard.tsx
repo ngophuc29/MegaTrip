@@ -35,7 +35,10 @@ export default function NewsCard({ article, featured = false }: { article: Artic
             <Card className="mb-6 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="md:flex">
                     <div className="md:w-1/2">
-                        <img src={article.image} alt={article.title} className="w-full h-64 md:h-full object-cover" />
+                        <Link prefetch={false} href={`/tin-tuc/${article.id}`}>
+
+                            <img src={article.image} alt={article.title} className="w-full h-64 md:h-full object-cover" />
+                        </Link>
                     </div>
                     <div className="md:w-1/2 p-6 flex flex-col justify-between">
                         <div>
@@ -70,7 +73,10 @@ export default function NewsCard({ article, featured = false }: { article: Artic
         <Card className="hover:shadow-md transition-shadow">
             <div className="md:flex">
                 <div className="md:w-1/3">
-                    <img src={article.image} alt={article.title} className="w-full h-48 md:h-full object-cover" />
+                    <Link prefetch={false} href={`/tin-tuc/${article.id}`}>
+
+                        <img src={article.image} alt={article.title} className="w-full h-48 md:h-full object-cover" />
+                    </Link>
                 </div>
                 <div className="md:w-2/3 p-4">
                     <div className="flex items-center gap-2 mb-2">
