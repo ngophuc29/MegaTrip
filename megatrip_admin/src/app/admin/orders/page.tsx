@@ -409,12 +409,12 @@ export default function Orders() {
     });
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<"create" | "edit" | "view">("view");
-    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<Order | any>(null);
     const [refundModalOpen, setRefundModalOpen] = useState(false);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [noteModalOpen, setNoteModalOpen] = useState(false);
     const [newNote, setNewNote] = useState("");
-    const [orderDetails, setOrderDetails] = useState(null);
+    const [orderDetails, setOrderDetails] = useState<any>(null);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [isSelectingCompletable, setIsSelectingCompletable] = useState(false);
     const [isSelectingCancellable, setIsSelectingCancellable] = useState(false);
@@ -803,7 +803,7 @@ export default function Orders() {
             key: "serviceDate",
             title: "Ngày sử dụng",
             sortable: true,
-            render: (value, record: Order) => {
+            render: (value, record: any) => {
                 const snap = record.metadata?.bookingDataSnapshot;
                 const item = record.items?.[0];
                 let serviceDate = '';
@@ -855,7 +855,7 @@ export default function Orders() {
         });
     };
 
-    const handleCompleteOrder = (order: Order) => {
+    const handleCompleteOrder = (order: any) => {
         // Tính ngày sử dụng từ metadata
         const snap = order.metadata?.bookingDataSnapshot;
         const item = order.items?.[0];
@@ -1069,7 +1069,7 @@ export default function Orders() {
         const dataToCheck = allOrdersData || orders;
 
         return dataToCheck
-            .filter((order) => {
+            .filter((order: any) => {
                 // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
                 const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
 
@@ -1119,7 +1119,7 @@ export default function Orders() {
 
                 return isValidStatus && isServiceDateValid;
             })
-            .map((order) => order.id);
+            .map((order: any) => order.id);
     };
 
     const getCancellableOrders = () => {
@@ -1127,14 +1127,14 @@ export default function Orders() {
         const dataToCheck = allOrdersData || orders;
 
         return dataToCheck
-            .filter((order) => {
+            .filter((order: any) => {
                 // Kiểm tra trạng thái đơn hàng: Chọn tất cả đơn chưa hoàn thành và chưa hủy
                 const isValidStatus = order.orderStatus !== "completed" && order.orderStatus !== "cancelled";
 
                 // Kiểm tra ngày sử dụng (chọn đơn chưa qua ngày hiện tại: serviceDate > today)
                 const snap = order.metadata?.bookingDataSnapshot;
                 const item = order.items?.[0];
-                let isServiceDateValid = false;
+                let isServiceDateValid = false ;
 
                 // Ngày hiện tại (đặt giờ về 00:00:00 để so sánh theo ngày)
                 const today = new Date();
@@ -1177,7 +1177,7 @@ export default function Orders() {
 
                 return isValidStatus && isServiceDateValid;
             })
-            .map((order) => order.id);
+            .map((order: any) => order.id);
     };
 
 
@@ -1219,11 +1219,11 @@ export default function Orders() {
 
 
     // Hàm tính hoàn tiền (dựa trên metadata, ví dụ cho flight)
-    const calculateRefundAmount = (order: Order) => {
+    const calculateRefundAmount = (order: any) => {
         if (order.paymentStatus !== "paid") return 0;
         // Với flight: Trừ phạt (penalty) từ metadata.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees
         const penalties = order.metadata?.bookingDataSnapshot?.rawPricing?.outbound?.data?.flightOffers?.[0]?.price?.fees || [];
-        const penaltyAmount = penalties.reduce((sum, fee) => sum + parseFloat(fee.amount || 0), 0);
+        const penaltyAmount = penalties.reduce((sum:any, fee:any) => sum + parseFloat(fee.amount || 0), 0);
         // Hoàn tiền = Tổng - Phạt (hoặc 0 nếu phạt > tổng)
         return Math.max(0, order.total - penaltyAmount);
     };
@@ -1378,7 +1378,7 @@ export default function Orders() {
                         try {
                             console.log("Bulk hoàn thành: keys =", keys);
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                const order = orders.find((o: any) => o.id === id); // Tìm order bằng id
                                 console.log("Order found:", order);
                                 if (!order) continue;
 
@@ -1425,7 +1425,7 @@ export default function Orders() {
                                 title: "Hoàn thành thành công",
                                 description: "Đã hoàn thành các đơn hàng được chọn.",
                             });
-                        } catch (error) {
+                        } catch (error:any) {
                             console.error("Bulk complete error:", error); // Thêm log để debug
                             toast({
                                 title: "Lỗi khi hoàn thành",
@@ -1450,7 +1450,7 @@ export default function Orders() {
                             let successCount = 0;
                             let errorCount = 0;
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                const order = orders.find((o: any) => o.id === id); // Tìm order bằng id
                                 if (!order) {
                                     errorCount++;
                                     continue;
@@ -1506,7 +1506,7 @@ export default function Orders() {
                         try {
                             console.log("Bulk hoàn thành: keys =", keys);
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                const order = orders.find((o: any) => o.id === id); // Tìm order bằng id
                                 console.log("Order found:", order);
                                 if (!order) continue;
 
@@ -1553,7 +1553,7 @@ export default function Orders() {
                                 title: "Hoàn thành thành công",
                                 description: "Đã hoàn thành các đơn hàng được chọn.",
                             });
-                        } catch (error) {
+                        } catch (error:any) {
                             console.error("Bulk complete error:", error); // Thêm log để debug
                             toast({
                                 title: "Lỗi khi hoàn thành",
@@ -1575,7 +1575,7 @@ export default function Orders() {
                             let successCount = 0;
                             let errorCount = 0;
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                                const order = orders.find((o: any) => o.id === id); // Tìm order bằng id
                                 if (!order) {
                                     errorCount++;
                                     continue;
@@ -1794,7 +1794,7 @@ export default function Orders() {
                 <div>
                     <Label className="text-sm font-medium text-gray-700">Sản phẩm đặt hàng</Label>
                     <div className="mt-2 space-y-3">
-                        {selectedOrder.items.map((item, index) => (
+                        {selectedOrder.items.map((item:any, index:any) => (
                             <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                                 <div className="flex items-center space-x-3">
                                     <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -1832,14 +1832,14 @@ export default function Orders() {
                             <span>{new Intl.NumberFormat('vi-VN').format(selectedOrder.subtotal)} ₫</span>
                         </div>
 
-                        {selectedOrder.discounts.map((discount, index) => (
+                        {selectedOrder.discounts.map((discount:any, index:any) => (
                             <div key={index} className="flex justify-between text-green-600">
                                 <span>Giảm giá ({discount.code}):</span>
                                 <span>-{new Intl.NumberFormat('vi-VN').format(discount.amount)} ₫</span>
                             </div>
                         ))}
 
-                        {selectedOrder.fees.map((fee, index) => (
+                        {selectedOrder.fees.map((fee:any, index:any) => (
                             <div key={index} className="flex justify-between">
                                 <span>{fee.name}:</span>
                                 <span>{new Intl.NumberFormat('vi-VN').format(fee.amount)} ₫</span>
@@ -1907,7 +1907,7 @@ export default function Orders() {
                                         <div>
                                             <h4 className="font-semibold">Vé cũ</h4>
                                             <div className="space-y-2">
-                                                {orderDetails.oldTickets.filter((ticket) => ticket.status === 'cancelled').map((ticket) => (
+                                                {orderDetails.oldTickets.filter((ticket: any) => ticket.status === 'cancelled').map((ticket: any) => (
                                                     <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                         <div>
                                                             <div className="font-medium">{ticket.ticketNumber}</div>
@@ -1926,7 +1926,7 @@ export default function Orders() {
                                         <div>
                                             <h4 className="font-semibold">Vé đã đổi</h4>
                                             <div className="space-y-2">
-                                                {orderDetails.tickets.filter((ticket) => ticket.status === 'changed' || ticket.status === 'paid').map((ticket) => (
+                                                {orderDetails.tickets.filter((ticket: any) => ticket.status === 'changed' || ticket.status === 'paid').map((ticket: any) => (
                                                     <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                         <div>
                                                             <div className="font-medium">{ticket.ticketNumber}</div>
@@ -1973,7 +1973,7 @@ export default function Orders() {
                                     <div>
                                         <h4 className="font-semibold">Vé</h4>
                                         <div className="space-y-2">
-                                            {orderDetails.tickets.filter((ticket) => ticket.status === 'paid').map((ticket) => (
+                                            {orderDetails.tickets.filter((ticket: any) => ticket.status === 'paid').map((ticket: any) => (
                                                 <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                     <div>
                                                         <div className="font-medium">{ticket.ticketNumber}</div>

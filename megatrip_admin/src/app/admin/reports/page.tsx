@@ -72,9 +72,9 @@ export default function Reports() {
     { code: "FAMILY20", uses: 180, discount: 156000000, conversion: 15.2 },
     { code: "EARLY15", uses: 290, discount: 78000000, conversion: 8.8 },
     { code: "FLASH50", uses: 150, discount: 50000000, conversion: 10.0 },
-  ]);
+  ] as any);
   const [loading, setLoading] = useState(false);
-  const [productsData, setProductsData] = useState([]);
+  const [productsData, setProductsData] = useState([] as any[]);
 
   // Thêm state cho dateRange dựa trên granularity
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
@@ -388,7 +388,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Tour</p>
                       <p className="text-2xl font-bold">
-                        {groupedArray.filter((p) => p.type === "tour").length}
+                        {groupedArray.filter((p:any) => p.type === "tour").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-100">
@@ -403,7 +403,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Xe</p>
                       <p className="text-2xl font-bold">
-                        {groupedArray.filter((p) => p.type === "bus").length}
+                        {groupedArray.filter((p:any) => p.type === "bus").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-green-100">
@@ -418,7 +418,7 @@ export default function Reports() {
                     <div>
                       <p className="text-sm text-gray-600">Tổng Vé Máy Bay</p>
                       <p className="text-2xl font-bold">
-                        {groupedArray.filter((p) => p.type === "flight").length}
+                        {groupedArray.filter((p:any) => p.type === "flight").length}
                       </p>
                     </div>
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-100">
@@ -464,7 +464,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groupedArray.map((product, index) => (
+                  {groupedArray.map((product:any, index) => (
                     <tr key={index} className="border-b">
                       <td className="py-2">{product.name}</td>
                       <td className="text-right py-2">
@@ -594,7 +594,7 @@ export default function Reports() {
                   dataKey="uses"
                   name="Lượt sử dụng"
                 >
-                  {promoStats.map((entry, index) => (
+                  {promoStats.map((entry:any, index:any) => (
                     <Cell
                       key={`cell-${index}`}
                       fill={`hsl(${index * 90}, 70%, 50%)`}
@@ -605,11 +605,11 @@ export default function Reports() {
                   labelFormatter={(label) => ""}  // Bỏ label mặc định để tránh dấu : thừa
                   formatter={(value, name, props) => [`${props.payload.title}: ${value} Lượt sử dụng`, ""]}
                 />
-                <Legend formatter={(value, entry) => entry.payload.title || value} />
+                <Legend formatter={(value:any, entry:any) => entry.payload.title || value} />
               </PieChart>
             </ResponsiveContainer>
             <div className="grid grid-cols-2 gap-4">
-              {promoStats.map((promo, index) => (
+              {promoStats.map((promo:any, index:any) => (
                 <div key={index} className="p-4 border rounded-lg">
                   <h4 className="font-medium">{promo.title}</h4>  {/* Hiển thị title */}
                   <p className="text-sm text-gray-600">Mã: {promo.code || 'Không có'}</p>  {/* Hiển thị code */}
@@ -656,7 +656,7 @@ export default function Reports() {
 
     switch (reportType) {
       case "revenue":
-        totalRevenue = revenueData.reduce((sum, item) => sum + item.total, 0);
+        totalRevenue = revenueData.reduce((sum:any, item:any) => sum + item.total, 0);
         const avgPeriod = totalRevenue / (revenueData.length || 1); // Tránh chia 0
         growth =
           revenueData.length > 1 && revenueData[0].total !== 0
@@ -699,10 +699,10 @@ export default function Reports() {
         ];
 
       case "orders":
-        totalOrders = orderStats.reduce((sum, item) => sum + item.total, 0);
+        totalOrders = orderStats.reduce((sum:any, item:any) => sum + item.total, 0);
         const completionRate = totalOrders
           ? (
-            (orderStats.reduce((sum, item) => sum + item.confirmed, 0) /
+            (orderStats.reduce((sum:any, item:any) => sum + item.confirmed, 0) /
               totalOrders) *
             100
           ).toFixed(1)
@@ -732,7 +732,7 @@ export default function Reports() {
           {
             label: "Đơn hủy",
             value: orderStats
-              .reduce((sum, item) => sum + item.cancelled, 0)
+              .reduce((sum:any, item:any) => sum + item.cancelled, 0)
               .toString(),
             icon: ShoppingBag,
             color: "text-red-600",
@@ -746,9 +746,9 @@ export default function Reports() {
         ];
 
       case "customers":
-        totalNew = customerStats.reduce((sum, item) => sum + item.newUsers, 0);
+        totalNew = customerStats.reduce((sum:any, item:any) => sum + item.newUsers, 0);
         totalReturning = customerStats.reduce(
-          (sum, item) => sum + item.returningUsers,
+          (sum:any, item:any) => sum + item.returningUsers,
           0
         );
         const retentionRate =
@@ -792,14 +792,14 @@ export default function Reports() {
         ];
 
       case "promo":
-        totalUses = promoStats.reduce((sum, item) => sum + item.uses, 0);
+        totalUses = promoStats.reduce((sum:any, item:any) => sum + item.uses, 0);
         totalDiscount = promoStats.reduce(
-          (sum, item) => sum + item.discount,
+          (sum:any, item:any) => sum + item.discount,
           0
         );
         const avgConversion = promoStats.length
           ? (
-            promoStats.reduce((sum, item) => sum + item.conversion, 0) /
+            promoStats.reduce((sum:any, item:any) => sum + item.conversion, 0) /
             promoStats.length
           ).toFixed(1)
           : 0;
@@ -833,10 +833,10 @@ export default function Reports() {
       case "products":
         totalProducts = productsData.length;
         totalBookings = productsData.reduce(
-          (sum, p) => sum + p.totalBookings,
+          (sum:any, p:any) => sum + p.totalBookings,
           0
         );
-        totalRevenue = productsData.reduce((sum, p) => sum + p.totalRevenue, 0);
+        totalRevenue = productsData.reduce((sum:any, p:any) => sum + p.totalRevenue, 0);
         return [
           {
             label: "Tổng sản phẩm",
@@ -1148,7 +1148,7 @@ export default function Reports() {
                 </thead>
                 <tbody>
                   {reportType === "revenue" &&
-                    revenueData.map((row, index) => (
+                    revenueData.map((row:any, index:any) => (
                       <tr key={index} className="border-b">
                         <td className="py-2">{row.period}</td>
                         <td className="text-left py-2">
@@ -1166,7 +1166,7 @@ export default function Reports() {
                       </tr>
                     ))}
                   {reportType === "orders" &&
-                    orderStats.map((row, index) => (
+                    orderStats.map((row:any, index:any) => (
                       <tr key={index} className="border-b">
                         <td className="text-left py-2">{row.date}</td>
                         <td className="text-left py-2">
@@ -1187,7 +1187,7 @@ export default function Reports() {
                       </tr>
                     ))}
                   {reportType === "customers" &&
-                    customerStats.map((row, index) => (
+                    customerStats.map((row:any, index:any) => (
                       <tr key={index} className="border-b">
                         <td className="py-2">Tháng {row.month}</td>
                         <td className="text-left py-2">
@@ -1212,7 +1212,7 @@ export default function Reports() {
                       </tr>
                     ))}
                   {reportType === "products" &&
-                    productsData.map((product, index) => (
+                    productsData.map((product:any, index:any) => (
                       <tr key={index} className="border-b">
                         <td className="py-2">{product.name}</td>
                         <td className="text-right py-2">

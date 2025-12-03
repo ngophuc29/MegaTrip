@@ -19,6 +19,7 @@ import api from '../../../apis/auth';
 
 interface Customer {
     id: string;
+    key?: string; 
     name: string;
     email: string;
     phone: string;
@@ -32,6 +33,7 @@ interface Customer {
     lastOrderAt?: string;
     address?: string;
     notes?: string;
+    isVerified?: boolean;
 }
 
 interface CustomerFormData {
@@ -46,6 +48,7 @@ interface CustomerFormData {
     // avatar removed from admin form
     avatar?: string;
     sendInviteEmail?: boolean;
+    isVerified?: boolean;
 }
 
 interface CustomerFilters {
@@ -237,7 +240,8 @@ export default function Customers() {
         notes: "",
         status: "active",
         type: "Normal",
-        sendInviteEmail: false
+        sendInviteEmail: false,
+        isVerified: false
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);

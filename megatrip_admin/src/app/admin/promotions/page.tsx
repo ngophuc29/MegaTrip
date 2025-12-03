@@ -37,6 +37,14 @@ interface Promotion {
     requireCode?: boolean;
     autoApply?: boolean;
 }
+interface PromotionsResponse {
+    data: Promotion[];
+    pagination: {
+        total: number;
+        current: number;
+        pageSize: number;
+    };
+}
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
 
 interface PromotionFilters {
@@ -66,7 +74,7 @@ export default function Promotions() {
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [promotionToDelete, setPromotionToDelete] = useState<Promotion | null>(null);
     const [reportModalOpen, setReportModalOpen] = useState(false);
-    const [formData, setFormData] = useState<PromotionFormData>({
+    const [formData, setFormData] = useState<any>({
         code: "",
         title: "",
         description: "",
@@ -94,215 +102,213 @@ export default function Promotions() {
 
     // Fetch promotions with server API
     const mapServerPromotion = (item: any): Promotion => ({
-	// handle both _id (mongo) or id
-	id: item._id || item.id || String(item.code || Math.random()),
-	code: item.code || "",
-	title: item.title || "",
-	description: item.description || "",
-	type: item.type === "fixed" ? "fixed" : "percent",
-	value: item.value || 0,
-	minSpend: item.minSpend || 0,
-	maxUses: item.maxUses || 0,
-	usedCount: item.usedCount || 0,
-	appliesTo: Array.isArray(item.appliesTo) ? item.appliesTo : (item.appliesTo ? [item.appliesTo] : []),
-	validFrom: item.validFrom ? new Date(item.validFrom).toISOString() : "",
-	validTo: item.validTo ? new Date(item.validTo).toISOString() : "",
-	active: !!item.active,
-	createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
-	updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString(),
-	// map the new flags from server (fallback to defaults)
-	requireCode: typeof item.requireCode !== "undefined" ? !!item.requireCode : true,
-	autoApply: typeof item.autoApply !== "undefined" ? !!item.autoApply : false,
+        id: item._id || item.id || String(item.code || Math.random()),
+        code: item.code || "",
+        title: item.title || "",
+        description: item.description || "",
+        type: item.type === "fixed" ? "fixed" : "percent",
+        value: item.value || 0,
+        minSpend: item.minSpend || 0,
+        maxUses: item.maxUses || 0,
+        usedCount: item.usedCount || 0,
+        appliesTo: Array.isArray(item.appliesTo) ? item.appliesTo : (item.appliesTo ? [item.appliesTo] : []),
+        validFrom: item.validFrom ? new Date(item.validFrom).toISOString() : "",
+        validTo: item.validTo ? new Date(item.validTo).toISOString() : "",
+        active: !!item.active,
+        createdAt: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString(),
+        updatedAt: item.updatedAt ? new Date(item.updatedAt).toISOString() : new Date().toISOString(),
+        requireCode: typeof item.requireCode !== "undefined" ? !!item.requireCode : true,
+        autoApply: typeof item.autoApply !== "undefined" ? !!item.autoApply : false,
     });
 
-    const { data: promotionsData, isLoading, error, refetch } = useQuery({
-	queryKey: ['promotions', pagination.current, pagination.pageSize, searchQuery, filters],
-	queryFn: async () => {
-		const params = new URLSearchParams();
-		params.set('page', String(pagination.current));
-		params.set('pageSize', String(pagination.pageSize));
-		if (searchQuery) params.set('search', searchQuery);
-		if (filters.status) params.set('status', filters.status);
-		if (filters.type) params.set('type', filters.type);
-		if (filters.appliesTo) params.set('appliesTo', filters.appliesTo);
+    const { data: promotionsData, isLoading, error, refetch } = useQuery<PromotionsResponse>({
+        queryKey: ['promotions', pagination.current, pagination.pageSize, searchQuery, filters],
+        queryFn: async (): Promise<PromotionsResponse> => {
+            const params = new URLSearchParams();
+            params.set('page', String(pagination.current));
+            params.set('pageSize', String(pagination.pageSize));
+            if (searchQuery) params.set('search', searchQuery);
+            if (filters.status) params.set('status', filters.status);
+            if (filters.type) params.set('type', filters.type);
+            if (filters.appliesTo) params.set('appliesTo', filters.appliesTo);
 
-		const res = await fetch(`${API_BASE}/api/promotions?${params.toString()}`, { method: 'GET' });
-		if (!res.ok) {
-			const txt = await res.text();
-			throw new Error(`Failed to fetch promotions: ${res.status} ${txt}`);
-		}
-		const json = await res.json();
-		const data = Array.isArray(json.data) ? json.data.map(mapServerPromotion) : [];
-		return {
-			data,
-			pagination: {
-				total: json.pagination?.total || data.length,
-				current: json.pagination?.current || pagination.current,
-				pageSize: json.pagination?.pageSize || pagination.pageSize,
-			},
-		};
-	},
-	keepPreviousData: true,
+            const res = await fetch(`${API_BASE}/api/promotions?${params.toString()}`, { method: 'GET' });
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error(`Failed to fetch promotions: ${res.status} ${txt}`);
+            }
+            const json = await res.json();
+            const data = Array.isArray(json.data) ? json.data.map(mapServerPromotion) : [];
+            return {
+                data,
+                pagination: {
+                    total: json.pagination?.total || data.length,
+                    current: json.pagination?.current || pagination.current,
+                    pageSize: json.pagination?.pageSize || pagination.pageSize,
+                },
+            };
+        },
+        keepPreviousData: true,
     });
 
     // Create promotion mutation -> POST /api/promotions
     const createPromotionMutation = useMutation({
-	mutationFn: async (data: PromotionFormData) => {
-		const payload = {
-			...data,
-			// ensure ISO strings for dates
-			validFrom: data.validFrom ? new Date(data.validFrom).toISOString() : undefined,
-			validTo: data.validTo ? new Date(data.validTo).toISOString() : undefined,
-		};
-		const res = await fetch(`${API_BASE}/api/promotions`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload),
-		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({ error: 'Unknown' }));
-			throw new Error(err.error || err.details || 'Create failed');
-		}
-		const created = await res.json();
-		return mapServerPromotion(created);
-	},
-	onSuccess: () => {
-		queryClient.invalidateQueries({ queryKey: ['promotions'] });
-         // ensure immediate refresh of the active query
-            refetch().catch(() => {});
-		setModalOpen(false);
-		resetForm();
-		toast({
-			title: "Tạo khuyến mãi thành công",
-			description: "Chương trình khuyến mãi mới đã được tạo",
-		});
-	},
-	onError: (error: any) => {
-		toast({
-			title: "Lỗi khi tạo khuyến mãi",
-			description: String(error?.message || error),
-			variant: "destructive",
-		});
-	},
+        mutationFn: async (data: any) => {
+            const payload = {
+                ...data,
+                // ensure ISO strings for dates
+                validFrom: data.validFrom ? new Date(data.validFrom).toISOString() : undefined,
+                validTo: data.validTo ? new Date(data.validTo).toISOString() : undefined,
+            };
+            const res = await fetch(`${API_BASE}/api/promotions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Unknown' }));
+                throw new Error(err.error || err.details || 'Create failed');
+            }
+            const created = await res.json();
+            return mapServerPromotion(created);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['promotions'] });
+            // ensure immediate refresh of the active query
+            refetch().catch(() => { });
+            setModalOpen(false);
+            resetForm();
+            toast({
+                title: "Tạo khuyến mãi thành công",
+                description: "Chương trình khuyến mãi mới đã được tạo",
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Lỗi khi tạo khuyến mãi",
+                description: String(error?.message || error),
+                variant: "destructive",
+            });
+        },
     });
 
     // Update promotion mutation -> PUT /api/promotions/:id
     const updatePromotionMutation = useMutation({
-	mutationFn: async ({ id, data }: { id: string; data: Partial<PromotionFormData> }) => {
-		const payload: any = { ...data };
-		if (payload.validFrom) payload.validFrom = new Date(payload.validFrom).toISOString();
-		if (payload.validTo) payload.validTo = new Date(payload.validTo).toISOString();
+        mutationFn: async ({ id, data }: { id: string; data: Partial<any> }) => {
+            const payload: any = { ...data };
+            if (payload.validFrom) payload.validFrom = new Date(payload.validFrom).toISOString();
+            if (payload.validTo) payload.validTo = new Date(payload.validTo).toISOString();
 
-		const res = await fetch(`${API_BASE}/api/promotions/${id}`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload),
-		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({ error: 'Unknown' }));
-			throw new Error(err.error || err.details || 'Update failed');
-		}
-		const updated = await res.json();
-		return mapServerPromotion(updated);
-	},
-	onSuccess: () => {
-		queryClient.invalidateQueries({ queryKey: ['promotions'] });
-          refetch().catch(() => {});
-		setModalOpen(false);
-		resetForm();
-		toast({
-			title: "Cập nhật khuyến mãi thành công",
-			description: "Thông tin khuyến mãi đã được cập nhật",
-		});
-	},
-	onError: (error: any) => {
-		toast({
-			title: "Lỗi khi cập nhật khuyến mãi",
-			description: String(error?.message || error),
-			variant: "destructive",
-		});
-	},
+            const res = await fetch(`${API_BASE}/api/promotions/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Unknown' }));
+                throw new Error(err.error || err.details || 'Update failed');
+            }
+            const updated = await res.json();
+            return mapServerPromotion(updated);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['promotions'] });
+            refetch().catch(() => { });
+            setModalOpen(false);
+            resetForm();
+            toast({
+                title: "Cập nhật khuyến mãi thành công",
+                description: "Thông tin khuyến mãi đã được cập nhật",
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Lỗi khi cập nhật khuyến mãi",
+                description: String(error?.message || error),
+                variant: "destructive",
+            });
+        },
     });
 
     // Delete promotion mutation -> DELETE /api/promotions/:id
     const deletePromotionMutation = useMutation({
-	mutationFn: async (id: string) => {
-		const res = await fetch(`${API_BASE}/api/promotions/${id}`, { method: 'DELETE' });
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({ error: 'Unknown' }));
-			throw new Error(err.error || err.details || 'Delete failed');
-		}
-		return id;
-	},
-	onSuccess: (_, promotionId) => {
-		queryClient.invalidateQueries({ queryKey: ['promotions'] });
-           refetch().catch(() => {});
-		setDeleteModalOpen(false);
-		setPromotionToDelete(null);
-		toast({
-			title: "Đã xóa khuyến mãi",
-			description: `Khuyến mãi đã được xóa thành công`,
-			action: (
-				<Button
-					variant="outline"
-					size="sm"
-					onClick={async () => {
-						// no automatic undo on server; just show toast
-						toast({ title: "Hoàn tác", description: "Không có rollback tự động" });
-					}}
-				>
-					Hoàn tác
-				</Button>
-			),
-		});
-	},
-	onError: (error: any) => {
-		toast({
-			title: "Lỗi khi xóa khuyến mãi",
-			description: String(error?.message || error),
-			variant: "destructive",
-		});
-	},
+        mutationFn: async (id: string) => {
+            const res = await fetch(`${API_BASE}/api/promotions/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Unknown' }));
+                throw new Error(err.error || err.details || 'Delete failed');
+            }
+            return id;
+        },
+        onSuccess: (_, promotionId) => {
+            queryClient.invalidateQueries({ queryKey: ['promotions'] });
+            refetch().catch(() => { });
+            setDeleteModalOpen(false);
+            setPromotionToDelete(null);
+            toast({
+                title: "Đã xóa khuyến mãi",
+                description: `Khuyến mãi đã được xóa thành công`,
+                action: (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                            // no automatic undo on server; just show toast
+                            toast({ title: "Hoàn tác", description: "Không có rollback tự động" });
+                        }}
+                    >
+                        Hoàn tác
+                    </Button>
+                ),
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Lỗi khi xóa khuyến mãi",
+                description: String(error?.message || error),
+                variant: "destructive",
+            });
+        },
     });
 
     // Bulk operations mutation -> POST /api/promotions/bulk
     const bulkActionMutation = useMutation({
-	mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
-		const res = await fetch(`${API_BASE}/api/promotions/bulk`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action, ids }),
-		});
-		if (!res.ok) {
-			const err = await res.json().catch(() => ({ error: 'Unknown' }));
-			throw new Error(err.error || err.details || 'Bulk action failed');
-		}
-		return { action, ids };
-	},
-	onSuccess: (_, { action, ids }) => {
-		queryClient.invalidateQueries({ queryKey: ['promotions'] });
-            refetch().catch(() => {});
-		setSelectedPromotions([]);
-        const actionText = action === "activate" ? "kích hoạt" : action === "deactivate" ? "tắt" : "xóa";
-		toast({
-			title: `Thực hiện thành công`,
-			description: `Đã ${actionText} ${ids.length} khuyến mãi`,
-		});
-	},
-	onError: (error: any) => {
-		toast({
-			title: "Lỗi khi thực hiện thao tác",
-			description: String(error?.message || error),
-			variant: "destructive",
-		});
-	},
+        mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
+            const res = await fetch(`${API_BASE}/api/promotions/bulk`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, ids }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ error: 'Unknown' }));
+                throw new Error(err.error || err.details || 'Bulk action failed');
+            }
+            return { action, ids };
+        },
+        onSuccess: (_, { action, ids }) => {
+            queryClient.invalidateQueries({ queryKey: ['promotions'] });
+            refetch().catch(() => { });
+            setSelectedPromotions([]);
+            const actionText = action === "activate" ? "kích hoạt" : action === "deactivate" ? "tắt" : "xóa";
+            toast({
+                title: `Thực hiện thành công`,
+                description: `Đã ${actionText} ${ids.length} khuyến mãi`,
+            });
+        },
+        onError: (error: any) => {
+            toast({
+                title: "Lỗi khi thực hiện thao tác",
+                description: String(error?.message || error),
+                variant: "destructive",
+            });
+        },
     });
 
-    const promotions = promotionsData?.data || [];
+    const promotions = promotionsData?.data  || [];
     const total = promotionsData?.pagination?.total || 0;
 
     // Form validation
-    const validateForm = (data: PromotionFormData): Record<string, string> => {
+    const validateForm = (data: any): Record<string, string> => {
         const errors: Record<string, string> = {};
 
         // New rule: exactly two modes — autoApply OR requireCode.
@@ -374,11 +380,11 @@ export default function Promotions() {
         setIsFormDirty(false);
     };
 
-    const handleFormChange = (field: keyof PromotionFormData, value: any) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+    const handleFormChange = (field: keyof any, value: any) => {
+        setFormData((prev: any) => ({ ...prev, [field]: value }));
         setIsFormDirty(true);
 
-        if (formErrors[field]) {
+        if (formErrors[field as any]) {
             setFormErrors((prev) => ({ ...prev, [field]: "" }));
         }
     };
@@ -725,7 +731,7 @@ export default function Promotions() {
     };
 
     const renderPromotionForm = () => {
-        const isDisabled = modalMode === "edit" && selectedPromotion && selectedPromotion.usedCount > 0;
+        const isDisabled = !!(modalMode === "edit" && selectedPromotion && selectedPromotion.usedCount > 0);
         if (modalMode === "view" && selectedPromotion) {
             const status = getPromotionStatus(selectedPromotion);
             return (
@@ -1169,7 +1175,7 @@ export default function Promotions() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    
+
                                     {applyToOptions.map((option) => (
                                         <SelectItem key={option.value} value={option.value}>
                                             {option.label}

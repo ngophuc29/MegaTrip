@@ -91,13 +91,22 @@ const getTrendIcon = (trend: string) => {
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('vi-VN').format(value);
 };
-
+// Add interface for KPIItem
+interface KPIItem {
+    title: string;
+    value: string;
+    unit: string;
+    change: string;
+    trend: "up" | "down";
+    icon: React.ComponentType<{ className?: string }>;
+    period: string;
+}
 export default function Dashboard() {
     const [dateRange, setDateRange] = useState("today");
     const [serviceFilter, setServiceFilter] = useState("all");
 
     // States cho data từ API
-    const [kpiData, setKpiData] = useState([]);
+    const [kpiData, setKpiData] = useState<KPIItem[]>([]);
     const [revenueData, setRevenueData] = useState([]);
     const [serviceDistribution, setServiceDistribution] = useState([]);
     const [topServices, setTopServices] = useState([]);
@@ -152,7 +161,7 @@ export default function Dashboard() {
                 const totalOrdersValue = dashboardData.totalOrders || 0;
                 setTotalOrders(totalOrdersValue);
                 const revenueChange = dashboardData.revenueComparison?.changePercent || 0;
-                const newKpiData = [
+                const newKpiData: KPIItem[] = [
                     {
                         title: "Tổng doanh thu",
                         value: formatCurrency(totalRevenue),
@@ -262,7 +271,7 @@ export default function Dashboard() {
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {kpiData.map((kpi, index) => (
+                {kpiData.map((kpi:any, index) => (
                     <Card key={index} className="hover:shadow-lg transition-shadow">
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium text-gray-600">
@@ -348,7 +357,7 @@ export default function Dashboard() {
                                     paddingAngle={5}
                                     dataKey="value"
                                 >
-                                    {serviceDistribution.map((entry, index) => (
+                                    {serviceDistribution.map((entry:any, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
@@ -369,7 +378,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            {topServices.map((service, index) => (
+                            {topServices.map((service:any, index) => (
                                 <div key={service.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                                     <div className="flex items-center space-x-3">
                                         <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
@@ -403,7 +412,7 @@ export default function Dashboard() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            {recentActivities.map((activity) => (
+                            {recentActivities.map((activity:any) => (
                                 <div key={activity.id} className={`flex items-start space-x-3 p-3 rounded-lg ${activity.urgent ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'
                                     }`}>
                                     {/* Thêm icon cho loại dịch vụ nếu là order */}

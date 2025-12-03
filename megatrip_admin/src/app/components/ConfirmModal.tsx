@@ -30,6 +30,9 @@ interface ConfirmModalProps {
   onCancel?: () => void;
   showUndo?: boolean;
   undoTimeout?: number;
+  onClose?: () => void;
+  isOpen?: boolean;
+  description?: string;
   loading?: boolean; // Add loading prop
 }
 
@@ -50,6 +53,9 @@ export function ConfirmModal({
   showUndo = false,
   undoTimeout = 5000,
   loading = false,
+  isOpen = false,
+  onClose,
+  description,
 }: ConfirmModalProps) {
   const [inputValue, setInputValue] = useState("");
   const [isChecked, setIsChecked] = useState(false);

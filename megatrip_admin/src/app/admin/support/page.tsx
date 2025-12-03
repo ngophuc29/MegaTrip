@@ -1867,7 +1867,7 @@ const Support: React.FC = () => {
                     )}
                 </ModalForm>
 
-                <ConfirmModal
+                {/* <ConfirmModal
                     isOpen={!!deleteId}
                     onClose={() => setDeleteId(null)}
                     onConfirm={() => {
@@ -1881,7 +1881,7 @@ const Support: React.FC = () => {
                     title="Xóa ticket"
                     description="Bạn có chắc chắn muốn xóa ticket này? Hành động này không thể hoàn tác."
                     loading={deleteTicketMutation.isPending}
-                />
+                /> */}
             </div>
         </div>
     );

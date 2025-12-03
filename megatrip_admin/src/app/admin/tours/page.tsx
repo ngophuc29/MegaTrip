@@ -116,6 +116,7 @@ interface TourFormData {
     metaTitle: string;
     metaDescription: string;
     metaKeywords: string;
+    durationDisplay: string;
 }
 
 interface TourFilters {
@@ -296,6 +297,7 @@ export default function Tours() {
         metaTitle: "",
         metaDescription: "",
         metaKeywords: "",
+        durationDisplay: "",
     });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
     const [isFormDirty, setIsFormDirty] = useState(false);
@@ -310,7 +312,7 @@ export default function Tours() {
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
-    });
+    } as any);
 
     // new: provinces state + selectedDeparture
     const [provinces, setProvinces] = useState<Province[]>([]);
@@ -897,6 +899,7 @@ export default function Tours() {
             metaTitle: tour.metaTitle || "",
             metaDescription: tour.metaDescription || "",
             metaKeywords: tour.metaKeywords || "",
+            durationDisplay: typeof tour.duration === "number" ? `${tour.duration} ngày ${Math.max(0, tour.duration - 1)} đêm` : (tour.duration || ""),
         };
     };
     // Normalize payload so it matches BE schema exactly
@@ -1823,6 +1826,7 @@ export default function Tours() {
             metaTitle: tour.metaTitle || "",
             metaDescription: tour.metaDescription || "",
             metaKeywords: tour.metaKeywords || "",
+            durationDisplay: typeof tour.duration === "number" ? `${tour.duration} ngày ${Math.max(0, tour.duration - 1)} đêm` : (tour.duration || ""),
         });
         setModalMode("edit");
         setModalOpen(true);
