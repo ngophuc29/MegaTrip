@@ -2332,7 +2332,7 @@ export default function Buses() {
                     {/* Ghi chú cho người dùng về hai trường 'Tổng số ghế' và 'Ghế có sẵn' */}
                     <div className="col-span-3">
                         <p className="text-sm text-gray-500 mb-2">
-                            Lưu ý: "Tổng số ghế" và "Ghế có sẵn" được tự động thiết lập từ loại xe / layout đã chọn.
+                            Lưu ý: &quot;Tổng số ghế&quot; và &quot;Ghế có sẵn&quot; được tự động thiết lập từ loại xe / layout đã chọn.
                             Người dùng không thể nhập thủ công. Để thay đổi, hãy chọn loại xe khác hoặc chỉnh layout.
                         </p>
                     </div>
@@ -2487,7 +2487,7 @@ export default function Buses() {
                         {hasBookings && modalMode === "edit" && (
                             <p className="text-sm text-red-500 mt-1">Không thể thay đổi loại xe vì đã có người đặt chỗ.</p>
                         )}
-                        <p className="text-sm text-gray-500 mt-2">Chọn 1 loại con; Tổng số ghế sẽ được đặt từ seat_capacity (nếu có). Ghế có sẵn giữ nguyên.</p>
+                        <p className="text-sm text-gray-500 mt-2">Chọn 1 loại xe / Tổng số ghế sẽ được đặt từ seat_capacity (nếu có). Ghế có sẵn giữ nguyên.</p>
                     </div>
                 </div>
 
