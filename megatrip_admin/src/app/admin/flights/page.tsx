@@ -849,7 +849,7 @@ export default function Flights() {
                 bulkActionMutation.mutate({ action: 'cancel', ids: keys });
             },
             icon: <Ban className="w-4 h-4 mr-2" />,
-            variant: "secondary" as const,
+            variant: "default" as const, // Change to "default"
         },
         {
             label: "Xóa",

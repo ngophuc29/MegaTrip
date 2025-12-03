@@ -514,7 +514,7 @@ export default function News() {
             label: "Lưu trữ",
             action: (keys: string[]) => bulkActionMutation.mutate({ action: "archive", ids: keys }),
             icon: <ArchiveIcon className="w-4 h-4 mr-2" />,
-            variant: "secondary" as const,
+            variant: "default" as const,
         },
         {
             label: "Xóa",

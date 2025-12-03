@@ -668,7 +668,7 @@ export default function Promotions() {
                 bulkActionMutation.mutate({ action: "deactivate", ids: keys });
             },
             icon: <XCircle className="w-4 h-4 mr-2" />,
-            variant: "secondary" as const,
+            variant: "default" as const,
         },
         {
             label: "Xóa",
@@ -1040,7 +1040,7 @@ export default function Promotions() {
                                         if (checked) {
                                             handleFormChange("appliesTo", [...formData.appliesTo, option.value]);
                                         } else {
-                                            handleFormChange("appliesTo", formData.appliesTo.filter((s) => s !== option.value));
+                                            handleFormChange("appliesTo", formData.appliesTo.filter((s: any) => s !== option.value));
                                         }
                                     }}
                                     disabled={isDisabled} // Thêm isDisabled
