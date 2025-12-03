@@ -448,7 +448,7 @@ export default function Reports() {
               {reportType === "products" && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được duyệt và hoàn thành thành công (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+                    <strong>Lưu ý:</strong> &quot;Đơn duyệt&quot; là số đơn hàng đã được duyệt và hoàn thành thành công (confirmed orders). &quot;Doanh thu&quot; chỉ tính từ đơn đã duyệt và thanh toán thành công.
                   </p>
                 </div>
               )}
@@ -1099,7 +1099,7 @@ export default function Reports() {
             {reportType === "products" && (
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Lưu ý:</strong> "Đơn duyệt" là số đơn hàng đã được thanh toán (confirmed orders). "Doanh thu" chỉ tính từ đơn đã duyệt và thanh toán thành công.
+                  <strong>Lưu ý:</strong> &quot;Đơn duyệt&quot; là số đơn hàng đã được thanh toán (confirmed orders). &quot;Doanh thu&quot; chỉ tính từ đơn đã duyệt và thanh toán thành công.
                 </p>
               </div>
             )}

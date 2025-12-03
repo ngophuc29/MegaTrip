@@ -81,8 +81,7 @@ export function ConfirmModal({
       onOpenChange(false);
       
       if (showUndo) {
-        let undoToast: any;
-        undoToast = toast({
+        const undoToast = toast({
           title: "Hành động đã thực hiện",
           description: (
             <div className="flex items-center justify-between">
@@ -167,7 +166,7 @@ export function ConfirmModal({
               <Label htmlFor="confirm-input">
                 Để xác nhận, vui lòng nhập{" "}
                 <span className="font-mono font-bold text-red-600">
-                  "{typingText}"
+                  &quot;{typingText}&quot;
                 </span>
               </Label>
               <Input

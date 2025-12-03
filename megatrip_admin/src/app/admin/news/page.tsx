@@ -195,36 +195,21 @@ export default function News() {
         if (!confirm("Bạn có chắc chắn muốn xóa ảnh đại diện?")) return;
         handleFormChange("heroImage", "");
     };
-    const { data: newsData, isLoading, error, refetch } = (() => {
-        if (BACKEND_AVAILABLE) {
-            return useQuery({
-                queryKey: ["news", pagination.current, pagination.pageSize, searchQuery, filters],
-                queryFn: async () => {
-                    const params = new URLSearchParams({
-                        page: pagination.current.toString(),
-                        limit: pagination.pageSize.toString(),
-                        ...(searchQuery && { q: searchQuery }),
-                        ...(filters.status !== "all" && { status: filters.status }),
-                        ...(filters.category !== "all" && { category: filters.category }),
-                    });
-                    const response = await fetch(`${API_BASE}/api/admin/news?${params}`);
-                    if (!response.ok) throw new Error("Failed to fetch news");
-                    return response.json();
-                },
+    const { data: newsData, isLoading, error, refetch } = useQuery({
+        queryKey: ["news", pagination.current, pagination.pageSize, searchQuery, filters],
+        queryFn: async () => {
+            const params = new URLSearchParams({
+                page: pagination.current.toString(),
+                limit: pagination.pageSize.toString(),
+                ...(searchQuery && { q: searchQuery }),
+                ...(filters.status !== "all" && { status: filters.status }),
+                ...(filters.category !== "all" && { category: filters.category }),
             });
-        } else {
-            // no network; return local-shaped object
-            return {
-                data: { data: articlesState, pagination: { total: totalState } },
-                isLoading: false,
-                error: null,
-                refetch: async () => {
-                    toast({ title: "Chạy local mode", description: "Dữ liệu thao tác chỉ trên frontend", variant: "default" });
-                    return { data: articlesState, pagination: { total: totalState } };
-                },
-            };
-        }
-    })();
+            const response = await fetch(`${API_BASE}/api/admin/news?${params}`);
+            if (!response.ok) throw new Error("Failed to fetch news");
+            return response.json();
+        },
+    });
     // helpers to mutate local state (used by stubbed mutations)
     const makeLocalArticle = (data: NewsFormData): NewsArticle => {
         const now = new Date().toISOString();
