@@ -441,11 +441,11 @@ export default function Customers() {
                 return { success: true };
             }
             if (action === 'block') {
-                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: false })));
+                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: false } as any)));
                 return { success: true };
             }
             if (action === 'unblock') {
-                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: true })));
+                await Promise.all(ids.map(id => api.adminUpdateUser(id, { isVerified: true } as any)));
                 return { success: true };
             }
             throw new Error('Hành động không hợp lệ');
