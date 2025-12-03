@@ -23,7 +23,7 @@ function TourSkeleton() {
 function computeSuggestedOriginal(basePrice: number | undefined) {
   if (!basePrice || Number.isNaN(basePrice)) return undefined;
   const price = Number(basePrice);
-  let multiplier = price < 1_000_000 ? 1.25 : price < 5_000_000 ? 1.15 : 1.10;
+  const multiplier = price < 1_000_000 ? 1.25 : price < 5_000_000 ? 1.15 : 1.10;
   const suggested = Math.round(price * multiplier / 100000) * 100000;
   // only return if suggested > basePrice to make sense as "original" price
   return suggested > price ? suggested : undefined;

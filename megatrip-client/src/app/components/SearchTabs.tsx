@@ -97,7 +97,7 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
   // - infants <= adults
   // - seated = adults + children <= 9 (reduce children first)
   const normalizePassengers = (p: PassengerCount): PassengerCount => {
-    let adults = Math.max(1, Number.isFinite(p.adults) ? p.adults : 1);
+    const adults = Math.max(1, Number.isFinite(p.adults) ? p.adults : 1);
     let children = Math.max(0, Number.isFinite(p.children) ? p.children : 0);
     let infants = Math.max(0, Number.isFinite(p.infants) ? p.infants : 0);
 

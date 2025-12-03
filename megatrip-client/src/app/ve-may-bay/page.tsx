@@ -397,7 +397,7 @@ export default function VeMayBay() {
         // price and currency (use total/grandTotal as provided)
         const priceStr = String(offer.price?.total || offer.price?.grandTotal || '0');
         const currency = offer.price?.currency || 'VND';
-        let priceNumeric = Number(priceStr) || 0;
+        const priceNumeric = Number(priceStr) || 0;
         // if currency isn't VND keep numeric as-is (formatting will show currency)
 
         // Attempt to read amenities/policies from the offer or raw payload (some suppliers embed these)
