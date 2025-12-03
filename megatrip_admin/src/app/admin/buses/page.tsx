@@ -297,7 +297,7 @@ export default function Buses() {
         return `${year}-${month}-${day}T${hour}:${minute}`;
     };
 
-    const parseVNLocalString = (str: string) => {
+    const parseVNLocalString = (str: string | undefined) => {
         if (!str) return null;
         const [date, time] = str.split('T');
         if (!date || !time) return null;
