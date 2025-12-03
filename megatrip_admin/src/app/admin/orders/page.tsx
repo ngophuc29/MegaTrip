@@ -79,7 +79,7 @@ interface Order {
     updatedAt: string;
     changeCalendar?: boolean;
     dateChangeCalendar?: string;
-    timeline: Array<TimelineEvent>;
+    // timeline: Array<TimelineEvent>;
 }
 // Add API_BASE at the top, assuming it's defined in your config
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
@@ -1172,7 +1172,7 @@ export default function Orders() {
                     }
                     const serviceDate = serviceDateRaw ? new Date(serviceDateRaw) : null;
                     const serviceDateOnly = serviceDate ? new Date(serviceDate.getFullYear(), serviceDate.getMonth(), serviceDate.getDate()) : null;
-                    isServiceDateValid = serviceDateOnly && serviceDateOnly > todayOnly;
+                    isServiceDateValid = serviceDateOnly ? serviceDateOnly > todayOnly : false;
                 }
 
                 return isValidStatus && isServiceDateValid;
