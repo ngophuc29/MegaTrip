@@ -62,10 +62,10 @@ export default function Reports() {
   const { toast } = useToast();
 
   // Add state for API data
-  const [revenueData, setRevenueData] = useState([]);
-  const [serviceDistribution, setServiceDistribution] = useState([]);
-  const [orderStats, setOrderStats] = useState([]);
-  const [customerStats, setCustomerStats] = useState([]);
+  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [serviceDistribution, setServiceDistribution] = useState<any[]>([]);
+  const [orderStats, setOrderStats] = useState<any[]>([]);
+  const [customerStats, setCustomerStats] = useState<any[]>([]);
   const [promoStats, setPromoStats] = useState([
     { code: "SUMMER2024", uses: 450, discount: 125000000, conversion: 12.5 },
     { code: "WELCOME10", uses: 320, discount: 89000000, conversion: 8.7 },
@@ -81,8 +81,13 @@ export default function Reports() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
-  const [monthRange, setMonthRange] = useState({ fromMonth: (currentMonth === 1 ? 12 : currentMonth - 1).toString(), fromYear: (currentMonth === 1 ? currentYear - 1 : currentYear).toString(), toMonth: currentMonth.toString(), toYear: currentYear.toString() }); // Chuyển thành string
-  const [yearRange, setYearRange] = useState({ fromYear: currentYear.toString(), toYear: currentYear.toString() }); // Chuyển thành string
+  const [monthRange, setMonthRange] = useState<any>({
+    fromMonth: (currentMonth === 1 ? 12 : currentMonth - 1).toString(),
+    fromYear: (currentMonth === 1 ? currentYear - 1 : currentYear).toString(),
+    toMonth: currentMonth.toString(),
+    toYear: currentYear.toString(),
+  });// Chuyển thành string
+  const [yearRange, setYearRange] = useState<any>({ fromYear: currentYear.toString(), toYear: currentYear.toString() }); // Chuyển thành string
 
   // API base URL (adjust if needed)
   const API_BASE = "http://localhost:7700/api/stats";
@@ -644,7 +649,7 @@ export default function Reports() {
   const getSummaryData = () => {
     if (loading) return [];
 
-    let growth = 0;
+    let growth:number|string = 0;
     let totalRevenue = 0;
     let totalOrders = 0;
     let totalNew = 0;

@@ -910,7 +910,7 @@ const Support: React.FC = () => {
     });
 
     const updateTicketMutation = useMutation({
-        mutationFn: async ({ id, data }: { id: string; data: Partial<TicketFormData> }) => {
+        mutationFn: async ({ id, data }: { id: string; data: any }) => {
             try {
                 const res = await fetch(`${API_BASE}/api/support/${encodeURIComponent(id)}`, {
                     method: "PUT",
@@ -1083,18 +1083,18 @@ const Support: React.FC = () => {
         });
     };
 
-    const handleAssignmentChange = (ticketId: string, assignedTo: string) => {
-        updateTicketMutation.mutate({
-            id: ticketId,
-            data: {
-                assignedTo: assignedTo === "unassigned" ? undefined : assignedTo,
-                assignedToName:
-                    assignedTo === "unassigned"
-                        ? undefined
-                        : admins.find((a) => a.id === assignedTo)?.name || "",
-            },
-        });
-    };
+    // const handleAssignmentChange = (ticketId: string, assignedTo: string) => {
+    //     updateTicketMutation.mutate({
+    //         id: ticketId,
+    //         data: {
+    //             assignedTo: assignedTo === "unassigned" ? undefined : assignedTo,
+    //             assignedToName:
+    //                 assignedTo === "unassigned"
+    //                     ? undefined
+    //                     : admins.find((a) => a.id === assignedTo)?.name || "",
+    //         },
+    //     });
+    // };
 
     // const handleAddResponse = () => {
     //     if (!selectedTicket || !responseContent.trim()) return;

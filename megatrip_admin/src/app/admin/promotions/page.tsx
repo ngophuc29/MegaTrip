@@ -148,7 +148,7 @@ export default function Promotions() {
                 },
             };
         },
-        keepPreviousData: true,
+        placeholderData: (previousData) => previousData, // Replace keepPreviousData
     });
 
     // Create promotion mutation -> POST /api/promotions
