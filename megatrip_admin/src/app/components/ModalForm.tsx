@@ -167,7 +167,7 @@ export function ModalForm({
                       {action.text}
                     </Button>
                   ))}
-                  {mode !== "view" && (
+                  {!isReadOnly && (
                     <>
                       {onSaveAndClose && (
                         <Button
