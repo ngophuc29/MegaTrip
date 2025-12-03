@@ -90,90 +90,7 @@ const sampleSeatLayout = [
         { id: 'B4', type: 'bed', status: 'available', floor: 'lower' },
     ]
 ];
-export function mapBusDocToClient(doc: any) {
-    const toNumber = (v: any) => {
-        if (v == null) return undefined;
-        if (typeof v === 'number') return v;
-        if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
-        // nested mongo export shapes
-        if (v?.$numberInt) return Number(v.$numberInt);
-        if (v?.$numberLong) return Number(v.$numberLong);
-        if (v?.$date?.$numberLong) return Number(v.$date.$numberLong);
-        if (v?.$date) return Number(new Date(v.$date));
-        return Number(v);
-    };
 
-    const toDate = (raw: any) => {
-        const n = toNumber(raw);
-        if (!n) return null;
-        return new Date(n);
-    };
-
-    const fmtDate = (d: Date | null) => d ? d.toISOString().split('T')[0] : '';
-
-    const departureDate = toDate(doc.departureAt ?? (doc.departureDates && doc.departureDates[0]));
-    const arrivalDate = toDate(doc.arrivalAt ?? (doc.arrivalDates && doc.arrivalDates[0]));
-
-    // convert seatMap -> grouped rows (array of rows)
-    const seatMap = Array.isArray(doc.seatMap) ? doc.seatMap : [];
-    const rows: Record<string, any[]> = {};
-    seatMap.forEach((s: any) => {
-        const r = s?.pos?.r?.$numberInt ?? s?.pos?.r ?? '0';
-        const rowKey = String(r);
-        rows[rowKey] = rows[rowKey] || [];
-        const floor = String(s.type || '').toLowerCase().includes('upper') ? 'upper' : 'lower';
-        rows[rowKey].push({
-            id: s.seatId ?? s.label,
-            label: s.label ?? s.seatId,
-            type: String(s.type).includes('bed') ? 'bed' : 'seat',
-            status: s.status ?? 'available',
-            floor,
-            pos: {
-                r: rowKey,
-                c: s?.pos?.c?.$numberInt ?? s?.pos?.c ?? null
-            }
-        });
-    });
-    const seatLayout = Object.keys(rows).sort((a, b) => Number(a) - Number(b)).map(k => rows[k]);
-    // price mapping: prefer explicit adultPrice/childPrice/infantPrice; fallback to legacy price if present
-    const adultPrice = toNumber(doc.adultPrice ?? doc.price);
-    const childPrice = toNumber(doc.childPrice ?? (adultPrice ? Math.round(adultPrice * 0.75) : undefined));
-    const infantPrice = toNumber(doc.infantPrice ?? (adultPrice ? Math.round(adultPrice * 0.2) : undefined));
-
-    return {
-        id: doc._id?.$oid ?? doc._id ?? doc.busCode,
-        busNumber: doc.busCode ?? doc.busNumber,
-        company: doc.operator?.name ?? doc.operator,
-        images: doc.operator?.logo ? [doc.operator.logo] : (doc.images || []),
-        route: `${doc.routeFrom?.city ?? doc.routeFrom?.name ?? ''} - ${doc.routeTo?.city ?? doc.routeTo?.name ?? ''}`.trim(),
-        routeFrom: doc.routeFrom,
-        routeTo: doc.routeTo,
-        departure: {
-            time: departureDate ? departureDate.toISOString().split('T')[1].slice(0, 5) : '',
-            location: doc.routeFrom?.name ?? '',
-            address: doc.routeFrom?.city ?? ''
-        },
-        arrival: {
-            time: arrivalDate ? arrivalDate.toISOString().split('T')[1].slice(0, 5) : '',
-            location: doc.routeTo?.name ?? '',
-            address: doc.routeTo?.city ?? ''
-        },
-        date: fmtDate(departureDate),
-        departureDate,
-        arrivalDate,
-        duration: doc.duration ?? '',
-        type: Array.isArray(doc.busType) ? doc.busType.join(', ') : doc.busType,
-        adultPrice: adultPrice ?? 0,
-        childPrice: childPrice ?? 0,
-        infantPrice: infantPrice ?? 0,
-        seats: toNumber(doc.seatsTotal),
-        availableSeats: toNumber(doc.seatsAvailable),
-        seatLayout, // array of rows with seats
-        amenities: Array.isArray(doc.amenities) ? doc.amenities : (typeof doc.amenities === 'string' ? doc.amenities.split(',') : []),
-        status: doc.status,
-        raw: doc
-    };
-}
 export default function ChiTietXeDuLich() {
     const router = useRouter();
     const { id } = useParams() as { id: string };
@@ -229,6 +146,90 @@ export default function ChiTietXeDuLich() {
             .sort((a, b) => Number(a) - Number(b))
             .map(k => rowsMap[k]);
     };
+    const mapBusDocToClient = (doc: any) => {
+        const toNumber = (v: any) => {
+            if (v == null) return undefined;
+            if (typeof v === 'number') return v;
+            if (typeof v === 'string' && /^\d+$/.test(v)) return Number(v);
+            // nested mongo export shapes
+            if (v?.$numberInt) return Number(v.$numberInt);
+            if (v?.$numberLong) return Number(v.$numberLong);
+            if (v?.$date?.$numberLong) return Number(v.$date.$numberLong);
+            if (v?.$date) return Number(new Date(v.$date));
+            return Number(v);
+        };
+
+        const toDate = (raw: any) => {
+            const n = toNumber(raw);
+            if (!n) return null;
+            return new Date(n);
+        };
+
+        const fmtDate = (d: Date | null) => d ? d.toISOString().split('T')[0] : '';
+
+        const departureDate = toDate(doc.departureAt ?? (doc.departureDates && doc.departureDates[0]));
+        const arrivalDate = toDate(doc.arrivalAt ?? (doc.arrivalDates && doc.arrivalDates[0]));
+
+        // convert seatMap -> grouped rows (array of rows)
+        const seatMap = Array.isArray(doc.seatMap) ? doc.seatMap : [];
+        const rows: Record<string, any[]> = {};
+        seatMap.forEach((s: any) => {
+            const r = s?.pos?.r?.$numberInt ?? s?.pos?.r ?? '0';
+            const rowKey = String(r);
+            rows[rowKey] = rows[rowKey] || [];
+            const floor = String(s.type || '').toLowerCase().includes('upper') ? 'upper' : 'lower';
+            rows[rowKey].push({
+                id: s.seatId ?? s.label,
+                label: s.label ?? s.seatId,
+                type: String(s.type).includes('bed') ? 'bed' : 'seat',
+                status: s.status ?? 'available',
+                floor,
+                pos: {
+                    r: rowKey,
+                    c: s?.pos?.c?.$numberInt ?? s?.pos?.c ?? null
+                }
+            });
+        });
+        const seatLayout = Object.keys(rows).sort((a, b) => Number(a) - Number(b)).map(k => rows[k]);
+        // price mapping: prefer explicit adultPrice/childPrice/infantPrice; fallback to legacy price if present
+        const adultPrice = toNumber(doc.adultPrice ?? doc.price);
+        const childPrice = toNumber(doc.childPrice ?? (adultPrice ? Math.round(adultPrice * 0.75) : undefined));
+        const infantPrice = toNumber(doc.infantPrice ?? (adultPrice ? Math.round(adultPrice * 0.2) : undefined));
+
+        return {
+            id: doc._id?.$oid ?? doc._id ?? doc.busCode,
+            busNumber: doc.busCode ?? doc.busNumber,
+            company: doc.operator?.name ?? doc.operator,
+            images: doc.operator?.logo ? [doc.operator.logo] : (doc.images || []),
+            route: `${doc.routeFrom?.city ?? doc.routeFrom?.name ?? ''} - ${doc.routeTo?.city ?? doc.routeTo?.name ?? ''}`.trim(),
+            routeFrom: doc.routeFrom,
+            routeTo: doc.routeTo,
+            departure: {
+                time: departureDate ? departureDate.toISOString().split('T')[1].slice(0, 5) : '',
+                location: doc.routeFrom?.name ?? '',
+                address: doc.routeFrom?.city ?? ''
+            },
+            arrival: {
+                time: arrivalDate ? arrivalDate.toISOString().split('T')[1].slice(0, 5) : '',
+                location: doc.routeTo?.name ?? '',
+                address: doc.routeTo?.city ?? ''
+            },
+            date: fmtDate(departureDate),
+            departureDate,
+            arrivalDate,
+            duration: doc.duration ?? '',
+            type: Array.isArray(doc.busType) ? doc.busType.join(', ') : doc.busType,
+            adultPrice: adultPrice ?? 0,
+            childPrice: childPrice ?? 0,
+            infantPrice: infantPrice ?? 0,
+            seats: toNumber(doc.seatsTotal),
+            availableSeats: toNumber(doc.seatsAvailable),
+            seatLayout, // array of rows with seats
+            amenities: Array.isArray(doc.amenities) ? doc.amenities : (typeof doc.amenities === 'string' ? doc.amenities.split(',') : []),
+            status: doc.status,
+            raw: doc
+        };
+    }
     useEffect(() => {
         if (!id) return;
         let mounted = true;
