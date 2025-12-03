@@ -176,7 +176,7 @@ export function mapBusDocToClient(doc: any) {
 }
 export default function ChiTietXeDuLich() {
     const router = useRouter();
-    const { id } = useParams();
+    const { id } = useParams() as { id: string };
     const searchParams = useSearchParams();
     const [remoteBus, setRemoteBus] = useState<any | null>(null);
     const [busSlotsMap, setBusSlotsMap] = useState<Record<string, any>>({});
@@ -702,7 +702,7 @@ export default function ChiTietXeDuLich() {
                                     <div>
                                         <h4 className="font-medium mb-2">Tiện ích</h4>
                                         <div className="flex flex-wrap gap-2">
-                                            {bus.amenities.map((amenity, index) => (
+                                            {bus.amenities.map((amenity:any, index:any) => (
                                                 <div key={index} className="flex items-center gap-1 text-sm text-[hsl(var(--muted-foreground))]">
                                                     {getAmenityIcon(amenity)}
                                                     <span className="capitalize">{amenity}</span>
@@ -782,7 +782,7 @@ export default function ChiTietXeDuLich() {
                                         <Label className="text-base font-medium mb-3 block">Điểm đón</Label>
                                         <div className="space-y-3">
 
-                                            {pickupList.map((point, index) => (
+                                            {pickupList.map((point:any, index:any) => (
                                                 <div
                                                     key={index}
                                                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${selectedPickup === point.location ? 'border-primary bg-primary/5' : 'hover:bg-gray-50'
@@ -812,7 +812,7 @@ export default function ChiTietXeDuLich() {
                                     <div>
                                         <Label className="text-base font-medium mb-3 block">Điểm trả</Label>
                                         <div className="space-y-3">
-                                            {dropoffList.map((point, index) => (
+                                            {dropoffList.map((point:any, index:any) => (
                                                 <div
                                                     key={index}
                                                     className={`border rounded-lg p-3 cursor-pointer transition-colors ${selectedDropoff === point.location ? 'border-primary bg-primary/5' : 'hover:bg-gray-50'

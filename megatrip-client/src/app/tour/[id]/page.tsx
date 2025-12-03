@@ -55,7 +55,7 @@ import { toast } from 'sonner';
 
 // Sample tour data with enhanced information
 const tourDetails = {
-    id: 1,
+    id: "1",
     name: 'Đà Nẵng - Hội An - Bà Nà Hills 3N2Đ',
     departure: 'TP. Hồ Chí Minh',
     destinations: ['Đà Nẵng', 'Hội An', 'Bà Nà Hills'],
@@ -179,7 +179,7 @@ const tourDetails = {
             notes: 'Chịu chi phí chênh lệch (nếu có). Chỉ chuyển 1 lần, phải tham gia trong 60 ngày. Không áp dụng lễ/Tết. Chuyển cho người khác: miễn phí (trừ vé máy bay theo hãng). Bảo lưu khoản thanh toán: 6 tháng; sau đó từ bỏ, không hoàn.'
         }
     },
-    reviews: {
+    reviews1: {
         overall: 4.8,
         breakdown: {
             service: 4.9,
@@ -274,7 +274,7 @@ function toLocalYMD(d?: Date | null) {
 }
 export default function ChiTietTour() {
     const router = useRouter();
-    const { id } = useParams();
+    const { id } = useParams() as { id: string };
 
     const [dbLoaded, setDbLoaded] = useState(false); // dùng để re-render sau khi merge dữ liệu từ BE
 
@@ -350,9 +350,9 @@ export default function ChiTietTour() {
         }
         // services list normalization + try extract accommodation from services
         const servicesList = Array.isArray(db.services) ? db.services : (db.services ? [db.services] : []);
-        const servicesLower = servicesList.map(s => String(s).toLowerCase());
-        const svcHotelIdx = servicesLower.findIndex(s => s.includes('khách sạn') || s.includes('khach san') || s.includes('hotel'));
-        const svcResortIdx = servicesLower.findIndex(s => s.includes('resort'));
+        const servicesLower = servicesList.map((s: any) => String(s).toLowerCase());
+        const svcHotelIdx = servicesLower.findIndex((s: any) => s.includes('khách sạn') || s.includes('khach san') || s.includes('hotel'));
+        const svcResortIdx = servicesLower.findIndex((s: any) => s.includes('resort'));
         const serviceAccommodation = svcHotelIdx !== -1 ? servicesList[svcHotelIdx] : (svcResortIdx !== -1 ? servicesList[svcResortIdx] : null);
 
         // itinerary: ensure each day has meals, accommodation, transport (fallback to tour-level fields)
@@ -417,7 +417,7 @@ export default function ChiTietTour() {
             },
             // keep policies & reviews from sample for now (BE will provide later)
             policies: db.policies ?? tourDetails.policies,
-            reviews: db.reviews ?? tourDetails.reviews,
+            reviews1: db.reviews ?? tourDetails.reviews,
         };
     }
 
@@ -891,7 +891,7 @@ export default function ChiTietTour() {
                                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
                                         <span className="font-medium">{tourDetails.rating}</span>
                                     </div>
-                                    <span className="text-muted-foreground">({tourDetails.reviews.comments.length} đánh giá)</span>
+                                    <span className="text-muted-foreground">({tourDetails.reviews1?.comments.length} đánh giá)</span>
                                 </div>
 
                                 <div className="space-y-2">
@@ -953,7 +953,7 @@ export default function ChiTietTour() {
                                                 }}
                                             >
                                                 <div className="flex items-center justify-between">
-                                                    <div className="text-sm font-medium">{formatDate(dateInfo.startIso || dateInfo.date)}</div>
+                                                    <div className="text-sm font-medium">{formatDate((dateInfo as any).startIso || dateInfo.date)}</div>
                                                     {isSelected && <CheckCircle className="h-4 w-4 text-[hsl(var(--primary))] ml-2" />}
                                                 </div>
                                                 <div className="text-xs text-[hsl(var(--primary))] font-semibold">{formatPrice(dateInfo.price)}</div>
@@ -1229,7 +1229,7 @@ export default function ChiTietTour() {
                                                 {[...Array(5)].map((_, i) => (
                                                     <Star
                                                         key={i}
-                                                        className={`h-5 w-5 ${i < Math.floor(overallRating)
+                                                        className={`h-5 w-5 ${i < Math.floor(overallRating as any)
                                                             ? 'fill-yellow-400 text-yellow-400'
                                                             : 'text-gray-300'
                                                             }`}
@@ -1242,11 +1242,11 @@ export default function ChiTietTour() {
 
                                     <div className="space-y-2">
 
-                                        {Object.entries(distribution.reduce((acc, d) => ({ ...acc, [d.star]: d.count }), {})).reverse().map(([stars, count]) => (
+                                        {Object.entries(distribution.reduce((acc: Record<number, number>, d) => ({ ...acc, [d.star]: d.count }), {})).reverse().map(([stars, count]) => (
                                             <div key={stars} className="flex items-center gap-2">
                                                 <span className="text-sm w-8">{stars}★</span>
                                                 <Progress value={(count / reviews.length) * 100} className="flex-1" />
-                                                <span className="text-sm text-muted-foreground w-8">{count}%</span>
+                                                <span className="text-sm text-muted-foreground w-8">{Math.round((count / reviews.length) * 100)}%</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1258,7 +1258,7 @@ export default function ChiTietTour() {
                                 <div>
                                     <h4 className="font-semibold mb-3">Đánh giá chi tiết</h4>
                                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                        {Object.entries(tourDetails.reviews.breakdown).map(([category, rating]) => (
+                                        {Object.entries(tourDetails.reviews1.breakdown).map(([category, rating]) => (
                                             <div key={category} className="text-center">
                                                 <div className="font-medium text-primary">{rating}</div>
                                                 <div className="text-xs text-muted-foreground capitalize">{category}</div>

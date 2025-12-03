@@ -29,7 +29,7 @@ interface PassengerCount {
 }
 
 interface SearchTabsProps {
-  onSearch?: () => void;
+  onSearch?: (data: any) => void;
   activeTab?: 'flight' | 'bus' | 'tour';
 }
 
@@ -40,10 +40,10 @@ export default function SearchTabs({ onSearch, activeTab }: SearchTabsProps) {
     children: 0,
     infants: 0,
   });
-  const [flightDeparture, setFlightDeparture] = useState<Date>(new Date());
-  const [flightReturn, setFlightReturn] = useState<Date>();
-  const [busDeparture, setBusDeparture] = useState<Date>(new Date());
-  const [tourDeparture, setTourDeparture] = useState<Date>(new Date());
+  const [flightDeparture, setFlightDeparture] = useState<Date|any>(new Date());
+  const [flightReturn, setFlightReturn] = useState<Date|any>();
+  const [busDeparture, setBusDeparture] = useState<Date|any>(new Date());
+  const [tourDeparture, setTourDeparture] = useState<Date|any>(new Date());
   const [isPassengerOpen, setIsPassengerOpen] = useState(false);
   const [provinces, setProvinces] = useState<{ code: string, name: string }[]>([]);
   const [airports, setAirports] = useState<any[]>([]);

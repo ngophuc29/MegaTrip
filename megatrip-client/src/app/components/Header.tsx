@@ -44,7 +44,7 @@ export default function Header() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname()!;
 
   useEffect(() => {
     const handleScroll = () => {

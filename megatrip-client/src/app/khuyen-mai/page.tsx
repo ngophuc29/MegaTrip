@@ -388,7 +388,7 @@ export default function KhuyenMai() {
                             {promotionCategories.map((category) => (
                                 <TabsTrigger key={category.id} value={category.id} className="flex items-center gap-2">
                                     {category.icon && <category.icon className="h-4 w-4" />}
-                                    {category.name} ({counts[category.id] ?? 0})
+                                    {category.name} ({(counts as any)[category.id] ?? 0})
                                 </TabsTrigger>
                             ))}
                         </TabsList>

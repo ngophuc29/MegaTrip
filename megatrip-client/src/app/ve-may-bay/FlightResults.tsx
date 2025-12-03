@@ -150,7 +150,7 @@ export default function FlightResults({
   const [pricingByFlight, setPricingByFlight] = useState<Record<string, any>>(cacheInit.pricing);
   const [seatmapByFlight, setSeatmapByFlight] = useState<Record<string, any>>(cacheInit.seatmap);
   // state for signatures per flight
-  const [signaturesByFlight, setSignaturesByFlight] = useState<Record<string, string>>(cacheInit.signatures);
+  const [signaturesByFlight, setSignaturesByFlight] = useState<Record<string, string | null>>(cacheInit.signatures);
   // UI navigation/loading state used when navigating to detail page
   const [navigating, setNavigating] = useState(false);
   // Helper: parse refundable value from traveler or offer objects.
@@ -203,7 +203,7 @@ export default function FlightResults({
       const travelerPricings = offer?.travelerPricings ?? [];
       const fareBasis = travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.fareBasis ?? travelerPricings?.[0]?.fareBasis ?? null;
       const rule = Object.values(detailedFareRules).find((fr: any) => (fareBasis && fr?.fareBasis === fareBasis) || !!fr);
-      const penalty = rule?.fareNotes?.descriptions?.find((desc: any) => desc.descriptionType === 'PENALTIES');
+      const penalty = (rule as any)?.fareNotes?.descriptions?.find((desc: any) => desc.descriptionType === 'PENALTIES');
       if (!penalty?.text) return false;
       const txt = String(penalty.text).toUpperCase();
       // match typical phrases - be permissive
@@ -477,7 +477,7 @@ export default function FlightResults({
             </CardContent>
           </Card>
         ) : (
-          sortedFlights.map((flight) => (
+          sortedFlights.map((flight: any) => (
             // compute stable pricing cache key for this flight so buttons/flags can reference pricingLoadingByFlight[key]
             (() => {
               const flightOfferPayload = flight.raw ? flight.raw : constructFallbackOffer(flight);
@@ -739,7 +739,7 @@ export default function FlightResults({
 
                                       const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
                                       const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
-                                      const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                      // const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
 
                                       // Bags / fare details
                                       const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;

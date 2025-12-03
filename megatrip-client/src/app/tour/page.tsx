@@ -210,7 +210,7 @@ function mapDbTourToList(db: any) {
     // Use Vietnam timezone (UTC+7) for date comparison
     const now = new Date();
     // Get VN date components correctly
-    const vnDateStr = now.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); // YYYY-MM-DD format
+    const vnDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }); // YYYY-MM-DD format
     const [vnYear, vnMonth, vnDay] = vnDateStr.split('-').map(Number);
     const vnToday = new Date(vnYear, vnMonth - 1, vnDay); // Create date at start of VN day
     const availableDates = (db.startDates || []).map((d: any) => {
@@ -262,7 +262,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([200000, 10000000]); 
+    const [priceRange, setPriceRange] = useState([200000, 10000000]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
@@ -382,7 +382,7 @@ export default function Tour() {
             const mapped = data.map(mapDbTourToList);
             setApiTours(mapped);
             setFetchError(null);
-        } catch (err) {
+        } catch (err: any) {
             const msg = String(err?.message || err || 'Không thể kết nối tới server');
             console.error('Fetch tours error', err);
             setApiTours([]);
@@ -392,20 +392,20 @@ export default function Tour() {
             setIsLoading(false);
         }
     }
-      useEffect(() => {
-              let mounted = true;
-              // reset attempt flag so UI shows correct state for new search
-                  setFetchAttempted(false);
-              // call fetchTours whenever search params change (so /tour?from=.. triggers API)
-                  (async () => {
-                          await fetchTours();
-                      })();
-              return () => { mounted = false; };
-          }, [searchParams ? String(searchParams.toString()) : '']);
+    useEffect(() => {
+        let mounted = true;
+        // reset attempt flag so UI shows correct state for new search
+        setFetchAttempted(false);
+        // call fetchTours whenever search params change (so /tour?from=.. triggers API)
+        (async () => {
+            await fetchTours();
+        })();
+        return () => { mounted = false; };
+    }, [searchParams ? String(searchParams.toString()) : '']);
 
     // const destinationTours = selectedTour ? generateDestinationTours() : [];
     // const allTours = selectedTour ? [...destinationTours, ...sampleTours] : sampleTours;
-    const destinationTours = selectedTour ? generateDestinationTours() : [];
+    const destinationTours = selectedTour ? selectedTour.destination : [];
     const baseTours = apiTours; // Chỉ dùng API, không fallback sampleTours
     const allTours = selectedTour ? [...destinationTours, ...baseTours] : baseTours;
     // const filteredTours = allTours.filter(tour => {
@@ -646,7 +646,7 @@ export default function Tour() {
                                                         <div className="text-sm opacity-90 text-white"><span>Tên : </span>{p.title}</div>
                                                         {p.code && <div className="text-xs opacity-75 text-white">Áp dụng từ {formatPrice(p.minSpend || 0)} VND</div>}
 
-                                                    <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                        <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
                                                     </div>
                                                     {p.code ? (
                                                         <Button size="sm" variant="secondary" className="text-red-600" onClick={() => {

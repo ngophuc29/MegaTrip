@@ -503,7 +503,7 @@ export default function TaiKhoan() {
     const [changingPassword, setChangingPassword] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editForm, setEditForm] = useState(userData.profile);
-    const [bookings, setBookings] = useState(null);
+    const [bookings, setBookings] = useState<any>(null);
     const [loadingBookings, setLoadingBookings] = useState(false);
     const [bookingsError, setBookingsError] = useState(null);
     const [memberSinceDate, setMemberSinceDate] = useState<string>('');
@@ -536,7 +536,7 @@ export default function TaiKhoan() {
 
         const fetchProfile = async () => {
             try {
-                const payload = await me();
+                const payload: any = await me();
                 // map fields...
                 userData.profile.name = payload.name ?? userData.profile.name;
                 userData.profile.email = payload.email ?? userData.profile.email;
@@ -641,7 +641,7 @@ export default function TaiKhoan() {
                 const data = Array.isArray(json.data) ? json.data : (json.data?.data || []);
                 const mapped = data.map(mapOrderToBooking);
                 if (mounted) setBookings(mapped);
-            } catch (err) {
+            } catch (err: any) {
                 console.error('Failed to load bookings:', err);
                 if (mounted) setBookingsError(err.message || 'load_failed');
             } finally {
@@ -745,7 +745,7 @@ export default function TaiKhoan() {
 
     }
     // Function mở modal chi tiết
-    const openOrderDetail = async (orderId) => {
+    const openOrderDetail = async (orderId: string) => {
         setLoadingDetails(true);
         setDetailModalOpen(true);
         try {
@@ -874,7 +874,7 @@ export default function TaiKhoan() {
                                         <div className="flex justify-between">
                                             <span className="text-sm text-muted-foreground">Đã hoàn thành</span>
                                             <span className="font-medium">
-                                                {displayBookings.filter(b => b.status === 'completed').length}
+                                                {displayBookings.filter((b: any) => b.status === 'completed').length}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
@@ -1008,7 +1008,7 @@ export default function TaiKhoan() {
                                                 <div className="text-center text-muted-foreground">Chưa có đơn hàng</div>
                                             ) : (
                                                 <div className="space-y-4">
-                                                    {displayBookings.slice(0, 3).map((booking) => (
+                                                    {displayBookings.slice(0, 3).map((booking: any) => (
                                                         <div key={booking.id} className="flex items-center justify-between p-3 border rounded-lg">
                                                             <div className="flex items-center gap-3">
                                                                 <div className="p-2 bg-primary/10 rounded">
@@ -1407,25 +1407,25 @@ export default function TaiKhoan() {
                 <Modal open={detailModalOpen} onOpenChange={setDetailModalOpen} size="lg">
                     <ModalContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                         <ModalHeader>
-                            <ModalTitle>Chi tiết đơn hàng {selectedOrder?.id}</ModalTitle>
+                            <ModalTitle>Chi tiết đơn hàng {(selectedOrder as any)?.id}</ModalTitle>
                             <ModalDescription>
-                                {orderDetails?.order && (
+                                {(orderDetails as any)?.order && (
                                     <div className="space-y-2">
                                         {/* Tags */}
                                         <div className="flex gap-2">
-                                            {orderDetails.order.paymentStatus === 'paid' && <Badge className="bg-green-100 text-green-700">Đã thanh toán</Badge>}
-                                            {orderDetails.order.orderStatus === 'cancelled' && <Badge className="bg-red-100 text-red-700">Đã hủy</Badge>}
-                                            {orderDetails.order.changeCalendar && <Badge className="bg-blue-100 text-blue-700">Đã đổi lịch</Badge>}
+                                            {(orderDetails as any).order.paymentStatus === 'paid' && <Badge className="bg-green-100 text-green-700">Đã thanh toán</Badge>}
+                                            {(orderDetails as any).order.orderStatus === 'cancelled' && <Badge className="bg-red-100 text-red-700">Đã hủy</Badge>}
+                                            {(orderDetails as any).order.changeCalendar && <Badge className="bg-blue-100 text-blue-700">Đã đổi lịch</Badge>}
                                         </div>
                                         {/* Note đổi lịch */}
                                         {/* Note đổi lịch */}
-                                        {orderDetails.order.changeCalendar && (
+                                        {(orderDetails as any).order.changeCalendar && (
                                             <div className="text-sm text-muted-foreground italic">
                                                 Bạn đã đổi lịch từ ngày {
-                                                    orderDetails.order.items?.[0]?.type === 'flight'
-                                                        ? orderDetails.order.metadata?.bookingDataSnapshot?.flights?.outbound?.date
-                                                        : orderDetails.order.metadata?.bookingDataSnapshot?.details?.date
-                                                } sang ngày {orderDetails.order.dateChangeCalendar}
+                                                    (orderDetails as any).order.items?.[0]?.type === 'flight'
+                                                        ? (orderDetails as any).order.metadata?.bookingDataSnapshot?.flights?.outbound?.date
+                                                        : (orderDetails as any).order.metadata?.bookingDataSnapshot?.details?.date
+                                                } sang ngày {(orderDetails as any).order.dateChangeCalendar}
                                             </div>
                                         )}
                                     </div>
@@ -1435,14 +1435,14 @@ export default function TaiKhoan() {
                         <div className="p-4 space-y-4">
                             {loadingDetails ? (
                                 <div className="text-center">Đang tải...</div>
-                            ) : orderDetails ? (
+                            ) : orderDetails  ? (
                                 <>
 
                                     {/* Thông tin cơ bản */}
                                     <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div><strong>Mã đơn:</strong> {orderDetails.order.orderNumber}</div>
-                                        <div><strong>Tổng tiền:</strong> {formatPrice(orderDetails.order.total)}</div>
-                                        <div><strong>Ngày đặt:</strong> {new Date(orderDetails.order.createdAt).toLocaleDateString('vi-VN')}</div>
+                                        <div><strong>Mã đơn:</strong> {(orderDetails as any)?.order.orderNumber}</div>
+                                        <div><strong>Tổng tiền:</strong> {formatPrice((orderDetails as any).order.total)}</div>
+                                        <div><strong>Ngày đặt:</strong> {new Date((orderDetails as any).order.createdAt).toLocaleDateString('vi-VN')}</div>
                                         {/* <div><strong>Ngày sử dụng12:</strong> {(() => {
                                             const snap = orderDetails.order.metadata?.bookingDataSnapshot;
                                             const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
@@ -1451,10 +1451,10 @@ export default function TaiKhoan() {
                                             return serviceDateObj ? serviceDateObj.toISOString().slice(0, 10) : '--';
                                         })()}</div> */}
                                         <div><strong>Ngày sử dụng:</strong> {(() => {
-                                            const snap = orderDetails.order.metadata?.bookingDataSnapshot;
-                                            const item = orderDetails.order.items?.[0];
+                                            const snap = (orderDetails as any).order.metadata?.bookingDataSnapshot;
+                                            const item = (orderDetails as any).order.items?.[0];
                                             let serviceDate = '';
-                                            if (item?.type === 'flight' && !orderDetails.order.changeCalendar) {
+                                            if (item?.type === 'flight' && !(orderDetails as any).order.changeCalendar) {
                                                 const flights = snap?.flights;
                                                 if (flights?.outbound && flights?.inbound) {
                                                     serviceDate = `${flights.outbound.date} - ${flights.inbound.date}`;
@@ -1465,7 +1465,7 @@ export default function TaiKhoan() {
                                                 }
                                             } else {
                                                 const originalServiceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date;
-                                                serviceDate = orderDetails.order.changeCalendar && orderDetails.order.dateChangeCalendar ? orderDetails.order.dateChangeCalendar : originalServiceDateRaw;
+                                                serviceDate = (orderDetails as any).order.changeCalendar && (orderDetails as any).order.dateChangeCalendar ? (orderDetails as any).order.dateChangeCalendar : originalServiceDateRaw;
                                                 if (serviceDate) {
                                                     const serviceDateObj = new Date(serviceDate);
                                                     serviceDate = serviceDateObj.toISOString().slice(0, 10);
@@ -1473,10 +1473,10 @@ export default function TaiKhoan() {
                                             }
                                             return serviceDate || '--';
                                         })()}</div>
-                                        <div><strong>Trạng thái:</strong> {getStatusText(orderDetails.order.orderStatus)}</div>
+                                        <div><strong>Trạng thái:</strong> {getStatusText((orderDetails as any).order.orderStatus)}</div>
                                         {/* Pickup / Dropoff details (tour or bus) */}
                                         {(() => {
-                                            const snap = orderDetails.order.metadata?.bookingDataSnapshot;
+                                            const snap = (orderDetails as any).order.metadata?.bookingDataSnapshot;
                                             const d = snap?.details || snap?.meta || {};
                                             if (!d) return null;
                                             return (
@@ -1496,11 +1496,11 @@ export default function TaiKhoan() {
                                     </div>
 
                                     {/* Thông tin hành khách */}
-                                    {orderDetails.order.metadata?.bookingDataSnapshot?.details?.passengers && (
+                                    {(orderDetails as any).order.metadata?.bookingDataSnapshot?.details?.passengers && (
                                         <div>
                                             <h4 className="font-semibold mb-2">Thông tin hành khách</h4>
                                             <div className="space-y-2">
-                                                {orderDetails.order.metadata.bookingDataSnapshot.details.passengers.map((passenger: any, index: number) => (
+                                                {(orderDetails as any).order.metadata.bookingDataSnapshot.details.passengers.map((passenger: any, index: number) => (
                                                     <div key={index} className="border p-3 rounded">
                                                         <div className="grid grid-cols-2 gap-2 text-sm">
                                                             <div><strong>Họ tên:</strong> {passenger.title ? `${passenger.title} ` : ''}{passenger.firstName} {passenger.lastName}</div>
@@ -1518,11 +1518,11 @@ export default function TaiKhoan() {
 
                                     {/* Breakdown vé */}
                                     <div className="space-y-4">
-                                        {orderDetails.oldTickets && orderDetails.oldTickets.length > 0 && (
+                                        {(orderDetails as any).oldTickets && (orderDetails as any).oldTickets.length > 0 && (
                                             <div>
                                                 <h4 className="font-semibold">Vé cũ</h4>
                                                 <div className="space-y-2">
-                                                    {orderDetails.oldTickets.map((ticket: any) => (
+                                                    {(orderDetails as any).oldTickets.map((ticket: any) => (
                                                         <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                             <div>
                                                                 <div className="font-medium">{ticket.productId}</div>
@@ -1553,13 +1553,13 @@ export default function TaiKhoan() {
                                             </div>
                                         )}
 
-                                        {orderDetails.tickets && orderDetails.tickets.length > 0 && (
+                                        {(orderDetails as any).tickets && (orderDetails as any).tickets.length > 0 && (
                                             <div>
-                                                <h4 className="font-semibold">{orderDetails.oldTickets?.length > 0 ? 'Vé đã đổi / Vé' : 'Vé'}</h4>
+                                                <h4 className="font-semibold">{(orderDetails as any).oldTickets?.length > 0 ? 'Vé đã đổi / Vé' : 'Vé'}</h4>
                                                 <div className="space-y-2">
                                                     {(
                                                         // Chỉ show vé mới (không phải vé cũ)
-                                                        orderDetails.tickets.filter((t: any) => !orderDetails.oldTickets?.some((o: any) => o._id === t._id))
+                                                        (orderDetails as any).tickets.filter((t: any) => !(orderDetails as any).oldTickets?.some((o: any) => o._id === t._id))
                                                     ).map((ticket: any) => (
                                                         <div key={ticket._id} className="border p-2 rounded flex justify-between items-center">
                                                             <div>
@@ -1612,7 +1612,7 @@ export default function TaiKhoan() {
                     customerId={customerId}
                     onSubmit={({ rating, comment }) => {
                         if (!reviewBooking) return;
-                        setBookings(prev => prev.map(b => (b as any).id === (reviewBooking as any).id ? { ...(b as any), canReview: false, rating, review: comment } : b));
+                        setBookings((prev: any[]) => prev.map(b => (b as any).id === (reviewBooking as any).id ? { ...(b as any), canReview: false, rating, review: comment } : b));
                         setReviewOpen(false);
                         setReviewBooking(null);
                         toast('Cảm ơn bạn đã chia sẻ trải nghiệm.');

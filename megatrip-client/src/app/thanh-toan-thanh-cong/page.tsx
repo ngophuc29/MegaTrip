@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { ReadonlyURLSearchParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -24,17 +24,17 @@ import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas-pro'; // FIX: Use html2canvas-pro
 
 export default function ThanhToanThanhCong() {
-    const searchParams = useSearchParams();
-    const orderId = searchParams.get('orderId');
+    const searchParams = useSearchParams() as ReadonlyURLSearchParams;
+    const orderId: string | null = searchParams.get('orderId');
     const extraData = searchParams.get('extraData');
 
-    const [order, setOrder] = useState(null);
-    const [tickets, setTickets] = useState([]);
+    const [order, setOrder] = useState<any>(null);
+    const [tickets, setTickets] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState<any>(null);
     const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
     const [isDownloadMode, setIsDownloadMode] = useState(false);
-    const ticketRefs = useRef([]);
+    const ticketRefs = useRef<any[]>([]);
 
     const loadFont = async (pdf: jsPDF, fontUrl: string, fontName: string) => {
         return new Promise<boolean>((resolve) => {
@@ -139,7 +139,7 @@ export default function ThanhToanThanhCong() {
                 ];
             } else {
                 // Hiện items bình thường
-                tableRows = order.items.map((item, index) => [
+                tableRows = order.items.map((item: any, index: number) => [
                     index + 1,
                     item.name || item.itemId,
                     item.quantity,
@@ -158,14 +158,14 @@ export default function ThanhToanThanhCong() {
                     headStyles: { fillColor: [41, 128, 185], textColor: 255, font: tableFont },
                     alternateRowStyles: { fillColor: [245, 245, 245] },
                 });
-                yPosition = pdf.lastAutoTable.finalY + 10;
+                yPosition = (pdf as any).lastAutoTable.finalY + 10;
             } catch (e) {
                 console.error('Error creating table:', e);
                 pdf.setFontSize(10);
                 pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
                 pdf.text('Chi tiết items:', 20, yPosition);
                 yPosition += 10;
-                order.items.forEach((item, index) => {
+                order.items.forEach((item: any, index: number) => {
                     pdf.text(`${index + 1}. ${item.name || item.itemId} - SL: ${item.quantity} - Giá: ${formatPrice(item.unitPrice)} - Tổng: ${formatPrice(item.subtotal)}`, 20, yPosition);
                     yPosition += 5;
                 });
@@ -187,9 +187,9 @@ export default function ThanhToanThanhCong() {
             yPosition += 10;
 
             for (let i = 0; i < tickets.length; i++) {
-                const ticketElement = ticketRefs.current[i];
+                const ticketElement :any = ticketRefs.current[i];
                 console.log(`Attempting to capture ref ${i}:`, ticketElement);
-                if (ticketElement) {
+                if (ticketElement ) {
                     try {
                         const canvas = await html2canvas(ticketElement, {
                             scale: 4,
@@ -199,10 +199,10 @@ export default function ThanhToanThanhCong() {
                             logging: true,
                             width: ticketElement.scrollWidth + 10,
                             height: ticketElement.scrollHeight + 10,
-                            timeout: 10000,
+                            // timeout: 10000, // Remove invalid timeout option
                             ignoreElements: (element) => element.tagName === 'SCRIPT' || element.tagName === 'STYLE',
                             onclone: (clonedDoc) => {
-                                const clonedElement = clonedDoc.querySelector(`.ve-dien-tu-${i}`);
+                                const clonedElement: any = clonedDoc.querySelector(`.ve-dien-tu-${i}`);
                                 if (clonedElement) {
                                     clonedElement.style.visibility = 'visible';
                                     clonedElement.style.display = 'block';
@@ -210,7 +210,6 @@ export default function ThanhToanThanhCong() {
                                     clonedElement.style.border = '1px solid #000'; // Add border để force hiện
                                 }
                             },
-
                         });
                         const imgData = canvas.toDataURL('image/png');
                         const imgWidth = 170;
@@ -232,7 +231,7 @@ export default function ThanhToanThanhCong() {
                         pdf.setFontSize(10);
                         pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
 
-                        let passenger = {};
+                        let passenger: any = {};
                         if (typeof tickets[i].passenger === 'string') {
                             try {
                                 passenger = JSON.parse(tickets[i].passenger);
@@ -267,7 +266,7 @@ export default function ThanhToanThanhCong() {
                     pdf.setFontSize(10);
                     pdf.setFont(fontLoaded ? 'ArialUnicodeMS' : 'times', 'normal');
 
-                    let passenger = {};
+                    let passenger: any = {};
                     if (typeof tickets[i].passenger === 'string') {
                         try {
                             passenger = JSON.parse(tickets[i].passenger);
@@ -369,7 +368,7 @@ export default function ThanhToanThanhCong() {
                 const data = await response.json();
                 setOrder(data.order);
                 setTickets(data.tickets || []);
-            } catch (err) {
+            } catch (err: any) {
                 setError(err.message);
             } finally {
                 setIsLoading(false);
@@ -463,7 +462,7 @@ export default function ThanhToanThanhCong() {
                         )}
                     </div>
                     <h1 className="text-3xl font-bold text-green-600 mb-2">
-                        {isDownloadMode ? 'Tải Vé Điện Tử' : (orderId.startsWith('ORD_FORCHANGE_') ? 'Giao dịch đổi lịch thành công!' : 'Giao dịch thành công!')}
+                        {isDownloadMode ? 'Tải Vé Điện Tử' : (orderId!.startsWith('ORD_FORCHANGE_') ? 'Giao dịch đổi lịch thành công!' : 'Giao dịch thành công!')}
                     </h1>
                    
                     <p className="text-lg text-muted-foreground">
@@ -484,7 +483,7 @@ export default function ThanhToanThanhCong() {
                             return (
                                 <VeDienTu
                                     key={ticket._id}
-                                    ref={(el) => (ticketRefs.current[index] = el)}
+                                    ref={(el) => { ticketRefs.current[index] = el; }}
                                     className={`ve-dien-tu-${index}`}
                                     bookingType={bookingType}
                                     bookingData={bookingData}

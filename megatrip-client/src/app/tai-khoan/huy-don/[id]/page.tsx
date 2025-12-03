@@ -169,7 +169,7 @@ export default function HuyDonPage() {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const payload = await me();
+                const payload:any = await me();
                 const resolvedUserId = payload?._id ?? payload?.id ?? payload?.userId ?? payload?._id?.$oid ?? null;
                 setCustomerId(resolvedUserId);
             } catch (err) {
@@ -310,8 +310,8 @@ export default function HuyDonPage() {
         const req = {
             id,
             type: 'refund',
-            bookingId: booking.id,
-            title: booking.title,
+            bookingId: booking!.id,
+            title: booking!.title,
             status: 'submitted',
             createdAt: new Date().toISOString(),
             amountRefund: breakdown?.refund || 0,
@@ -319,7 +319,7 @@ export default function HuyDonPage() {
             details: {
                 airline: (policy as any).airlinePolicy?.name,
                 tierRate: breakdown?.tierRate,
-                airlinePenalty: breakdown?.airlinePenalty,
+                airlinePenalty: (breakdown as any)?.airlinePenalty,
                 taxes: breakdown?.taxes,
                 platformFee: breakdown?.platformFee,
                 note,
@@ -357,10 +357,10 @@ export default function HuyDonPage() {
             zp_trans_id: order?.zp_trans_id || null,
             paymentReference: order?.paymentReference || null,
             // pass fee breakdown so support/backend knows amounts to refund
-            airlinePenalty: breakdown?.airlinePenalty || 0,
-            taxes: breakdown?.taxes || 0,
-            platformFee: breakdown?.platformFee || 0,
-            refundAmount: breakdown?.refund || 0,
+            airlinePenalty: (breakdown as any)?.airlinePenalty || 0,
+            taxes: (breakdown as any)?.taxes || 0,
+            platformFee: (breakdown as any)?.platformFee || 0,
+            refundAmount: (breakdown as any)?.refund || 0,
             currency: 'VND',
             message: `${reason}${note ? '\n\n' + note : ''}`
         };

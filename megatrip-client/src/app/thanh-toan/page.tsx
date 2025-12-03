@@ -146,6 +146,7 @@ const getBookingData = (searchParams: URLSearchParams) => {
           addOns: Number(searchParams.get("addOns")) || 0,
           discount: Number(searchParams.get("discount")) || 0,
           total: Number(searchParams.get("total")) || 0,
+          perPax: Number(searchParams.get("perPax")) || 0,
         },
       };
 
@@ -160,7 +161,7 @@ const getBookingData = (searchParams: URLSearchParams) => {
 
       // attach per-pax pricing if present
       if (unitAdult || unitChild || unitInfant) {
-        base.pricing.perPax = {
+        (base as any).pricing.perPax = {
           adultUnit: unitAdult ?? 0,
           childUnit: unitChild ?? 0,
           infantUnit: unitInfant ?? 0,
@@ -168,15 +169,15 @@ const getBookingData = (searchParams: URLSearchParams) => {
       }
 
       // attach single-room info
-      base.pricing.singleRooms = singleRooms;
-      base.pricing.singleSupplement = singleSupplement;
+      (base as any).pricing.singleRooms = singleRooms;
+      (base as any).pricing.singleSupplement = singleSupplement;
 
       // try parse breakdown JSON (passengers array)
       if (breakdownRaw) {
         try {
           const parsed = JSON.parse(breakdownRaw);
           if (Array.isArray(parsed)) {
-            base.pricing.breakdown = parsed;
+            (base as any).pricing.breakdown = parsed;
             // derive counts if not provided elsewhere
             const counts = { adults: 0, children: 0, infants: 0 };
             parsed.forEach((p: any) => {
@@ -184,9 +185,9 @@ const getBookingData = (searchParams: URLSearchParams) => {
               if (p.type === "child") counts.children += Number(p.qty || 0);
               if (p.type === "infant") counts.infants += Number(p.qty || 0);
             });
-            if (!base.passengers) base.passengers = { counts };
+            if (!(base as any).passengers) (base as any).passengers = { counts };
             else
-              base.passengers.counts = { ...base.passengers.counts, ...counts };
+              (base as any).passengers.counts = { ...(base as any).passengers.counts, ...counts };
           }
         } catch (e) {
           // ignore invalid JSON
@@ -311,17 +312,17 @@ const getBookingData = (searchParams: URLSearchParams) => {
 };
 
 // Nhận số lượng khách từ param hoặc localStorage
-const getInitialPassengers = (searchParams: URLSearchParams) => {
+const getInitialPassengers = (searchParams: URLSearchParams | null) => {
   let adults = 1,
     children = 0,
     infants = 0;
-  if (searchParams.get("adults")) adults = Number(searchParams.get("adults"));
-  if (searchParams.get("children"))
+  if (searchParams?.get("adults")) adults = Number(searchParams.get("adults"));
+  if (searchParams?.get("children"))
     children = Number(searchParams.get("children"));
-  if (searchParams.get("infants"))
+  if (searchParams?.get("infants"))
     infants = Number(searchParams.get("infants"));
   // Nếu không có param thì lấy từ localStorage
-  if (!searchParams.get("adults") && typeof window !== "undefined") {
+  if (!searchParams?.get("adults") && typeof window !== "undefined") {
     const stored = window.localStorage.getItem("participants");
     if (stored) {
       try {
@@ -372,7 +373,7 @@ const getInitialPassengers = (searchParams: URLSearchParams) => {
 
 export default function ThanhToan() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams()!;
   // remember bookingKey param so we can re-save payload to sessionStorage if user edits data
   const initialBookingKey =
     typeof searchParams?.get === "function"
@@ -566,7 +567,7 @@ export default function ThanhToan() {
     const addOnsComputed = addOnsArr.reduce((s: number, a: any) => {
       const unit = Number(a?.unitPrice ?? a?.price ?? 0);
       const qty = Number(a?.qty ?? 1);
-      const total = Number(a?.total ?? unit * qty ?? 0);
+      const total = Number(a?.total ?? unit * qty);
       return s + (Number.isFinite(total) ? total : 0);
     }, 0);
     const addOnsExplicit = Number(p.addOnsTotal ?? p.addOnsAmount ?? 0);
@@ -789,13 +790,13 @@ export default function ThanhToan() {
         );
 
         const evaluated = candidates
-          .map((p) => {
+          .map((p:any) => {
             const eligibleAmount = amount;
             const d = computeDiscountForPromo(p, eligibleAmount);
             return { promo: p, discount: Math.round(d) };
           })
-          .filter((e) => e.discount > 0)
-          .sort((a, b) => b.discount - a.discount); // sort desc so index 0 is best
+          .filter((e:any) => e.discount > 0)
+          .sort((a:any, b:any) => b.discount - a.discount); // sort desc so index 0 is best
 
         if (!cancelled) {
           if (evaluated.length === 0) {
@@ -1401,12 +1402,11 @@ export default function ThanhToan() {
       if (bookingType === "flight" && bookingData?.flights?.outbound) {
         const outbound = bookingData.flights.outbound;
         const inbound = bookingData.flights.inbound;
-        const formatDate = (date) =>
+        const formatDate = (date:any) =>
           date ? date.replace(/-/g, "") : "YYYYMMDD";
-        const formatTime = (time) =>
+        const formatTime = (time:any) =>
           time ? time.split("-")[0].replace(":", "").slice(0, 4) : "HHMM";
-        const formatRoute = (dep, arr) => (dep && arr ? `${dep}-${arr}` : "");
-
+        const formatRoute = (dep:any, arr:any) => (dep && arr ? `${dep}-${arr}` : "");
         const outboundSegment = outbound.itineraries?.[0]?.segments?.[0];
         const outboundKey =
           outboundSegment?.carrierCode &&
@@ -1970,19 +1970,19 @@ export default function ThanhToan() {
 
   const getAirportLabel = (
     iata: string | undefined | null,
-    fallbackCity?: string
+    fallbackCity?: any
   ) => {
     if (!iata) return fallbackCity || "";
     const code = String(iata).toUpperCase();
-    const entry = airportsMap?.[code] ?? null;
+    const entry = (airportsMap as any)?.[code] ?? null;
     // prefer nice city name, then state, then fallbackCity, finally iata
     if (entry) return entry.city || entry.state || fallbackCity || code;
     // some sources send IATA in city field (like "DAD"), detect and try map too
     if (
       (fallbackCity ?? "").length === 3 &&
-      airportsMap?.[fallbackCity?.toUpperCase()]
+      (airportsMap as any)?.[fallbackCity?.toUpperCase()]
     ) {
-      const e2 = airportsMap[fallbackCity!.toUpperCase()];
+      const e2 = (airportsMap as any)[fallbackCity!.toUpperCase()];
       return e2.city || e2.state || code;
     }
     return fallbackCity || code;
@@ -3031,9 +3031,7 @@ export default function ThanhToan() {
                           <Separator />
                           <div
                             className="flex items-center justify-between text-sm cursor-pointer mt-2"
-                            onClick={() =>
-                              setShowAddonsDetails((prev) => !prev)
-                            }
+                            onClick={() => setShowAddonsDetails((prev) => ({ outbound: !prev.outbound, inbound: !prev.inbound }))}
                           >
                             <div className="font-semibold text-base">
                               {" "}
@@ -3275,7 +3273,7 @@ export default function ThanhToan() {
                           <div
                             className="flex items-center justify-between text-sm cursor-pointer mt-2"
                             onClick={() =>
-                              setShowAddonsDetails((prev) => !prev)
+                              setShowAddonsDetails((prev) => ({ outbound: !prev.outbound, inbound: !prev.inbound }))
                             }
                           >
                             <div className="font-semibold text-base">
@@ -3384,7 +3382,7 @@ export default function ThanhToan() {
 
                     const sumAddonsForLeg = (leg: string | null) =>
                       addOnsArr
-                        .filter((a) => (a.leg ?? null) === leg)
+                        .filter((a:any) => (a.leg ?? null) === leg)
                         .reduce(
                           (s: number, a: any) =>
                             s + Number(a.total ?? a.unitPrice ?? a.price ?? 0),
@@ -3392,7 +3390,7 @@ export default function ThanhToan() {
                         );
                     const sumSeatsForLeg = (leg: string | null) =>
                       seatsArr
-                        .filter((s) => (s.leg ?? null) === leg)
+                        .filter((s:any) => (s.leg ?? null) === leg)
                         .reduce(
                           (s: number, it: any) => s + Number(it.price ?? 0),
                           0
@@ -3522,12 +3520,12 @@ export default function ThanhToan() {
                                 {showAddonsDetails[legKey] && (
                                   <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
                                     {addOnsArr.filter(
-                                      (a) => (a.leg ?? null) === legKey
+                                      (a:any) => (a.leg ?? null) === legKey
                                     ).length > 0 ? (
                                       <div className="space-y-2">
                                         {addOnsArr
                                           .filter(
-                                            (a) => (a.leg ?? null) === legKey
+                                            (a:any) => (a.leg ?? null) === legKey
                                           )
                                           .map((a: any, idx: number) => (
                                             <div
@@ -3591,11 +3589,11 @@ export default function ThanhToan() {
                             {showFareDetails[legKey] && (
                               <div className="mt-2 mb-2 p-2 bg-gray-50 rounded-md text-sm">
                                 {seatsArr.filter(
-                                  (s) => (s.leg ?? null) === legKey
+                                  (s:any) => (s.leg ?? null) === legKey
                                 ).length > 0 ? (
                                   <div className="space-y-2">
                                     {seatsArr
-                                      .filter((s) => (s.leg ?? null) === legKey)
+                                      .filter((s:any) => (s.leg ?? null) === legKey)
                                       .map((s: any, idx: number) => (
                                         <div
                                           key={idx}
@@ -3688,7 +3686,7 @@ export default function ThanhToan() {
                         {/* Tổng tiền dịch vụ*/}
                         <div
                           className="flex items-center justify-between text-sm cursor-pointer mt-2"
-                          onClick={() => setShowAddonsDetails((prev) => !prev)}
+                          onClick={() => setShowAddonsDetails((prev) => ({ outbound: !prev.outbound, inbound: !prev.inbound }))}
                         >
                           <div className="font-semibold text-base">
                             {" "}

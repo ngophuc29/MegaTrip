@@ -1,5 +1,5 @@
-// one way flight offers from SGN to HAN on 2025-09-20 for 1 adult, max 3 results
-{
+[
+    {
     "meta": {
         "count": 3,
         "links": {
@@ -319,9 +319,7 @@
         }
     }
 }
-
-
-// Round trip 
+,
 {
     "meta": {
         "count": 3,
@@ -761,3 +759,4 @@
         }
     }
 }
+]

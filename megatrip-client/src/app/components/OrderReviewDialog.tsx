@@ -46,7 +46,7 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, custome
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    orderId: booking.orderObjectId,
+                    orderId: (booking as any).orderObjectId,
                     productId: booking.productId,
                     customerId: customerId || '64e65e8d3d5e2b0c8a3e9f12', // Fallback nếu null
                     rating,

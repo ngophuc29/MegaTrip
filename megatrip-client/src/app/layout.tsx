@@ -15,7 +15,7 @@ interface LayoutProps {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "/";
 
   // Hàm lấy title động theo route
   const getTitle = () => {

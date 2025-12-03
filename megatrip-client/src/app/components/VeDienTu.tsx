@@ -180,7 +180,7 @@ const VeDienTu = React.forwardRef<HTMLDivElement, VeDienTuProps>(({ bookingType,
                                                     </div>
                                                 )}
                                                 {(leg === 'inbound' || leg === null) && (bookingData.details.flights?.inbound || ticket?.reservationInfo?.flights?.inbound) && (
-                                                    <div className={leg === 'outbound' ? 'pt-2' : ''}>
+                                                    <div className={(leg as any) === 'outbound' ? 'pt-2' : ''}>
                                                         <div className="font-medium text-blue-700">Chuyến về (Inbound)</div>
                                                         <div className="flex justify-between"><span className="text-gray-500">Mã chuyến bay:</span><span className="font-medium">{bookingData.details.flights?.inbound?.flightNumber || ticket.reservationInfo.flights.inbound.flightNumber}</span></div>
                                                         <div className="flex justify-between"><span className="text-gray-500">Tuyến:</span><span className="font-medium">{bookingData.details.flights?.inbound?.route || ticket.reservationInfo.flights.inbound.route}</span></div>
@@ -244,7 +244,7 @@ const VeDienTu = React.forwardRef<HTMLDivElement, VeDienTuProps>(({ bookingType,
                                 <Users className="h-5 w-5" />{bookingType === 'flight' ? 'Quyền lợi' : bookingType === 'bus' ? 'Tiện ích' : 'Quyền lợi'}
                             </div>
                             <div className="flex flex-wrap gap-2">
-                                {(bookingType === 'flight' ? getFlightBenefits(bookingData.pricing) : bookingType === 'bus' ? busBenefits : tourBenefits).map((b, i) => (
+                                {(bookingType === 'flight' ? getFlightBenefits(bookingData.pricing) : bookingType === 'bus' ? busBenefits : tourBenefits).map((b: any, i:any) => (
                                     <span key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${bookingType === 'flight' ? 'bg-blue-100 text-blue-700' : bookingType === 'bus' ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{b.icon}{b.label}</span>
                                 ))}
                             </div>

@@ -399,7 +399,7 @@ export default function XeDuLich() {
                 console.warn('fetchBuses -> empty list returned from server, full response:', json);
             }
             setFetchedBuses(normalized);
-        } catch (err) {
+        } catch (err:any) {
             const msg = String(err?.message || err || 'Không thể kết nối tới server');
             console.error('fetchBuses error', err);
             setFetchedBuses([]);

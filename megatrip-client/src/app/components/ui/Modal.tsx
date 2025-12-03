@@ -5,9 +5,10 @@ type ModalProps = {
     open: boolean;
     onOpenChange?: (open: boolean) => void;
     children?: React.ReactNode;
+    size?: 'sm' | 'md' | 'lg' | 'xl';
 };
 
-export function Modal({ open, onOpenChange, children }: ModalProps) {
+export function Modal({ open, onOpenChange, children, size = 'xl' }: ModalProps) {
     useEffect(() => {
         if (typeof window === 'undefined') return;
         document.body.style.overflow = open ? 'hidden' : '';
@@ -16,6 +17,13 @@ export function Modal({ open, onOpenChange, children }: ModalProps) {
 
     if (!open) return null;
 
+    const sizeClasses = {
+        sm: 'max-w-sm',
+        md: 'max-w-md',
+        lg: 'max-w-4xl',
+        xl: 'max-w-5xl',
+    };
+
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center ">
             <div
@@ -23,7 +31,7 @@ export function Modal({ open, onOpenChange, children }: ModalProps) {
                 onClick={() => onOpenChange?.(false)}
                 aria-hidden
             />
-            <div className="relative w-full max-w-5xl mx-4 " >
+            <div className={`relative w-full ${sizeClasses[size]} mx-4`} >
                 {children}
             </div>
         </div>,
@@ -31,9 +39,9 @@ export function Modal({ open, onOpenChange, children }: ModalProps) {
     );
 }
 
-export function ModalContent({ children }: { children?: React.ReactNode }) {
+export function ModalContent({ children, className }: { children?: React.ReactNode; className?: string }) {
     return (
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden max-h-[92vh] overflow-y-auto">
+        <div className={`bg-white rounded-lg shadow-lg overflow-hidden max-h-[92vh] overflow-y-auto ${className || ''}`}>
             {children}
         </div>
     );

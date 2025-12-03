@@ -28,13 +28,21 @@ function computeSuggestedOriginal(basePrice: number | undefined) {
   // only return if suggested > basePrice to make sense as "original" price
   return suggested > price ? suggested : undefined;
 }
+// Add props interface
+interface TourResultsProps {
+  isLoading: boolean;
+  sortedTours: any[]; // Define proper type if available
+  favorites: any[]; // Define proper type if available
+  toggleFavorite: (id: any) => void;
+  formatPrice: (price: number) => string;
+}
 export default function TourResults({
   isLoading,
   sortedTours,
   favorites,
   toggleFavorite,
   formatPrice
-}) {
+}: TourResultsProps) {
   // Save a viewed tour identifier (slug or id) to localStorage (most-recent-first, max 10)
   const saveRecentTour = (tour: any) => {
     if (typeof window === 'undefined') return;

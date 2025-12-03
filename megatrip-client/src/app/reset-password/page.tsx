@@ -7,7 +7,7 @@ import { Label } from '../components/ui/label';
 import auth from '../../apis/auth';
 
 export default function ResetPasswordPage() {
-    const searchParams = useSearchParams();
+    const searchParams = useSearchParams()!;
     const router = useRouter();
     const [email, setEmail] = useState('');
     const [token, setToken] = useState('');

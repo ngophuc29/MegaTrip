@@ -307,7 +307,7 @@ export default function ChiTietVeMayBay() {
 
 
         // Sửa: Log tất cả ghế có price > 0 (bỏ 'CH' để debug)
-        const paidSeats = rows.flatMap(r => r.seats.filter(s => s.price > 0));
+        const paidSeats = rows.flatMap((r: any) => r.seats.filter((s: any) => s.price > 0));
         console.log(`🔍 [${leg}] Ghế trả phí (price > 0):`, paidSeats.map(s => ({ number: s.number, price: s.price, availability: s.availability, characteristics: s.characteristics })));
         console.log(`🔍 [${leg}] Ghế trả phí có trong bookedSeatsByLeg[${leg}]:`, paidSeats.filter(s => bookedSeatsByLeg[leg].includes(s.number)).map(s => s.number));
 
@@ -332,16 +332,16 @@ export default function ChiTietVeMayBay() {
                 };
             }),
         }));
-        const occupiedFromAmadeus = markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED' && !bookedSeatsByLeg[leg].includes(s.number)).map(s => s.number));
+        const occupiedFromAmadeus = markedRows.flatMap((r: any) => r.seats.filter((s: any) => s.availability === 'OCCUPIED' && !bookedSeatsByLeg[leg].includes(s.number)).map((s: any) => s.number));
         const occupiedFromBooking = bookedSeatsByLeg[leg];
         console.log(`🔍 [ChiTietMayBay] Ghế OCCUPIED từ Amadeus:`, occupiedFromAmadeus);
         console.log(`🔍 [ChiTietMayBay] Ghế OCCUPIED từ vé đã đặt:`, occupiedFromBooking);
-        console.log(`🔍 [ChiTietMayBay] Tổng ghế OCCUPIED sau mark:`, markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED').map(s => s.number))); // Từ Amadeus + vé nếu có
+        console.log(`🔍 [ChiTietMayBay] Tổng ghế OCCUPIED sau mark:`, markedRows.flatMap((r: any) => r.seats.filter((s: any) => s.availability === 'OCCUPIED').map((s: any) => s.number))); // Từ Amadeus + vé nếu có
 
         // Thêm log tổng hợp cho từng chuyến
         const totalOccupiedFromAmadeus = occupiedFromAmadeus.length;
         const totalOccupiedFromBooking = occupiedFromBooking.length;
-        const totalOccupiedFinal = markedRows.flatMap(r => r.seats.filter(s => s.availability === 'OCCUPIED')).length;
+        const totalOccupiedFinal = markedRows.flatMap((r: any) => r.seats.filter((s: any) => s.availability === 'OCCUPIED')).length;
         console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED từ Amadeus: ${totalOccupiedFromAmadeus}`);
         console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED từ vé đã đặt: ${totalOccupiedFromBooking}`);
         console.log(`📊 [${leg.toUpperCase()}] Tổng ghế OCCUPIED cuối cùng: ${totalOccupiedFinal}`);
@@ -463,10 +463,10 @@ export default function ChiTietVeMayBay() {
                 // Cập nhật seatmaps
                 if (stored?.seatmap?.[outKey]) {
                     const rawOut = stored.seatmap[outKey];
-                    setCachedSeatmap((prev) => ({ ...(prev || {}), outbound: rawOut }));
+                    setCachedSeatmap((prev: any) => ({ ...(prev || {}), outbound: rawOut }));
                     const parsedOut = parseSeatmap(rawOut);
-                    setParsedSeatmaps((prev) => ({ ...(prev || {}), outbound: parsedOut.rows }));
-                    setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), outbound: parsedOut.amenities }));
+                    setParsedSeatmaps((prev: any) => ({ ...(prev || {}), outbound: parsedOut.rows }));
+                    setParsedAmenitiesByLeg((prev: any) => ({ ...(prev || {}), outbound: parsedOut.amenities }));
                     setSeatmapSummary(parsedOut.summary);
                     setAircraftAmenities(parsedOut.amenities);
                     setSeatRows(parsedOut.rows);
@@ -478,10 +478,10 @@ export default function ChiTietVeMayBay() {
                 }
                 if (stored?.seatmap?.[inKey]) {
                     const rawIn = stored.seatmap[inKey];
-                    setCachedSeatmap((prev) => ({ ...(prev || {}), inbound: rawIn }));
+                    setCachedSeatmap((prev: any) => ({ ...(prev || {}), inbound: rawIn }));
                     const parsedIn = parseSeatmap(rawIn);
-                    setParsedSeatmaps((prev) => ({ ...(prev || {}), inbound: parsedIn.rows }));
-                    setParsedAmenitiesByLeg((prev) => ({ ...(prev || {}), inbound: parsedIn.amenities }));
+                    setParsedSeatmaps((prev: any) => ({ ...(prev || {}), inbound: parsedIn.rows }));
+                    setParsedAmenitiesByLeg((prev: any) => ({ ...(prev || {}), inbound: parsedIn.amenities }));
                 }
             } else {
                 const pricing = stored?.pricing?.[lookupId];
@@ -577,6 +577,7 @@ export default function ChiTietVeMayBay() {
                         });
                     });
                 } else if (typeof val === 'object') {
+                    if (val) {
                     Object.entries(val).forEach(([subKey, entry]: any, idx) => {
                         if (!entry) return;
                         const price = entry?.price?.amount ?? entry?.amount ?? entry?.amount?.value ?? null;
@@ -599,6 +600,7 @@ export default function ChiTietVeMayBay() {
                             sourceKey: key,
                         });
                     });
+                    }
                 }
             }
             setDynamicAddOnServices([...addOnServices, ...includedAddOns.filter(ia => !addOnServices.some(s => s.id === ia.id))]);
@@ -902,7 +904,7 @@ export default function ChiTietVeMayBay() {
     let isChangeable = flightDetails.changeable;
     try {
         for (const r of Object.values(detailedFareRules || {})) {
-            const notes = r?.fareNotes?.descriptions ?? [];
+            const notes = (r as any)?.fareNotes?.descriptions ?? [];
             for (const n of notes) {
                 if (String(n?.text ?? '').toUpperCase().includes('CHANGE')) {
                     isChangeable = true;
@@ -1065,17 +1067,17 @@ export default function ChiTietVeMayBay() {
 
 
     // compute only extras (add-ons + seat fees) to be added on top of derived.offerTotal when present
-    const computeExtras = () => {
-        const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
-            const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
-            if (!addOn) return total;
-            const per = addOnPerPassenger[addOnId] ?? false;
-            const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
-            return total + ((addOn?.price || 0) * qty);
-        }, 0);
-        const seatSelectedTotal = selectedSeats.reduce((sum, s) => sum + (s.price || 0), 0);
-        return addOnTotal + seatSelectedTotal;
-    };
+    // const computeExtras = () => {
+    //     const addOnTotal = selectedAddOns.reduce((total, addOnId) => {
+    //         const addOn = dynamicAddOnServices.find(service => service.id === addOnId);
+    //         if (!addOn) return total;
+    //         const per = addOnPerPassenger[addOnId] ?? false;
+    //         const qty = per ? (participants.adults + participants.children + participants.infants) : 1;
+    //         return total + ((addOn?.price || 0) * qty);
+    //     }, 0);
+    //     const seatSelectedTotal = selectedSeats.reduce((sum: number, s: any) => sum + (s.price || 0), 0);
+    //     return addOnTotal + seatSelectedTotal;
+    // };
 
     const getAmenityIcon = (amenity: string) => {
         switch (amenity) {
@@ -1317,7 +1319,7 @@ export default function ChiTietVeMayBay() {
         const legs = isRoundtrip ? ['outbound', 'inbound'] : ['outbound'];
         legs.forEach((leg) => {
             // Remove ghế đã booked khỏi selectedSeatsByLeg - nhưng bookedSeatsByLeg luôn rỗng
-            const currentSeats = selectedSeatsByLeg[leg].filter(s => !bookedSeatsByLeg[leg].includes(s.number));
+            const currentSeats = selectedSeatsByLeg[leg as keyof typeof selectedSeatsByLeg].filter((s: any) => !bookedSeatsByLeg[leg as keyof typeof bookedSeatsByLeg].includes(s.number));
             setSelectedSeatsByLeg((prev) => ({
                 ...prev,
                 [leg]: currentSeats,
@@ -1326,32 +1328,32 @@ export default function ChiTietVeMayBay() {
             if (currentSeats.length > max) {
                 setSelectedSeatsByLeg((prev) => ({
                     ...prev,
-                    [leg]: prev[leg].slice(0, max),
+                    [leg]: prev[leg as keyof typeof prev].slice(0, max),
                 }));
                 return;
             }
             if (currentSeats.length < max && parsedSeatmaps[leg]?.length > 0) {
-                const alreadyIds = new Set(currentSeats.map((s) => s.id));
-                const allSeats = parsedSeatmaps[leg].flatMap((r) => r.seats || []);
-                const freeSeats = allSeats.filter((s) => {
-                    const chars = (s.characteristics ?? []).map((c) => String(c).toUpperCase());
+                const alreadyIds = new Set(currentSeats.map((s: any) => s.id));
+                const allSeats = parsedSeatmaps[leg].flatMap((r: any) => r.seats || []);
+                const freeSeats = allSeats.filter((s: any) => {
+                    const chars = (s.characteristics ?? []).map((c: any) => String(c).toUpperCase());
                     const hasCH = chars.includes('CH');
                     const priceIsZero = Number(s.price || 0) === 0;
                     // Thêm check: loại bỏ ghế đã booked - nhưng luôn false
-                    const isBooked = bookedSeatsByLeg[leg].includes(s.number);
+                    const isBooked = bookedSeatsByLeg[leg as keyof typeof bookedSeatsByLeg].includes(s.number);
                     return s.availability === 'AVAILABLE' && priceIsZero && !hasCH && !alreadyIds.has(s.id) && !isBooked;
                 });
                 if (freeSeats.length > 0) {
                     const need = Math.min(max - currentSeats.length, freeSeats.length);
                     setSelectedSeatsByLeg((prev) => ({
                         ...prev,
-                        [leg]: [...prev[leg], ...freeSeats.slice(0, need)],
+                        [leg]: [...prev[leg as keyof typeof prev], ...freeSeats.slice(0, need)],
                     }));
                 }
             }
             // Cập nhật seatRows sau khi chọn ghế
             if (parsedSeatmaps[leg]?.length > 0) {
-                const markedRows = markOccupiedSeats(parsedSeatmaps[leg], leg);
+                const markedRows = markOccupiedSeats(parsedSeatmaps[leg], leg as 'outbound' | 'inbound');
                 setSeatRows(markedRows);
                 setMarkedSeatRows(markedRows);
             }
@@ -1532,11 +1534,11 @@ export default function ChiTietVeMayBay() {
     })();
 
     const calculateTotal = () => {
-        const outboundAdultUnit = derivedOutbound.adultsUnit || parseNumberSafe(outboundCachedPricing?.price?.total ?? flightDetails.fareRules[selectedFare].price);
+        const outboundAdultUnit = derivedOutbound.adultsUnit || parseNumberSafe(outboundCachedPricing?.price?.total ?? (flightDetails as any).fareRules[selectedFare].price);
         const outboundChildUnit = derivedOutbound.childrenUnit || Math.round(outboundAdultUnit * 0.75);
         const outboundInfantUnit = derivedOutbound.infantsUnit || Math.round(outboundAdultUnit * 0.2);
 
-        const inboundAdultUnit = isRoundtrip && inboundCachedPricing ? (derivedInbound.adultsUnit || parseNumberSafe(inboundCachedPricing.price?.total ?? flightDetails.fareRules[selectedFare].price)) : 0;
+        const inboundAdultUnit = isRoundtrip && inboundCachedPricing ? (derivedInbound.adultsUnit || parseNumberSafe(inboundCachedPricing.price?.total ?? (flightDetails as any).fareRules[selectedFare].price)) : 0;
         const inboundChildUnit = isRoundtrip && inboundCachedPricing ? (derivedInbound.childrenUnit || Math.round(inboundAdultUnit * 0.75)) : 0;
         const inboundInfantUnit = isRoundtrip && inboundCachedPricing ? (derivedInbound.infantsUnit || Math.round(inboundAdultUnit * 0.2)) : 0;
 
@@ -1608,7 +1610,7 @@ export default function ChiTietVeMayBay() {
                 setAircraftAmenities(parsedOnFly.amenities);
             } else {
                 // Không có data nào, set rỗng
-                const markedRows = [];
+                const markedRows: any[] = [];
                 setSeatRows(markedRows);
                 setMarkedSeatRows(markedRows);
             }
@@ -1662,8 +1664,8 @@ export default function ChiTietVeMayBay() {
         // prefer nice city name, then state, then fallbackCity, finally iata
         if (entry) return entry.city || entry.state || fallbackCity || code;
         // some sources send IATA in city field (like "DAD"), detect and try map too
-        if ((fallbackCity ?? '').length === 3 && airportsMap?.[fallbackCity?.toUpperCase()]) {
-            const e2 = airportsMap[fallbackCity!.toUpperCase()];
+        if ((fallbackCity ?? '').length === 3 && airportsMap?.[(fallbackCity as any)?.toUpperCase()]) {
+            const e2 = airportsMap[(fallbackCity as any)!.toUpperCase()];
             return e2.city || e2.state || code;
         }
         return fallbackCity || code;
@@ -1880,7 +1882,7 @@ export default function ChiTietVeMayBay() {
                                     </CardHeader>
                                     <CardContent>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {dynamicAddOnServices.map((service) => (
+                                            {dynamicAddOnServices.map((service: any) => (
                                                 <div
                                                     key={service.id}
                                                     className={`border rounded-lg p-4 transition-colors ${selectedAddOnsByLeg[selectedLeg].includes(service.id)
@@ -2288,7 +2290,7 @@ export default function ChiTietVeMayBay() {
                                                 {selectedAddOnsByLeg.outbound.length > 0 && (
                                                     <div className="space-y-1">
                                                         {selectedAddOnsByLeg.outbound.map((addOnId) => {
-                                                            const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                            const addOn:any = dynamicAddOnServices.find((service) => service.id === addOnId);
                                                             if (!addOn) return null;
                                                             const qty = addOnPerPassenger[addOnId] || 1; // Lấy số lượng
                                                             return (
@@ -2390,7 +2392,7 @@ export default function ChiTietVeMayBay() {
                                                         {selectedAddOnsByLeg.inbound.length > 0 && (
                                                             <div className="space-y-1">
                                                                 {selectedAddOnsByLeg.inbound.map((addOnId) => {
-                                                                    const addOn = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                                    const addOn: any = dynamicAddOnServices.find((service) => service.id === addOnId);
                                                                     if (!addOn) return null;
                                                                     const qty = addOnPerPassenger[addOnId] || 1; // Sử dụng số lượng từ state
                                                                     return (
@@ -2663,9 +2665,9 @@ export default function ChiTietVeMayBay() {
                                                     // Tính toán dữ liệu booking
                                                     const paxCount = participants.adults + participants.children + participants.infants;
                                                     const pricingPerPax = {
-                                                        adultUnit: Math.round(derived.adultsUnit || flightDetails.fareRules[selectedFare].price),
-                                                        childUnit: Math.round(derived.childrenUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.75)),
-                                                        infantUnit: Math.round(derived.infantsUnit || Math.round(flightDetails.fareRules[selectedFare].price * 0.2)),
+                                                        adultUnit: Math.round(derived.adultsUnit || (flightDetails as any).fareRules[selectedFare].price),
+                                                        childUnit: Math.round(derived.childrenUnit || Math.round((flightDetails as any).fareRules[selectedFare].price * 0.75)),
+                                                        infantUnit: Math.round(derived.infantsUnit || Math.round((flightDetails as any).fareRules[selectedFare].price * 0.2)),
                                                     };
                                                     const paxTotals = {
                                                         adultsTotal: pricingPerPax.adultUnit * participants.adults,

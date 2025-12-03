@@ -147,7 +147,7 @@ export default function DoiLichPage() {
         const airlineName = dictionaries?.carriers?.[carrier] || carrier || 'Unknown';
 
         const aircraftCodes = [...new Set(segments.map((s: any) => s.aircraft?.code).filter(Boolean))];
-        const aircraft = aircraftCodes.map((c: string) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
+        const aircraft = (aircraftCodes as any)?.map((c: string) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
 
         const stopsCount = Math.max(0, segments.length - 1);
         const stopsText = stopsCount === 0 ? 'Bay thẳng' : `${stopsCount} dừng`;
@@ -500,7 +500,7 @@ export default function DoiLichPage() {
             const pp = (selectedOption as any).perPax;
             computedNewTotalBase = (Number(pp.adult || 0) * adults) + (Number(pp.child || 0) * children) + (Number(pp.infant || 0) * infants);
         } else if (selectedOption) {
-            const unitPrice = Number(selectedOption.raw?.price?.total || selectedOption.price || selectedOption.fare || 0);
+            const unitPrice = Number((selectedOption as any).raw?.price?.total || (selectedOption as any).price || selectedOption.fare || 0);
             // Fix: For flight, price is already total; don't multiply by totalPax
             if (booking?.type === 'flight') {
                 computedNewTotalBase = unitPrice;
@@ -929,9 +929,9 @@ export default function DoiLichPage() {
         const fetchAndMatchTickets = async () => {
             // Log ngày của selectedOption's flight
             const selectedOffer = options.find((f: any) => f.id === selectedOptionId);
-            console.log(`🔍 [Đổi lịch] Ngày flight outbound:`, selectedOffer?.raw?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] || 'Không có');
-            if (selectedOffer?.raw?.itineraries?.[0]?.segments?.[1]) {  // Nếu có inbound (roundtrip)
-                console.log(`🔍 [Đổi lịch] Ngày flight inbound:`, selectedOffer.raw.itineraries[0].segments[1]?.departure?.at?.split('T')?.[0] || 'Không có');
+            console.log(`🔍 [Đổi lịch] Ngày flight outbound:`, (selectedOffer as any)?.raw?.itineraries?.[0]?.segments?.[0]?.departure?.at?.split('T')?.[0] || 'Không có');
+            if ((selectedOffer as any)?.raw?.itineraries?.[0]?.segments?.[1]) {  // Nếu có inbound (roundtrip)
+                console.log(`🔍 [Đổi lịch] Ngày flight inbound:`, (selectedOffer as any).raw.itineraries[0].segments[1]?.departure?.at?.split('T')?.[0] || 'Không có');
             }
             try {
                 // Fetch tickets: chỉ lấy flight tickets với status paid/changed (đồng bộ với ChiTietMayBay)
@@ -1013,7 +1013,7 @@ export default function DoiLichPage() {
                         if (!ticketFlight) return;
 
                         // Match with selectedOffer's segment (for the new flight)
-                        const segment = selectedOffer?.raw?.itineraries?.[0]?.segments?.[selectedLeg === 'outbound' ? 0 : 1];  // 0 for outbound, 1 for inbound if roundtrip
+                        const segment = (selectedOffer as any)?.raw?.itineraries?.[0]?.segments?.[selectedLeg === 'outbound' ? 0 : 1];  // 0 for outbound, 1 for inbound if roundtrip
                         const didMatch = segment ? matchFlight(segment, ticketFlight) : false;
 
                         // Add seats only when matched (for paid/changed tickets)
@@ -1103,7 +1103,7 @@ export default function DoiLichPage() {
                     const tour = j && j.data ? j.data : j;
                     let dates = Array.isArray(tour?.startDates) ? tour.startDates : [];
                     // Filter chỉ giữ ngày > today
-                    dates = dates.filter(d => d > todayIso);
+                    dates = dates.filter((d: any) => d > todayIso);
                     const adultUnit = Number(tour?.adultPrice ?? tour?.pricing?.perPax?.adultUnit ?? tour?.price ?? 0);
                     const childUnit = Number(tour?.childPrice ?? tour?.pricing?.perPax?.childUnit ?? 0);
                     const infantUnit = Number(tour?.infantPrice ?? tour?.pricing?.perPax?.infantUnit ?? 0);
@@ -1113,7 +1113,7 @@ export default function DoiLichPage() {
                     const dateList = (dates || []).map((d: any) => {
                         try { return new Date(d).toISOString(); } catch { return String(d); }
                     });
-                    const slotPromises = dateList.map(async (dtIso, idx) => {
+                    const slotPromises = dateList.map(async (dtIso: any, idx: number) => {
                         const dateIso = dtIso.split('T')[0];
                         const slotUrl = `${Tourbase}/api/tours/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
                         try {
@@ -1167,7 +1167,7 @@ export default function DoiLichPage() {
                     //     const daysDiff = (depDateMidnight.getTime() - nowMidnight.getTime()) / (1000 * 60 * 60 * 24);
                     //     return daysDiff > 3;
                     // });
-                    dates = dates.filter(d => {
+                    dates = dates.filter((d: any) => {
                         const depDate = new Date(d + 'T00:00:00'); // assuming d is YYYY-MM-DD
                         const hoursDiff = (depDate.getTime() - now.getTime()) / (1000 * 60 * 60);
                         return hoursDiff >= 24; // Match canChange policy for bus
@@ -1182,7 +1182,7 @@ export default function DoiLichPage() {
                     const dateList = (dates || []).map((d: any) => {
                         try { return new Date(d).toISOString(); } catch { return String(d); }
                     });
-                    const slotPromises = dateList.map(async (dtIso) => {
+                    const slotPromises = dateList.map(async (dtIso: any) => {
                         const dateIso = dtIso.split('T')[0];
                         const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(dateIso)}`;
                         try {
@@ -1526,7 +1526,7 @@ export default function DoiLichPage() {
         setSelectedSeats((prev) => (prev && prev.length ? [] : prev));
         setSeatMap((prev) => (prev && prev.length ? [] : prev));
         // Reset cho flight
-        if (booking.type !== 'flight') {
+        if ((booking as any).type !== 'flight') {
             setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
             setSelectedSeats([]);
             setSelectedSeatFees(0);  // Reset phí ghế
@@ -1543,14 +1543,14 @@ export default function DoiLichPage() {
             }
 
             const selectedOffer = options.find((f: any) => f.id === selectedOptionId);
-            if (!selectedOffer || !selectedOffer.raw) {
+            if (!selectedOffer || !(selectedOffer as any).raw) {
                 setFlightSeatMap({ rows: [], summary: null, amenities: null, freeSeats: [] });
                 return;
             }
             setSeatmapLoading(true);
 
             try {
-                const seatmap = await fetchSeatmapForFlight(selectedOffer.raw);
+                const seatmap = await fetchSeatmapForFlight((selectedOffer as any).raw);
                 if (seatmap) {
                     const parsed = parseSeatmap(seatmap);
                     // Áp dụng markOccupiedSeats cho leg hiện tại (outbound/inbound dựa trên selectedLeg)
@@ -1777,8 +1777,8 @@ export default function DoiLichPage() {
                                                                             console.log('Selected option ID:', value);
                                                                             const selectedOpt = options.find(o => o.id === value);  // Tìm item từ options
                                                                             console.log('Selected option item (full):', selectedOpt);
-                                                                            if (selectedOpt?.raw) {
-                                                                                console.log('Selected option raw data for seatmap:', selectedOpt.raw);
+                                                                            if ((selectedOpt as any)?.raw) {
+                                                                                console.log('Selected option raw data for seatmap:', (selectedOpt as any).raw);
                                                                             } else {
                                                                                 console.log('No raw data found for selected option');
                                                                             }
@@ -1790,11 +1790,11 @@ export default function DoiLichPage() {
                                                                                         <div className="flex items-center gap-3">
                                                                                             <RadioGroupItem value={opt.id} />
                                                                                             <div>
-                                                                                                <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {opt.departure.time}</div>
+                                                                                                <div className="font-medium flex items-center gap-2"><Clock className="h-4 w-4" /> {(opt as any).departure.time}</div>
                                                                                             </div>
                                                                                         </div>
                                                                                         <div className="text-right">
-                                                                                            <div className="text-sm">Phí mới {formatPrice(opt.price)}</div>
+                                                                                            <div className="text-sm">Phí mới {formatPrice((opt as any).price)}</div>
                                                                                         </div>
                                                                                     </label>
                                                                                 ))}
@@ -1849,7 +1849,7 @@ export default function DoiLichPage() {
                                                                 ) : Object.keys(groupedOptions).length ? (
                                                                     Object.keys(groupedOptions).sort().map((date) => {
                                                                         const opts = groupedOptions[date];
-                                                                        const seats = opts[0]?.seatsAvailable ?? '-';
+                                                                        const seats = (opts[0] as any)?.seatsAvailable ?? '-';
                                                                         const selected = selectedDateLabel === date;
                                                                         return (
                                                                             <button

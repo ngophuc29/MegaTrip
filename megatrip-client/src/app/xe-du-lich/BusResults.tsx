@@ -116,7 +116,7 @@ export default function BusResults({
                     <div className="flex items-center gap-2 mt-3">
                       <span className="text-sm text-[hsl(var(--muted-foreground))]">Tiện ích:</span>
                       <div className="flex gap-1">
-                        {bus.amenities.map((amenity, index) => (
+                        {bus.amenities.map((amenity:any, index:any) => (
                           <span key={index} className="text-sm" title={amenity}>
                             {getAmenityIcon(amenity)}
                           </span>
@@ -178,7 +178,7 @@ export default function BusResults({
                             (Array.isArray(bus.pickup) && bus.pickup.length > 0)
                               ? bus.pickup
                               : (bus.routeFrom && bus.routeFrom.name ? [bus.routeFrom.name] : [])
-                          ).map((location, index) => (
+                          ).map((location:any, index:any) => (
                             <div key={index} className="flex items-start gap-1">
                               <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
                               {location}
@@ -194,7 +194,7 @@ export default function BusResults({
                             (Array.isArray(bus.dropoff) && bus.dropoff.length > 0)
                               ? bus.dropoff
                               : (bus.routeTo && bus.routeTo.name ? [bus.routeTo.name] : [])
-                          ).map((location, index) => (
+                          ).map((location:any, index:any) => (
                             <div key={index} className="flex items-start gap-1">
                               <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
                               {location}

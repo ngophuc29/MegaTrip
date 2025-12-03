@@ -59,7 +59,7 @@ const sampleFlights = [
         originalPrice: 2490000,
         class: 'Phổ thông',
         baggage: {
-            handbag: { weight: '7kg', pieces: '56x36x23cm' },
+            handbag: { weight: '7kg', pieces: '56x36x23cm', unit: '' },
             checkin: { weight: '23kg', pieces: 1 }
         },
         amenities: {
@@ -87,7 +87,8 @@ const sampleFlights = [
             'Ưu tiên check-in online',
             'Chọn chỗ ngồi miễn phí (hạng phổ thông)',
             'Bảo hiểm chuyến bay'
-        ]
+        ],
+        raw: undefined // Add raw property
     },
     {
         id: 2,
@@ -100,8 +101,8 @@ const sampleFlights = [
         price: 1690000,
         class: 'Phổ thông',
         baggage: {
-            handbag: { weight: '7kg', size: '56x36x23cm' },
-            checkin: { weight: '20kg', pieces: 1 }
+            handbag: { weight: '7kg', size: '56x36x23cm', unit: '' },
+            checkin: { weight: '20kg', pieces: 1, unit: '' },
         },
         amenities: {
             wifi: { available: true, free: true },
@@ -137,8 +138,8 @@ const sampleFlights = [
         price: 2290000,
         class: 'Phổ thông Plus',
         baggage: {
-            handbag: { weight: '10kg', size: '56x36x23cm' },
-            checkin: { weight: '23kg', pieces: 1 }
+            handbag: { weight: '10kg', size: '56x36x23cm', unit: '' },
+            checkin: { weight: '23kg', pieces: 1 ,unit: '' },
         },
         amenities: {
             wifi: { available: true, free: true },
@@ -367,7 +368,7 @@ export default function VeMayBay() {
 
         // aircraft: combine segment aircraft names or pick first
         const aircraftCodes = [...new Set(segments.map((s: any) => s.aircraft?.code).filter(Boolean))];
-        const aircraft = aircraftCodes.map((c: string) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
+        const aircraft = aircraftCodes.map((c: any) => dictionaries?.aircraft?.[c] || c).join(' / ') || '';
 
         // stops
         const stopsCount = Math.max(0, segments.length - 1);
@@ -678,11 +679,11 @@ export default function VeMayBay() {
 
                 // adjust priceRange if necessary (preserve existing logic)
                 if (mapped.length > 0) {
-                    const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
+                    const prices = mapped.map((m: any) => Number(m.price) || 0).filter(Boolean);
                     if (prices.length > 0) {
                         const minP = Math.min(...prices);
                         const maxP = Math.max(...prices);
-                        const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
+                        const anyInCurrentRange = prices.some((p: any) => p >= priceRange[0] && p <= priceRange[1]);
                         if (!anyInCurrentRange) {
                             setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
                         }
@@ -1897,7 +1898,7 @@ export default function VeMayBay() {
             const travelerPricings = offer?.travelerPricings ?? [];
             const fareBasis = travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.fareBasis ?? travelerPricings?.[0]?.fareBasis ?? null;
             const rule = Object.values(detailedFareRules).find((fr: any) => (fareBasis && fr?.fareBasis === fareBasis) || !!fr);
-            const penalty = rule?.fareNotes?.descriptions?.find((desc: any) => desc.descriptionType === 'PENALTIES');
+            const penalty = (rule as any)?.fareNotes?.descriptions?.find((desc: any) => desc.descriptionType === 'PENALTIES');
             if (!penalty?.text) return false;
             const txt = String(penalty.text).toUpperCase();
             return txt.includes('CHANGE') || txt.includes('CHANGES ANY TIME') || txt.includes('CHANGES');
@@ -1919,7 +1920,7 @@ export default function VeMayBay() {
     })();
     const [seatmapByFlight, setSeatmapByFlight] = useState<Record<string, any>>(cacheInit.seatmap);
     // state for signatures per flight
-    const [signaturesByFlight, setSignaturesByFlight] = useState<Record<string, string>>(cacheInit.signatures);
+    const [signaturesByFlight, setSignaturesByFlight] = useState<Record<string, string | null>>(cacheInit.signatures);
     // --- NEW: populate state from cache for a given key ---
     const populateFromCache = (key: string) => {
         try {
@@ -1974,7 +1975,7 @@ export default function VeMayBay() {
     const [promotions, setPromotions] = useState<any[]>([]);
     const [promotionsLoading, setPromotionsLoading] = useState(false);
     const [promotionsError, setPromotionsError] = useState<string | null>(null);
-    
+
     useEffect(() => {
         // load promotions applicable to flights
         const loadPromos = async () => {
@@ -2851,7 +2852,7 @@ export default function VeMayBay() {
                                                                                     const offerFromPricing = pricing?.data?.flightOffers?.[0] ?? (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing ?? null);
                                                                                     const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
                                                                                     const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
-                                                                                    const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                                                                    // const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
                                                                                     const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;
                                                                                     const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0];
                                                                                     const checkedQty = fareSeg?.includedCheckedBags?.quantity ?? flight.baggage?.checkin?.pieces;
@@ -3593,7 +3594,7 @@ export default function VeMayBay() {
                                                             const offerFromPricing = pricing?.data?.flightOffers?.[0] ?? (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing ?? null);
                                                             const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
                                                             const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
-                                                            const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                                            // const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
 
                                                             const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;
                                                             const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0];
@@ -4243,7 +4244,7 @@ export default function VeMayBay() {
                                                             const offerFromPricing = pricing?.data?.flightOffers?.[0] ?? (Array.isArray(pricing?.data) ? pricing.data[0] : pricing?.data ?? pricing ?? null);
                                                             const travelerForDetails = offerFromPricing?.travelerPricings?.[0] ?? offerFromPricing?.travelerPricings?.[0];
                                                             const parsedRefundForDetails = parseRefundable(travelerForDetails ?? offerFromPricing);
-                                                            const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
+                                                            // const refundForDetails = parsedRefundForDetails.amount != null ? parsedRefundForDetails.raw ?? parsedRefundForDetails.amount : null;
 
                                                             const traveler = pricing?.data?.travelerPricings?.[0] ?? pricing?.travelerPricings?.[0] ?? travelerForDetails;
                                                             const fareSeg = traveler?.fareDetailsBySegment?.[0] ?? traveler?.fareDetails?.[0];
