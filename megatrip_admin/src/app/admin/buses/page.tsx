@@ -1439,9 +1439,9 @@ export default function Buses() {
             render: (value, record: BusRoute) => {
                 const now = new Date();
                 const depDates = Array.isArray((record as any).departureDates) && (record as any).departureDates.length
-                    ? (record as any).departureDates.map(d => new Date(d))
+                    ? (record as any).departureDates.map((d: string) => new Date(d))
                     : (record.departureAt ? [new Date(record.departureAt)] : []);
-                const allPast = depDates.every(d => d < now);
+                const allPast = depDates.every((d: any) => d < now);
 
                 return (
                     <div className="flex items-center space-x-2">
