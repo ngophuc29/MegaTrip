@@ -92,7 +92,7 @@ export function ConfirmDialog({
             {requireConfirmation && (
               <div className="space-y-2">
                 <Label htmlFor="confirm-input">
-                  Để xác nhận, vui lòng nhập "<strong>{confirmationText}</strong>"
+                  Để xác nhận, vui lòng nhập &quot;{confirmationText}&quot;
                 </Label>
                 <Input
                   id="confirm-input"

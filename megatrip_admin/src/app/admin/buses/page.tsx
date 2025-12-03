@@ -2728,7 +2728,7 @@ export default function Buses() {
                 open={deleteModalOpen}
                 onOpenChange={setDeleteModalOpen}
                 title="Xóa tuyến xe"
-                message={`Bạn có chắc chắn muốn xóa tuyến xe "${busToDelete?.busCode}"?${busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? ' Tuyến xe này có đặt chỗ.' : ''}`}
+                message={`Bạn có chắc chắn muốn xóa tuyến xe &quot;${busToDelete?.busCode}&quot;?${busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? ' Tuyến xe này có đặt chỗ.' : ''}`}
                 type="danger"
                 requireTyping={true}
                 // typingText={busToDelete && (busToDelete.seatsTotal - busToDelete.seatsAvailable) > 0 ? "FORCE_DELETE" : "DELETE"}
