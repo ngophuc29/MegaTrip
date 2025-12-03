@@ -193,7 +193,7 @@ export function ConfirmModal({
               <Checkbox
                 id="confirm-checkbox"
                 checked={isChecked}
-                onCheckedChange={setIsChecked}
+                onCheckedChange={(checked) => setIsChecked(checked === true)}
               />
               <Label htmlFor="confirm-checkbox" className="text-sm">
                 {checkboxText}

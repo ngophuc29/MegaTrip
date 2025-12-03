@@ -9,7 +9,7 @@ import { useToast } from "./ui/use-toast";
 interface ImageFile {
   id: string;
 
-  file?: File | null;
+  file?: File | null | undefined;
   url: string;
   alt?: string;
   uploading?: boolean;
@@ -221,14 +221,16 @@ export function ImageUploader({
 
     // Upload files sequentially (you can parallelize if desired)
     for (const imageFile of newImages) {
-      try {
-        await uploadImage(imageFile.file, imageFile.id);
-      } catch (error) {
-        toast({
-          title: "Upload thất bại",
-          description: `Không thể upload ${imageFile.file.name}`,
-          variant: "destructive"
-        });
+      if (imageFile.file) {
+        try {
+          await uploadImage(imageFile.file, imageFile.id);
+        } catch (error) {
+          toast({
+            title: "Upload thất bại",
+            description: `Không thể upload ${imageFile.file.name}`,
+            variant: "destructive"
+          });
+        }
       }
     }
   }, [images.length, maxFiles, disabled, toast, onChange]);
@@ -294,7 +296,7 @@ export function ImageUploader({
 
   const retryUpload = (id: string) => {
     const image = images.find(img => img.id === id);
-    if (image) {
+    if (image && image.file) {
       setImages(prev =>
         prev.map(img =>
           img.id === id
@@ -305,7 +307,7 @@ export function ImageUploader({
       uploadImage(image.file, id).catch(() => {
         toast({
           title: "Upload thất bại",
-          description: `Không thể upload ${image.file.name}`,
+          description: `Không thể upload `,
           variant: "destructive"
         });
       });
