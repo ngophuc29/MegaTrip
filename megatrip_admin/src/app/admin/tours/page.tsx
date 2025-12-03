@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPin, Plus, Edit, Eye, Trash2, Calendar, DollarSign, Users, Star, Upload, RefreshCw, Globe, Settings, Image, Copy, ExternalLink, Save, FileText } from "lucide-react";
+import { MapPin, Plus, Edit, Eye, Trash2, Calendar, DollarSign, Users, Star, Upload, RefreshCw, Globe, Settings, Copy, ExternalLink, Save, FileText } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -117,6 +117,8 @@ interface TourFormData {
     metaDescription: string;
     metaKeywords: string;
     durationDisplay: string;
+    pickupPoints?: string[];
+    
 }
 
 interface TourFilters {
@@ -309,10 +311,10 @@ export default function Tours() {
     const queryClient = useQueryClient();
 
 
-    const [pagination, setPagination] = useState({
+    const [pagination, setPagination] = useState<any>({
         current: 1,
         pageSize: 10,
-    } as any);
+    } );
 
     // new: provinces state + selectedDeparture
     const [provinces, setProvinces] = useState<Province[]>([]);
@@ -352,7 +354,7 @@ export default function Tours() {
     async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
         return new Promise((resolve) => {
             try {
-                const img = new Image();
+                const img = new Image() ;
                 img.onload = () => {
                     const scale = Math.min(1, maxWidth / img.width);
                     const w = Math.max(1, Math.floor(img.width * scale));
@@ -505,11 +507,11 @@ export default function Tours() {
                 const total = body?.total || 0;
                 if (Array.isArray(data)) {
                     setTours(data.map(mapServerTour));
-                    setPagination(prev => ({ ...prev, total }));
+                    setPagination((prev: any) => ({ ...prev, total }));
                 } else {
                     console.info("No tours returned from API");
                     setTours([]);
-                    setPagination(prev => ({ ...prev, total: 0 }));
+                    setPagination((prev: any) => ({ ...prev, total: 0 }));
                 }
             } catch (err) {
                 console.error("Error fetching admin tours:", err);
@@ -1062,10 +1064,10 @@ export default function Tours() {
         },
         onSuccess: (createdTour: any) => {
             // update local UI list (convert numeric duration -> display string)
-            const displayDuration = calculateDuration(
-                createdTour.startDates?.[0] ? toLocalInput(new Date(createdTour.startDates[0])) : undefined,
-                createdTour.endDates?.[0] ? toLocalInput(new Date(createdTour.endDates[0])) : undefined
-            ) || `${createdTour.duration} ngày ${Math.max(0, createdTour.duration - 1)} đêm`;
+            const displayDuration = (createdTour.startDates?.[0] && createdTour.endDates?.[0]) ? calculateDuration(
+                toLocalInput(new Date(createdTour.startDates[0])),
+                toLocalInput(new Date(createdTour.endDates[0]))
+            ) : `${createdTour.duration} ngày ${Math.max(0, createdTour.duration - 1)} đêm`;
 
             const newTour: Tour = {
                 ...createdTour,
@@ -1144,10 +1146,11 @@ export default function Tours() {
                     tour.id === id ? {
                         ...tour,
                         ...updatedTour,
-                        duration: calculateDuration(
-                            updatedTour.startDates?.[0] ? toLocalInput(new Date(updatedTour.startDates[0])) : undefined,
-                            updatedTour.endDates?.[0] ? toLocalInput(new Date(updatedTour.endDates[0])) : undefined
-                        ) || `${updatedTour.duration} ngày ${Math.max(0, updatedTour.duration - 1)} đêm`,
+                        duration: (updatedTour.startDates?.[0] && updatedTour.endDates?.[0]) ? calculateDuration(
+                            toLocalInput(new Date(updatedTour.startDates[0])),
+                            toLocalInput(new Date(updatedTour.endDates[0]))
+                        ) : `${updatedTour.duration} ngày ${Math.max(0, updatedTour.duration - 1)} đêm`,
+
                         updatedAt: updatedTour.updatedAt ?? new Date().toISOString()
                     } : tour
                 )
@@ -1484,7 +1487,6 @@ export default function Tours() {
         setFormData({
             name: "",
             slug: "",
-
             description: "",
             departureFrom: "",
             destination: "",
@@ -1510,10 +1512,11 @@ export default function Tours() {
             cancellationPolicy: DEFAULT_CANCELLATION_POLICY,
             status: "draft",
             highlight: false,
-            visibility: "public",
+            isVisible: true,
             metaTitle: "",
             metaDescription: "",
             metaKeywords: "",
+            durationDisplay: "",
         });
         setFormErrors({});
         setIsFormDirty(false);

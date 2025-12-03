@@ -25,6 +25,7 @@ interface ImageUploaderProps {
   accept?: string;
   className?: string;
   disabled?: boolean;
+  hint?: string;
 }
 
 export function ImageUploader({
@@ -35,6 +36,7 @@ export function ImageUploader({
   accept = "image/*",
   className,
   disabled = false,
+  hint,
 }: ImageUploaderProps) {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
