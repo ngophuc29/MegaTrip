@@ -184,7 +184,7 @@ const SystemSettings: React.FC = () => {
 
     // Update settings mutation
     const updateSettingsMutation = useMutation({
-        mutationFn: async (data: Partial<SystemSettings>) => {
+        mutationFn: async (data: any) => {
             Object.assign(mockSettings, {
                 ...data,
                 paymentProviders: {
@@ -199,7 +199,7 @@ const SystemSettings: React.FC = () => {
                     ...mockSettings.smsNotifications,
                     ...data.smsNotifications,
                 },
-                corsOrigins: data.corsOrigins ? data.corsOrigins.split("\n").map((s) => s.trim()).filter(Boolean) : mockSettings.corsOrigins,
+                corsOrigins: data.corsOrigins ? data.corsOrigins.split("\n").map((s:any) => s.trim()).filter(Boolean) : mockSettings.corsOrigins,
             });
             return mockSettings;
         },
