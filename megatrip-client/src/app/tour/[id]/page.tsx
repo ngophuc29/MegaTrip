@@ -891,7 +891,7 @@ export default function ChiTietTour() {
                                         <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
                                         <span className="font-medium">{tourDetails.rating}</span>
                                     </div>
-                                    <span className="text-muted-foreground">({tourDetails.reviews1?.comments.length} đánh giá)</span>
+                                    {/* <span className="text-muted-foreground">({tourDetails.reviews1?.comments.length} đánh giá)</span> */}
                                 </div>
 
                                 <div className="space-y-2">
@@ -1245,8 +1245,8 @@ export default function ChiTietTour() {
                                         {Object.entries(distribution.reduce((acc: Record<number, number>, d) => ({ ...acc, [d.star]: d.count }), {})).reverse().map(([stars, count]) => (
                                             <div key={stars} className="flex items-center gap-2">
                                                 <span className="text-sm w-8">{stars}★</span>
-                                                <Progress value={(count / reviews.length) * 100} className="flex-1" />
-                                                <span className="text-sm text-muted-foreground w-8">{Math.round((count / reviews.length) * 100)}%</span>
+                                                <Progress value={reviews.length > 0 ? (count / reviews.length) * 100 : 0} className="flex-1" />
+                                                <span className="text-sm text-muted-foreground w-8">{reviews.length > 0 ? Math.round((count / reviews.length) * 100) : 0}%</span>
                                             </div>
                                         ))}
                                     </div>
@@ -1255,17 +1255,19 @@ export default function ChiTietTour() {
                                 <Separator />
 
                                 {/* Detailed Ratings */}
-                                <div>
-                                    <h4 className="font-semibold mb-3">Đánh giá chi tiết</h4>
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                                        {Object.entries(tourDetails.reviews1.breakdown).map(([category, rating]) => (
-                                            <div key={category} className="text-center">
-                                                <div className="font-medium text-primary">{rating}</div>
-                                                <div className="text-xs text-muted-foreground capitalize">{category}</div>
-                                            </div>
-                                        ))}
+                                {tourDetails.reviews1.breakdown && (
+                                    <div>
+                                        <h4 className="font-semibold mb-3">Đánh giá chi tiết</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                                            {Object.entries(tourDetails.reviews1.breakdown).map(([category, rating]) => (
+                                                <div key={category} className="text-center">
+                                                    <div className="font-medium text-primary">{rating}</div>
+                                                    <div className="text-xs text-muted-foreground capitalize">{category}</div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
                                 <Separator />
 

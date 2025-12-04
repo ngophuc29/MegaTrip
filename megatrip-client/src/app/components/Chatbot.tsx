@@ -63,7 +63,7 @@ const Chatbot = () => {
                     dataPrompt = filtered.map((t: any) =>
                         `**${t.name}**\n` +
                         `💰 ${t.adultPrice.toLocaleString()}đ | ⏱ ${t.duration} ngày | 📍 ${t.departureFrom} → ${t.destination}\n` +
-                        `🔗 [Đặt ngay](http://localhost:3000/tour/${t.slug})`
+                        `🔗 [Đặt ngay](https://mega-trip-eewz.vercel.app/tour/${t.slug})`
                     ).join('\n\n')
                 } else {
                     dataPrompt = 'Không tìm thấy tour phù hợp.'
@@ -79,7 +79,7 @@ const Chatbot = () => {
                     dataPrompt = filtered.map((b: any) =>
                         `**${b.operator.name}**\n` +
                         `📍 ${b.routeFrom.city} → ${b.routeTo.city} | 💰 ${b.adultPrice.toLocaleString()}đ\n` +
-                        `🔗 [Đặt ngay](http://localhost:3000/xe-du-lich/${b._id})`
+                        `🔗 [Đặt ngay](https://mega-trip-eewz.vercel.app/xe-du-lich/${b._id})`
                     ).join('\n\n')
                 } else {
                     dataPrompt = 'Hiện tại chưa có xe đi điểm bạn muốn. Bạn thử tìm điểm khác hoặc kiểm tra lại sau nhé!'
@@ -87,7 +87,7 @@ const Chatbot = () => {
             }
 
             else if (lowerInput.includes('máy bay') || lowerInput.includes('flight')) {
-                dataPrompt = 'Bạn hãy chọn **điểm đi** và **điểm đến** để xem vé máy bay nhé! [Tìm vé máy bay](http://localhost:3000/ve-may-bay)';
+                dataPrompt = 'Bạn hãy chọn **điểm đi** và **điểm đến** để xem vé máy bay nhé! [Tìm vé máy bay](https://mega-trip-eewz.vercel.app/ve-may-bay)';
             }
 
             else if (lowerInput.includes('hủy') || lowerInput.includes('hủy đơn') || lowerInput.includes('chính sách hủy')) {
@@ -168,7 +168,7 @@ Liên hệ hỗ trợ nếu cần.
 **Có số hotline không?**
 - Hotline: 1900 1234
 - Zalo OA: @MegaTripVN
-👉 [Xem ưu đãi ngay](http://localhost:3000/ho-tro)
+👉 [Xem ưu đãi ngay](https://mega-trip-eewz.vercel.app/ho-tro)
 Chúng tôi luôn sẵn sàng giúp đỡ!
     `;
             }
@@ -176,7 +176,7 @@ Chúng tôi luôn sẵn sàng giúp đỡ!
             else if (lowerInput.includes('khuyến mãi') || lowerInput.includes('giảm giá')) {
                 dataPrompt = `
 **Khuyến mãi MegaTrip**
-👉 [Xem ưu đãi ngay](http://localhost:3000/khuyen-mai)
+👉 [Xem ưu đãi ngay](https://mega-trip-eewz.vercel.app/khuyen-mai)
     `;
             }
 
