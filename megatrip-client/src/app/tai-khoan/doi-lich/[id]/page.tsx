@@ -397,7 +397,7 @@ export default function DoiLichPage() {
         (async () => {
             setLoadingOrder(true);
             try {
-                const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+                const base = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
                 const r = await fetch(`${base}/api/orders/${encodeURIComponent(routeId)}`);
                 if (!r.ok) throw new Error(String(r.status));
                 const json = await r.json();
@@ -696,7 +696,7 @@ export default function DoiLichPage() {
         }
 
         const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_BASE || 'http://localhost:7000';
-        const ORDERS_API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+        const ORDERS_API = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 
         try {
             const requestBody: any = {
@@ -935,7 +935,7 @@ export default function DoiLichPage() {
             }
             try {
                 // Fetch tickets: chỉ lấy flight tickets với status paid/changed (đồng bộ với ChiTietMayBay)
-                const response = await fetch('http://localhost:7700/api/tickets?type=flight&status=paid&status=changed');
+                const response = await fetch('https://megatripserver.onrender.com/api/tickets?type=flight&status=paid&status=changed');
                 if (!response.ok) return;
                 const { data: tickets } = await response.json();
 
@@ -1060,9 +1060,9 @@ export default function DoiLichPage() {
             if (!order) { setOptions([]); return; }
             setLoadingOptions(true);
             setOptions([]);
-            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const Tourbase = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 
-            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
             const item = Array.isArray(order.items) && order.items[0] ? order.items[0] : null;
             const { adults, children, infants, seatCount } = paxCountsFromOrder(order);
             const type = (item?.type || '').toLowerCase();
@@ -1354,7 +1354,7 @@ export default function DoiLichPage() {
                 // fallback: fetch tickets by ticketIds if exists
                 const tIds = Array.isArray(order?.ticketIds) ? order.ticketIds : [];
                 if (tIds.length) {
-                    const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+                    const base = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
                     const seatList: string[] = [];
                     await Promise.all(tIds.map(async (tid: any) => {
                         try {
@@ -1396,7 +1396,7 @@ export default function DoiLichPage() {
                 setSelectedSeats([]);
                 return;
             }
-            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
             try {
                 // try slot endpoint first
                 const slotUrl = `${base}/api/buses/${encodeURIComponent(productId)}/slots/${encodeURIComponent(selectedDateLabel)}`;

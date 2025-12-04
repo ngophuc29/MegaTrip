@@ -90,7 +90,7 @@ export default function Reports() {
   const [yearRange, setYearRange] = useState<any>({ fromYear: currentYear.toString(), toYear: currentYear.toString() }); // Chuyển thành string
 
   // API base URL (adjust if needed)
-  const API_BASE = "http://localhost:7700/api/stats";
+  const API_BASE = "https://megatripserver.onrender.com/api/stats";
 
   // Tính dateParams và granularityParam bằng useMemo
   const { dateParams, granularityParam } = useMemo(() => {

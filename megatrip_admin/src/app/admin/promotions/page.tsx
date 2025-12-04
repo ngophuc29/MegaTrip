@@ -45,7 +45,7 @@ interface PromotionsResponse {
         pageSize: number;
     };
 }
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 
 interface PromotionFilters {
     status: string;

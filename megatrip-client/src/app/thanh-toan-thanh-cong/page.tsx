@@ -364,7 +364,7 @@ import { withSuspense } from '../components/SuspenseWrapper';
 
         const fetchOrderDetails = async () => {
             try {
-                const response = await fetch(`http://localhost:7700/api/orders/${actualOrderId}/details`);
+                const response = await fetch(`https://megatripserver.onrender.com/api/orders/${actualOrderId}/details`);
                 if (!response.ok) throw new Error('Không thể tải thông tin đơn hàng');
                 const data = await response.json();
                 setOrder(data.order);

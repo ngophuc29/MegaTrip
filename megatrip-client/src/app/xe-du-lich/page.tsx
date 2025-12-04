@@ -149,7 +149,7 @@ export default function XeDuLich() {
 
 
     // base API (config bằng NEXT_PUBLIC_API_BASE hoặc fallback)
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
     // Promotions for bus
     const [promotions, setPromotions] = useState<any[]>([]);
     const [promotionsLoading, setPromotionsLoading] = useState(false);

@@ -280,7 +280,7 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:7700/api/promotions?pageSize=50&status=active');
+        const res = await fetch('https://megatripserver.onrender.com/api/promotions?pageSize=50&status=active');
         if (!res.ok) return;
         const json = await res.json();
         setRemotePromotions(Array.isArray(json.data) ? json.data : []);
@@ -293,7 +293,7 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:7700/api/admin/news?page=1&limit=3&status=published&featured=true');
+        const res = await fetch('https://megatripserver.onrender.com/api/admin/news?page=1&limit=3&status=published&featured=true');
         if (!res.ok) {
           console.warn('Failed to fetch latest news, status', res.status);
           return;
@@ -360,7 +360,7 @@ export default function Index() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('http://localhost:7700/api/tours?highlight=true&pageSize=4&isVisible=true');
+        const res = await fetch('https://megatripserver.onrender.com/api/tours?highlight=true&pageSize=4&isVisible=true');
         if (!res.ok) return;
         const json = await res.json();
         const tours = Array.isArray(json.data) ? json.data.filter((t: any) => t.highlight).slice(0, 4) : [];
@@ -416,7 +416,7 @@ export default function Index() {
     // fetch each slug/id from backend; tolerate different response shapes
     (async () => {
       try {
-        const res = await fetch('http://localhost:7700/api/tours/batch', {
+        const res = await fetch('https://megatripserver.onrender.com/api/tours/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ slugs: ids })

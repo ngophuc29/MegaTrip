@@ -40,8 +40,8 @@ const Chatbot = () => {
             const lowerInput = input.toLowerCase()
 
             const [tourRes, busRes] = await Promise.all([
-                fetch('http://localhost:7700/api/tours'),
-                fetch('http://localhost:7700/api/buses/client/buses?page=1&pageSize=50&status=scheduled')
+                fetch('https://megatripserver.onrender.com/api/tours'),
+                fetch('https://megatripserver.onrender.com/api/buses/client/buses?page=1&pageSize=50&status=scheduled')
             ])
             const tours = (await tourRes.json()).data || []
             const buses = (await busRes.json()).data || []

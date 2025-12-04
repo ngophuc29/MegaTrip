@@ -676,7 +676,7 @@ const mockTickets: SupportTicket[] = [
         satisfaction: 4,
     },
 ];
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://megatripserver.onrender.com";
 
 // map server ticket -> SupportTicket (UI)
 function mapApiTicketToSupportTicket(t: any): SupportTicket {

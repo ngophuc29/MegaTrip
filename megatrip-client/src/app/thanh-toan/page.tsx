@@ -54,7 +54,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { withSuspense } from "../components/SuspenseWrapper";
 
 // Khai báo mảng phương thức thanh toán
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://megatripserver.onrender.com";
 const paymentMethods = [
   // {
   //   id: "credit_card",

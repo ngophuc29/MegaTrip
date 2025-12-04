@@ -14,7 +14,7 @@ export function setAccessToken(token: string | null) {
 }
 
 const axiosAuth = axios.create({
-    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:7700',
+    baseURL: process.env.REACT_APP_API_URL || 'https://megatripserver.onrender.com',
     paramsSerializer: (params) => queryString.stringify(params),
     timeout: 15000,
 });

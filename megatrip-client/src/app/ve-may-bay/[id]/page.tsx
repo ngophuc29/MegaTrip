@@ -623,7 +623,7 @@ export default function ChiTietVeMayBay() {
                 }
 
                 // Fetch tickets: chỉ lấy flight tickets với status paid/changed
-                const response = await fetch('http://localhost:7700/api/tickets?type=flight&status=paid&status=changed');
+                const response = await fetch('https://megatripserver.onrender.com/api/tickets?type=flight&status=paid&status=changed');
                 if (!response.ok) return;
                 const { data: tickets } = await response.json();
 

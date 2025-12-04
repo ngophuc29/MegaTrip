@@ -211,7 +211,7 @@ function RequestsTab({ formatPrice, customerId }: { formatPrice: (n: number) => 
         setLoading(true);
         setError(null);
         try {
-            const base = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+            const base = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
             const res = await fetch(`${base}/api/support?customerId=${encodeURIComponent(customerId)}&page=1&pageSize=50`);
             if (!res.ok) throw new Error(String(res.status));
             const json = await res.json();
@@ -592,7 +592,7 @@ function TaiKhoan() {
         setChangingPassword(true);
         try {
             const token = localStorage.getItem('accessToken');
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/auth/me/password`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/auth/me/password`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -636,7 +636,7 @@ function TaiKhoan() {
             setBookingsError(null);
             try {
                 console.log('Using customerId for loadBookings:', customerId || FAKE_CUSTOMER_ID); // Log để kiểm tra
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/customer/${encodeURIComponent(customerId || FAKE_CUSTOMER_ID)}?page=1&pageSize=50`);
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/orders/customer/${encodeURIComponent(customerId || FAKE_CUSTOMER_ID)}?page=1&pageSize=50`);
                 if (!res.ok) throw new Error(`${res.status}`);
                 const json = await res.json();
                 const data = Array.isArray(json.data) ? json.data : (json.data?.data || []);
@@ -750,7 +750,7 @@ function TaiKhoan() {
         setLoadingDetails(true);
         setDetailModalOpen(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/orders/${orderId}/client/details`);
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/orders/${orderId}/client/details`);
             if (!res.ok) throw new Error('Failed to load order details');
             const data = await res.json();
             setOrderDetails(data);

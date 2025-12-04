@@ -182,7 +182,7 @@ export default function HuyDonPage() {
     useEffect(() => {
         let mounted = true;
         if (!id) return;
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
         (async () => {
             setLoadingOrder(true);
             try {
@@ -342,7 +342,7 @@ export default function HuyDonPage() {
             return;
         }
 
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
         const payload = {
             customerId: customerId || order?.customerId || '64e65e8d3d5e2b0c8a3e9f12', // Ưu tiên customerId từ me()
             customerName: order?.customerName || order?.customerName || order?.customer?.name || '',

@@ -42,7 +42,7 @@ export default function OrderReviewDialog({ open, onOpenChange, booking, custome
 
         setLoading(true);
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

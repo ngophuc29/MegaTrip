@@ -27,7 +27,7 @@ import {
     Tag,
     AlertCircle,
 } from 'lucide-react';
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 const promotionCategories = [
     { id: 'all', name: 'Tất cả', count: 24 },
     { id: 'flight', name: 'Vé máy bay', count: 8, icon: Plane },

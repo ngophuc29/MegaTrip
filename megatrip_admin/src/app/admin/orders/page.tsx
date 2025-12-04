@@ -82,7 +82,7 @@ interface Order {
     // timeline: Array<TimelineEvent>;
 }
 // Add API_BASE at the top, assuming it's defined in your config
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 interface OrderFilters {
     paymentStatus: string;
     orderStatus: string;

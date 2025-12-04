@@ -73,7 +73,7 @@ export default function Reviews() {
             if (filters.isVisible !== 'all') params.append('isVisible', filters.isVisible);
             if (searchQuery) params.append('search', searchQuery);
 
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews?${params}`);
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews?${params}`);
             if (!res.ok) throw new Error('Failed to fetch reviews');
             const data = await res.json();
             return {
@@ -90,7 +90,7 @@ export default function Reviews() {
     // Toggle visibility mutation
     const toggleVisibilityMutation = useMutation({
         mutationFn: async (id: string) => {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/${id}/toggle-visibility`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews/${id}/toggle-visibility`, {
                 method: 'PATCH',
             });
             if (!res.ok) throw new Error('Failed to toggle visibility');
@@ -114,7 +114,7 @@ export default function Reviews() {
     // Delete review mutation
     const deleteReviewMutation = useMutation({
         mutationFn: async (id: string) => {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/${id}`, {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews/${id}`, {
                 method: 'DELETE',
             });
             if (!res.ok) throw new Error('Failed to delete review');
@@ -144,9 +144,9 @@ export default function Reviews() {
     const bulkActionMutation = useMutation({
         mutationFn: async ({ action, ids }: { action: string; ids: string[] }) => {
             if (action === "toggle") {
-                await Promise.all(ids.map(id => fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/${id}/toggle-visibility`, { method: 'PATCH' })));
+                await Promise.all(ids.map(id => fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews/${id}/toggle-visibility`, { method: 'PATCH' })));
             } else if (action === "delete") {
-                await Promise.all(ids.map(id => fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/${id}`, { method: 'DELETE' })));
+                await Promise.all(ids.map(id => fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews/${id}`, { method: 'DELETE' })));
             }
             return { action, ids };
         },

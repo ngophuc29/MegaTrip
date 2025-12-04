@@ -38,7 +38,7 @@ export default function TinTuc() {
         (async () => {
             setLoading(true);
             try {
-                const res = await fetch('http://localhost:7700/api/admin/news?page=1&limit=1000&status=published');
+                const res = await fetch('https://megatripserver.onrender.com/api/admin/news?page=1&limit=1000&status=published');
                 if (!res.ok) {
                     console.warn('Failed to fetch news', res.status);
                     setArticles([]);

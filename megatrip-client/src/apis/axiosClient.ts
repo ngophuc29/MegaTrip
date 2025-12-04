@@ -5,7 +5,7 @@ import queryString from "query-string";
 import { toast } from "sonner";
 
 const axiosClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:7700",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://megatripserver.onrender.com",
   paramsSerializer: (params) => queryString.stringify(params),
   timeout: 15000,
 });

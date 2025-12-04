@@ -16,7 +16,7 @@ import { ConfirmModal } from "../../components/ConfirmModal";
 import { useToast } from "../../components/ui/use-toast";
 
 // --- Add API base (points to port 7700 by default) ---
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 
 interface BusRoute {
     id: string;

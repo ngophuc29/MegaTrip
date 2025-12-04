@@ -426,7 +426,7 @@ export default function ChiTietTour() {
         if (!id) return;
         async function fetchBySlug() {
             try {
-                const res = await fetch(`http://localhost:7700/api/tours/slug/${id}`);
+                const res = await fetch(`https://megatripserver.onrender.com/api/tours/slug/${id}`);
                 if (!res.ok) {
                     console.warn('Tour by slug fetch failed', res.status);
                     return;
@@ -591,7 +591,7 @@ export default function ChiTietTour() {
 
     const fetchReviews = async (productId: string) => {
         try {
-            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:7700'}/api/reviews/product/${productId}`);
+            const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews/product/${productId}`);
             if (res.ok) {
                 const json = await res.json();
                 setReviews(json.data || []);
@@ -605,7 +605,7 @@ export default function ChiTietTour() {
         if (!id) return;
         async function fetchBySlug() {
             try {
-                const res = await fetch(`http://localhost:7700/api/tours/slug/${id}`);
+                const res = await fetch(`https://megatripserver.onrender.com/api/tours/slug/${id}`);
                 if (!res.ok) {
                     console.warn('Tour by slug fetch failed', res.status);
                     return;
@@ -636,7 +636,7 @@ export default function ChiTietTour() {
 
                 }
                 // fetch slot info for each start date and merge into mapped.availableDates
-                const TOUR_SERVICE = 'http://localhost:7700';
+                const TOUR_SERVICE = 'https://megatripserver.onrender.com';
                 async function fetchSlotForDate(tourId: string, dateIso: string) {
                     try {
                         const r = await fetch(`${TOUR_SERVICE}/api/tours/${encodeURIComponent(tourId)}/slots/${encodeURIComponent(dateIso)}`);

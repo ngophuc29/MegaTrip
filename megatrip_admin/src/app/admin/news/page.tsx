@@ -95,7 +95,7 @@ export default function News() {
     const [pagination, setPagination] = useState({ current: 1, pageSize: 10 });
     const BACKEND_AVAILABLE = true;
     // base URL for backend API (override with NEXT_PUBLIC_API_BASE)
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:7700";
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "https://megatripserver.onrender.com";
     // local store used while BE not ready (or for optimistic updates)
     const [articlesState, setArticlesState] = useState<NewsArticle[]>([]);
     const [totalState, setTotalState] = useState<number>(0);
