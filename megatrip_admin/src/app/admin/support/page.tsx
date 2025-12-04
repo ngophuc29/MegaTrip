@@ -1146,7 +1146,7 @@ const Support: React.FC = () => {
                         transId: refundInfo.transId,
                         description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
                     };
-                    const momoResp = await fetch("http://localhost:7000/momo/refund", {
+                    const momoResp = await fetch("https://demo-payment-nc15.onrender.com/momo/refund", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(refundBody),
@@ -1162,7 +1162,7 @@ const Support: React.FC = () => {
                         amount,
                         description: `Khách hàng hủy đơn ${refundInfo.orderRef || ticketId}`,
                     };
-                    const zaloResp = await fetch("http://localhost:7000/zalo/refund", {
+                    const zaloResp = await fetch("https://demo-payment-nc15.onrender.com/zalo/refund", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify(zaloBody),

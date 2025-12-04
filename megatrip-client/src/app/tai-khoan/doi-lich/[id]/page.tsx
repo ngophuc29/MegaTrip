@@ -695,7 +695,7 @@ export default function DoiLichPage() {
             return;
         }
 
-        const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_BASE || 'http://localhost:7000';
+        const PAYMENT_BASE = process.env.NEXT_PUBLIC_PAYMENT_BASE || 'https://demo-payment-nc15.onrender.com';
         const ORDERS_API = process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com';
 
         try {
