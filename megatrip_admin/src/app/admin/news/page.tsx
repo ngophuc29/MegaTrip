@@ -305,7 +305,7 @@ export default function News() {
                 heroImage: data.heroImage || undefined,
                 updatedAt: new Date().toISOString(),
             } : a));
-            toast({ title: "Cập nhật ", description: "Thay đổi đã áp dụng trên frontend" });
+            toast({ title: "Cập nhật ", description: "Chỉnh sửa thông tin thành công" });
             setModalOpen(false);
             resetForm();
 

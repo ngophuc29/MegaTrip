@@ -1444,7 +1444,7 @@ const Support: React.FC = () => {
                             <SelectItem value="closed">Đã đóng</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button
+                    {/* <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(record.id)}
@@ -1452,7 +1452,7 @@ const Support: React.FC = () => {
                         type="button"
                     >
                         <Trash className="h-4 w-4" />
-                    </Button>
+                    </Button> */}
                 </div>
             ),
         },
@@ -1467,10 +1467,10 @@ const Support: React.FC = () => {
                         <h1 className="text-2xl font-bold">Chăm sóc khách hàng</h1>
                         <p className="text-gray-600">Quản lý ticket hỗ trợ khách hàng</p>
                     </div>
-                    <Button onClick={() => setModalOpen(true)}>
+                    {/* <Button onClick={() => setModalOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Tạo ticket mới
-                    </Button>
+                    </Button> */}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1525,7 +1525,7 @@ const Support: React.FC = () => {
                         <CardTitle>Bộ lọc</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                             <div className="relative">
                                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <Input
@@ -1580,9 +1580,10 @@ const Support: React.FC = () => {
                                     <SelectItem value="account">Tài khoản</SelectItem>
                                     <SelectItem value="general">Chung</SelectItem>
                                     <SelectItem value="complaint">Khiếu nại</SelectItem>
+                                    <SelectItem value="cancel">Hủy Đơn</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Select
+                            {/* <Select
                                 value={filters.assignedTo}
                                 onValueChange={(value) => setFilters({ ...filters, assignedTo: value })}
                             >
@@ -1598,7 +1599,7 @@ const Support: React.FC = () => {
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
-                            </Select>
+                            </Select> */}
                             <Button
                                 variant="outline"
                                 onClick={() => {
