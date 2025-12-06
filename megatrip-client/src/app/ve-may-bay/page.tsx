@@ -1123,7 +1123,7 @@ function VeMayBay() {
         setShowPromotions(false);
         setIsLoadingFlights(true); // Thêm: bắt đầu load
         setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 3000);
+        // setTimeout(() => setIsLoading(false), 3000);
     };
 
     const handleRouteSelect = (from: string, to: string, price?: string) => {
@@ -2470,7 +2470,7 @@ function VeMayBay() {
                                             const to = extractCode(rawTo);
 
                                             if (!hasSearched) {
-                                                return `Đang tải thông tin chuyến bay...`;
+                                                return ``;
                                             }
 
                                             // If roundtrip, show only the current leg's header according to tripStep
@@ -2535,9 +2535,9 @@ function VeMayBay() {
                                     ) : hasSearched ? (
                                         <Card className="text-center py-12">
                                             <CardContent>
-                                                <Plane className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
-                                                <h3 className="text-lg font-medium mb-2">Không tìm thấy chuyến bay phù hợp</h3>
-                                                <p className="text-[hsl(var(--muted-foreground))] mb-4">
+                                                 <Plane className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                                                <h3 className="text-lg font-medium mb-2 text-red-600">Không tìm thấy chuyến bay phù hợp</h3>
+                                                <p className="text-red-500 mb-4">
                                                     Vui lòng thử điều chỉnh bộ lọc hoặc thay đổi ngày bay
                                                 </p>
                                                 <Button variant="outline">Điều chỉnh tìm kiếm</Button>
