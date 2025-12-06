@@ -1450,7 +1450,7 @@ export default function Orders() {
                             let successCount = 0;
                             let errorCount = 0;
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                 const order = allOrdersData?.find((o:any) => o.id === id) || orders.find(o => o.id === id);
+                                 const order = allOrdersData?.find((o:any) => o.id === id) || orders.find((o:any) => o.id === id);
                                 if (!order) {
                                     errorCount++;
                                     console.error(`Order with id ${id} not found in current or all orders list`);
