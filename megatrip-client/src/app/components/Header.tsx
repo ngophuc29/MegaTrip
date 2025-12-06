@@ -97,80 +97,115 @@ export default function Header() {
           <NavigationMenu className="hidden lg:flex">
             <NavigationMenuList className="flex space-x-6">
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    Trang chủ
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname === '/') {
+                      window.location.reload();
+                    } else {
+                      router.push('/');
+                    }
+                  }}
+                >
+                  Trang chủ
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/ve-may-bay"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <Plane className="h-4 w-4" />
-                    <span>Vé máy bay</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/ve-may-bay')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/ve-may-bay');
+                    }
+                  }}
+                >
+                  <Plane className="h-4 w-4" />
+                  <span>Vé máy bay</span>
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/xe-du-lich"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <Bus className="h-4 w-4" />
-                    <span>Xe du lịch</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/xe-du-lich')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/xe-du-lich');
+                    }
+                  }}
+                >
+                  <Bus className="h-4 w-4" />
+                  <span>Xe du lịch</span>
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/tour"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <Map className="h-4 w-4" />
-                    <span>Tour</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/tour')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/tour');
+                    }
+                  }}
+                >
+                  <Map className="h-4 w-4" />
+                  <span>Tour</span>
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/khuyen-mai"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <Percent className="h-4 w-4" />
-                    <span>Khuyến mãi</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/khuyen-mai')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/khuyen-mai');
+                    }
+                  }}
+                >
+                  <Percent className="h-4 w-4" />
+                  <span>Khuyến mãi</span>
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/tin-tuc"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <Newspaper className="h-4 w-4" />
-                    <span>Tin tức</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/tin-tuc')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/tin-tuc');
+                    }
+                  }}
+                >
+                  <Newspaper className="h-4 w-4" />
+                  <span>Tin tức</span>
+                </Button>
               </NavigationMenuItem>
               <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <Link
-                    href="/ho-tro"
-                    className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
-                  >
-                    <HelpCircle className="h-4 w-4" />
-                    <span>Hỗ trợ</span>
-                  </Link>
-                </NavigationMenuLink>
+                <Button
+                  variant="ghost"
+                  className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                  onClick={() => {
+                    if (pathname.startsWith('/ho-tro')) {
+                      window.location.reload();
+                    } else {
+                      router.push('/ho-tro');
+                    }
+                  }}
+                >
+                  <HelpCircle className="h-4 w-4" />
+                  <span>Hỗ trợ</span>
+                </Button>
               </NavigationMenuItem>
             </NavigationMenuList>
           </NavigationMenu>
@@ -259,61 +294,110 @@ export default function Header() {
                   <SheetTitle>Menu</SheetTitle>
                 </SheetHeader>
                 <nav className="flex flex-col space-y-4 mt-4">
-                  <Link
-                    href="/"
-                    onClick={() => setIsSheetOpen(false)}
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname === '/' ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname === '/') {
+                        window.location.reload();
+                      } else {
+                        router.push('/');
+                      }
+                    }}
                   >
                     <span>Trang chủ</span>
-                  </Link>
-                  <Link
-                    href="/ve-may-bay"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/ve-may-bay')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/ve-may-bay');
+                      }
+                    }}
                   >
                     <Plane className="h-4 w-4" />
                     <span>Vé máy bay</span>
-                  </Link>
-                  <Link
-                    href="/xe-du-lich"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/xe-du-lich')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/xe-du-lich');
+                      }
+                    }}
                   >
                     <Bus className="h-4 w-4" />
                     <span>Xe du lịch</span>
-                  </Link>
-                  <Link
-                    href="/tour"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/tour')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/tour');
+                      }
+                    }}
                   >
                     <Map className="h-4 w-4" />
                     <span>Tour</span>
-                  </Link>
-                  <Link
-                    href="/khuyen-mai"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/khuyen-mai')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/khuyen-mai');
+                      }
+                    }}
                   >
                     <Percent className="h-4 w-4" />
                     <span>Khuyến mãi</span>
-                  </Link>
-                  <Link
-                    href="/tin-tuc"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/tin-tuc')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/tin-tuc');
+                      }
+                    }}
                   >
                     <Newspaper className="h-4 w-4" />
                     <span>Tin tức</span>
-                  </Link>
-                  <Link
-                    href="/ho-tro"
-                    onClick={() => setIsSheetOpen(false)}
+                  </Button>
+                  <Button
+                    variant="ghost"
                     className={`flex items-center space-x-2 transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
+                    onClick={() => {
+                      setIsSheetOpen(false);
+                      if (pathname.startsWith('/ho-tro')) {
+                        window.location.reload();
+                      } else {
+                        router.push('/ho-tro');
+                      }
+                    }}
                   >
                     <HelpCircle className="h-4 w-4" />
                     <span>Hỗ trợ</span>
-                  </Link>
+                  </Button>
                 </nav>
               </SheetContent>
             </Sheet>
