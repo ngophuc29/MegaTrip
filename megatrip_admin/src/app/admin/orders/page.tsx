@@ -1450,9 +1450,10 @@ export default function Orders() {
                             let successCount = 0;
                             let errorCount = 0;
                             for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find((o: any) => o.id === id); // Tìm order bằng id
+                                 const order = allOrdersData?.find((o:any) => o.id === id) || orders.find(o => o.id === id);
                                 if (!order) {
                                     errorCount++;
+                                    console.error(`Order with id ${id} not found in current or all orders list`);
                                     continue;
                                 }
                                 const orderId = order.id || order.orderNumber;
@@ -1470,6 +1471,13 @@ export default function Orders() {
                                         successCount++;
                                     } else {
                                         errorCount++;
+                                        console.error(`Failed to cancel order ${orderId}: HTTP ${res.status} - ${res.statusText}`);
+                                        try {
+                                            const errorData = await res.json();
+                                            console.error('Error details:', errorData);
+                                        } catch (parseError) {
+                                            console.error('No error details available, parse error:', parseError);
+                                        }
                                     }
                                 } catch (error) {
                                     errorCount++;
@@ -1483,6 +1491,7 @@ export default function Orders() {
                                 variant: errorCount > 0 ? "destructive" : "default",
                             });
                         } catch (error) {
+                            console.error('Bulk cancel error:', error);
                             toast({
                                 title: "Lỗi khi hủy đơn hàng",
                                 description: "Có lỗi xảy ra khi hủy đơn hàng.",
