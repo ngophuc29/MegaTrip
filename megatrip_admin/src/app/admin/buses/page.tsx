@@ -661,7 +661,7 @@ export default function Buses() {
     //     return errors;
     // };
     // Form validation
-    const validateForm = (data: BusFormData, modalMode: string, originalDepartureDates: string[] = [], changedFields?: string[]): Record<string, string> => {
+    const validateForm = useCallback((data: BusFormData, modalMode: string, originalDepartureDates: string[] = [], changedFields?: string[]): Record<string, string> => {
         const errors: Record<string, string> = {};
 
         // Chỉ validate nếu changedFields không được cung cấp hoặc trường này trong changedFields (chỉ cho edit)
@@ -935,7 +935,7 @@ export default function Buses() {
         }
 
         return errors;
-    };
+    }, []);
     useEffect(() => {
         const errors = validateForm(formData, modalMode, originalDepartureDates);
         setFormErrors(errors);
