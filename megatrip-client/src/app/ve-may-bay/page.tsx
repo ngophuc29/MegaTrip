@@ -678,6 +678,18 @@ function VeMayBay() {
                 const data = offersJson.data || [];
                 const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
 
+
+                // Nếu không có chuyến bay từ API, dùng sample data để test UI
+                if (mapped.length === 0) {
+                    console.log('No flights found from Amadeus');
+                    setApiFlights([]); // Đảm bảo rỗng
+                    setHasSearched(true);
+                    setShowPromotions(false);
+                    setIsLoading(false);
+                    setIsLoadingFlights(false);
+                    return; // Dừng không fetch tiếp
+                }
+
                 // adjust priceRange if necessary (preserve existing logic)
                 if (mapped.length > 0) {
                     const prices = mapped.map((m: any) => Number(m.price) || 0).filter(Boolean);
