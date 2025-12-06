@@ -85,7 +85,7 @@ interface TourFormData {
     endDate: string;
     startDates?: string[];
     endDates?: string[];
-    duration: string;
+    duration: string | number;
     difficulty: "easy" | "medium" | "difficult";
     adultPrice: number;
     childPrice: number;
