@@ -586,46 +586,9 @@ function mapDbTourToList(db: any) {
                             ) : tourPromotions.length === 0 ? (
                                 // keep original hardcoded cards/colors when no promos from server
                                 <>
-                                    <Card className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">TOUR500</div>
-                                                    <div className="text-sm opacity-90">Giảm 500K tour nội địa</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('TOUR500')}>
-                                                    {copied['TOUR500'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                    <Card className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">FAMILY25</div>
-                                                    <div className="text-sm opacity-90">Giảm 25% tour gia đình</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 15/02/2025</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('FAMILY25')}>
-                                                    {copied['FAMILY25'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                    <Card className="bg-gradient-to-r from-teal-500 to-green-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">WEEKEND30</div>
-                                                    <div className="text-sm opacity-90">Giảm 30% tour cuối tuần</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-teal-600" onClick={() => handleCopy('WEEKEND30')}>
-                                                    {copied['WEEKEND30'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
+                                    <Card className="col-span-3 text-center">
+                                        <CardContent>
+                                            <div className="text-sm text-[hsl(var(--muted-foreground))] mb-2">Hiện không có khuyến mãi cho tour</div>
                                         </CardContent>
                                     </Card>
                                 </>
