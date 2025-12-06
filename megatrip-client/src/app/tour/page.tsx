@@ -210,7 +210,7 @@ function mapDbTourToList(db: any) {
     // Use Vietnam timezone (UTC+7) for date comparison
     const now = new Date();
     // Get VN date components correctly
-    const vnDateStr = now.toLocaleDateString('en-CA', {timeZone: 'Asia/Ho_Chi_Minh'}); // YYYY-MM-DD format
+    const vnDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }); // YYYY-MM-DD format
     const [vnYear, vnMonth, vnDay] = vnDateStr.split('-').map(Number);
     const vnToday = new Date(vnYear, vnMonth - 1, vnDay); // Create date at start of VN day
     const availableDates = (db.startDates || []).map((d: any) => {
@@ -262,7 +262,7 @@ function mapDbTourToList(db: any) {
 export default function Tour() {
     const searchParams = useSearchParams();
     const [showFilters, setShowFilters] = useState(true);
-    const [priceRange, setPriceRange] = useState([200000, 10000000]); 
+    const [priceRange, setPriceRange] = useState([200000, 10000000]);
     const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
     // const [selectedDurations, setSelectedDurations] = useState<string[]>([]);
     // const [selectedDepartures, setSelectedDepartures] = useState<string[]>([]);
@@ -392,16 +392,16 @@ export default function Tour() {
             setIsLoading(false);
         }
     }
-      useEffect(() => {
-              let mounted = true;
-              // reset attempt flag so UI shows correct state for new search
-                  setFetchAttempted(false);
-              // call fetchTours whenever search params change (so /tour?from=.. triggers API)
-                  (async () => {
-                          await fetchTours();
-                      })();
-              return () => { mounted = false; };
-          }, [searchParams ? String(searchParams.toString()) : '']);
+    useEffect(() => {
+        let mounted = true;
+        // reset attempt flag so UI shows correct state for new search
+        setFetchAttempted(false);
+        // call fetchTours whenever search params change (so /tour?from=.. triggers API)
+        (async () => {
+            await fetchTours();
+        })();
+        return () => { mounted = false; };
+    }, [searchParams ? String(searchParams.toString()) : '']);
 
     // const destinationTours = selectedTour ? generateDestinationTours() : [];
     // const allTours = selectedTour ? [...destinationTours, ...sampleTours] : sampleTours;
@@ -585,46 +585,9 @@ export default function Tour() {
                             ) : tourPromotions.length === 0 ? (
                                 // keep original hardcoded cards/colors when no promos from server
                                 <>
-                                    <Card className="bg-gradient-to-r from-purple-500 to-indigo-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">TOUR500</div>
-                                                    <div className="text-sm opacity-90">Giảm 500K tour nội địa</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 31/12/2024</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('TOUR500')}>
-                                                    {copied['TOUR500'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                    <Card className="bg-gradient-to-r from-orange-500 to-red-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">FAMILY25</div>
-                                                    <div className="text-sm opacity-90">Giảm 25% tour gia đình</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 15/02/2025</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-orange-600" onClick={() => handleCopy('FAMILY25')}>
-                                                    {copied['FAMILY25'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                    <Card className="bg-gradient-to-r from-teal-500 to-green-500 text-white">
-                                        <CardContent className="p-4">
-                                            <div className="flex justify-between items-start">
-                                                <div>
-                                                    <div className="text-lg font-bold">WEEKEND30</div>
-                                                    <div className="text-sm opacity-90">Giảm 30% tour cuối tuần</div>
-                                                    <div className="text-xs opacity-75 mt-1">HSD: 28/02/2025</div>
-                                                </div>
-                                                <Button size="sm" variant="secondary" className="text-teal-600" onClick={() => handleCopy('WEEKEND30')}>
-                                                    {copied['WEEKEND30'] ? 'Đã copy!' : 'Copy mã'}
-                                                </Button>
-                                            </div>
+                                    <Card className="col-span-3 text-center">
+                                        <CardContent>
+                                            <div className="text-sm text-[hsl(var(--muted-foreground))] mb-2">Hiện không có khuyến mãi cho tour</div>
                                         </CardContent>
                                     </Card>
                                 </>
@@ -646,7 +609,7 @@ export default function Tour() {
                                                         <div className="text-sm opacity-90 text-white"><span>Tên : </span>{p.title}</div>
                                                         {p.code && <div className="text-xs opacity-75 text-white">Áp dụng từ {formatPrice(p.minSpend || 0)} VND</div>}
 
-                                                    <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
+                                                        <div className="text-xs opacity-75 mt-1 text-white">{p.validTo ? `HSD: ${new Date(p.validTo).toLocaleDateString('vi-VN')}` : ''}</div>
                                                     </div>
                                                     {p.code ? (
                                                         <Button size="sm" variant="secondary" className="text-red-600" onClick={() => {

@@ -1443,16 +1443,18 @@ export default function Orders() {
             return [
                 {
                     label: "Hủy đơn",
-                    action: async (keys: string[]) => { // keys giờ là array của id
+                    action: async (keys: string[]) => {
                         setBulkLoading(true);
                         setBulkLoadingMessage("Đang hủy đơn hàng...");
                         try {
                             let successCount = 0;
                             let errorCount = 0;
-                            for (const id of keys) { // Thay đổi: dùng id trực tiếp
-                                const order = orders.find(o => o.id === id); // Tìm order bằng id
+                            for (const id of keys) {
+                                // Ưu tiên tìm trong allOrdersData (toàn bộ data), fallback orders (pagination hiện tại)
+                                const order = allOrdersData?.find(o => o.id === id) || orders.find(o => o.id === id);
                                 if (!order) {
                                     errorCount++;
+                                    console.error(`Order with id ${id} not found in current or all orders list`);
                                     continue;
                                 }
                                 const orderId = order.id || order.orderNumber;
@@ -1470,6 +1472,13 @@ export default function Orders() {
                                         successCount++;
                                     } else {
                                         errorCount++;
+                                        console.error(`Failed to cancel order ${orderId}: HTTP ${res.status} - ${res.statusText}`);
+                                        try {
+                                            const errorData = await res.json();
+                                            console.error('Error details:', errorData);
+                                        } catch (parseError) {
+                                            console.error('No error details available, parse error:', parseError);
+                                        }
                                     }
                                 } catch (error) {
                                     errorCount++;
@@ -1483,6 +1492,7 @@ export default function Orders() {
                                 variant: errorCount > 0 ? "destructive" : "default",
                             });
                         } catch (error) {
+                            console.error('Bulk cancel error:', error);
                             toast({
                                 title: "Lỗi khi hủy đơn hàng",
                                 description: "Có lỗi xảy ra khi hủy đơn hàng.",
@@ -1494,7 +1504,7 @@ export default function Orders() {
                     },
                     icon: <XCircle className="w-4 h-4 mr-2" />,
                     variant: "destructive" as const,
-                },
+                }
             ];
         } else {
             return [

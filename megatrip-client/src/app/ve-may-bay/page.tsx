@@ -676,6 +676,18 @@ export default function VeMayBay() {
                 const data = offersJson.data || [];
                 const mapped = data.map((o: any, i: number) => mapOfferToFlight(o, dicts, i));
 
+
+                // Nếu không có chuyến bay từ API, dùng sample data để test UI
+                if (mapped.length === 0) {
+                    console.log('No flights found from Amadeus');
+                    setApiFlights([]); // Đảm bảo rỗng
+                    setHasSearched(true);
+                    setShowPromotions(false);
+                    setIsLoading(false);
+                    setIsLoadingFlights(false);
+                    return; // Dừng không fetch tiếp
+                }
+
                 // adjust priceRange if necessary (preserve existing logic)
                 if (mapped.length > 0) {
                     const prices = mapped.map(m => Number(m.price) || 0).filter(Boolean);
@@ -970,10 +982,11 @@ export default function VeMayBay() {
                 if (prices.length > 0) {
                     const minP = Math.min(...prices);
                     const maxP = Math.max(...prices);
-                    const anyInCurrentRange = prices.some(p => p >= priceRange[0] && p <= priceRange[1]);
-                    if (!anyInCurrentRange) {
-                        setPriceRange([Math.max(0, minP - 100000), maxP + 100000]);
-                    }
+                    const roundedMin = Math.max(0, Math.floor(minP / 100000) * 100000);
+                    const roundedMax = Math.ceil(maxP / 100000) * 100000;
+                    setMinPriceBound(roundedMin);
+                    setMaxPriceBound(roundedMax);
+                    setPriceRange([roundedMin, roundedMax]); // Set priceRange trước để filter không loại bỏ
                 }
             } catch { /* ignore */ }
 
@@ -985,7 +998,7 @@ export default function VeMayBay() {
                 setShowPromotions(false);
                 setIsLoading(false);
                 setCacheExpired(false);
-                setIsLoadingFlights(false); // Thêm: load xong
+                setIsLoadingFlights(false);
                 return;
             }
             try { removeCache(cacheKey); } catch { }
@@ -994,7 +1007,7 @@ export default function VeMayBay() {
             setShowPromotions(false);
             setIsLoading(false);
             setCacheExpired(true);
-            setIsLoadingFlights(false); // Thêm: load xong
+            setIsLoadingFlights(false);
             return;
         }
 
@@ -1121,7 +1134,7 @@ export default function VeMayBay() {
         setShowPromotions(false);
         setIsLoadingFlights(true); // Thêm: bắt đầu load
         setIsLoading(true);
-        setTimeout(() => setIsLoading(false), 3000);
+        // setTimeout(() => setIsLoading(false), 3000);
     };
 
     const handleRouteSelect = (from: string, to: string, price?: string) => {
@@ -1974,7 +1987,7 @@ export default function VeMayBay() {
     const [promotions, setPromotions] = useState<any[]>([]);
     const [promotionsLoading, setPromotionsLoading] = useState(false);
     const [promotionsError, setPromotionsError] = useState<string | null>(null);
-    
+
     useEffect(() => {
         // load promotions applicable to flights
         const loadPromos = async () => {
@@ -2468,7 +2481,7 @@ export default function VeMayBay() {
                                             const to = extractCode(rawTo);
 
                                             if (!hasSearched) {
-                                                return `Đang tải thông tin chuyến bay...`;
+                                                return ``;
                                             }
 
                                             // If roundtrip, show only the current leg's header according to tripStep
@@ -2533,12 +2546,13 @@ export default function VeMayBay() {
                                     ) : hasSearched ? (
                                         <Card className="text-center py-12">
                                             <CardContent>
-                                                <Plane className="h-12 w-12 text-[hsl(var(--muted-foreground))] mx-auto mb-4" />
-                                                <h3 className="text-lg font-medium mb-2">Không tìm thấy chuyến bay phù hợp</h3>
-                                                <p className="text-[hsl(var(--muted-foreground))] mb-4">
+                                                <Plane className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                                                <h3 className="text-lg font-medium mb-2 text-red-600">Không tìm thấy chuyến bay phù hợp</h3>
+                                                <p className="text-red-500 mb-4">
                                                     Vui lòng thử điều chỉnh bộ lọc hoặc thay đổi ngày bay
                                                 </p>
                                                 <Button variant="outline">Điều chỉnh tìm kiếm</Button>
+
                                             </CardContent>
                                         </Card>
                                     ) : (

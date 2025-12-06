@@ -20,6 +20,9 @@ import { RichTextEditor } from "../../components/RichTextEditor";
 import { useToast } from "../../components/ui/use-toast";
 import dynamic from "next/dynamic";
 import { Separator } from "@/app/components/ui/separator";
+import { GoogleGenerativeAI } from '@google/generative-ai';
+const genAI = new GoogleGenerativeAI(process.env.NEXT_PUBLIC_GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-lite' });
 const JoditEditorWrapper = dynamic(() => import("../../components/JoditEditorWrapper"), { ssr: false });
 interface Tour {
     id: string;
@@ -346,6 +349,9 @@ export default function Tours() {
     // Add state for total stats
     const [totalTours, setTotalTours] = useState(0);
     const [totalVisible, setTotalVisible] = useState(0);
+    const [aiLoading, setAiLoading] = useState<Record<number, boolean>>({}); // Track loading cho từng ngày
+    const [aiLoadingDescription, setAiLoadingDescription] = useState(false);
+
     // add compress helpers (insert near top of file after imports)
     async function compressDataUriClient(dataUri: string, maxWidth = 1600, quality = 0.8): Promise<string> {
         return new Promise((resolve) => {
@@ -2250,12 +2256,12 @@ export default function Tours() {
 
         return (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-6">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="basic">Thông tin cơ bản</TabsTrigger>
                     <TabsTrigger value="pricing">Giá & Chỗ</TabsTrigger>
                     <TabsTrigger value="itinerary">Lịch trình</TabsTrigger>
                     <TabsTrigger value="media">Media</TabsTrigger>
-                    <TabsTrigger value="seo">SEO</TabsTrigger>
+                    {/* <TabsTrigger value="seo">SEO</TabsTrigger> */}
                     <TabsTrigger value="settings">Cài đặt</TabsTrigger>
                 </TabsList>
 
@@ -2276,12 +2282,50 @@ export default function Tours() {
                         </div>
 
                     </div>
+                    
                     <div className="space-y-4 mb-10">
-                        <Label className="text-xl font-semibold text-gray-900" htmlFor="description">Mô tả chi tiết</Label>
+                        <div className="flex justify-between items-center">
+                            <Label className="text-xl font-semibold text-gray-900" htmlFor="description">Mô tả chi tiết</Label>
+                            {/* Nút tạo gợi ý AI, chỉ hiện khi đã chọn điểm khởi hành, điểm đến, và thời lượng */}
+                            {/* {formData.departureFrom && formData.destination  && ( */}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={async () => {
+                                        setAiLoadingDescription(true);
+                                        try {
+                                            const durationText = formData.durationDisplay || `${formData.duration} ngày ${Math.max(0, (formData.duration as number) - 1)} đêm`;
+                                            const prompt = `Bạn là trợ lý du lịch chuyên nghiệp. Tạo mô tả chi tiết, hấp dẫn cho tour du lịch từ ${formData.departureFrom} đến ${formData.destination}, thời lượng ${durationText}.
+
+Yêu cầu:
+- Giới thiệu về chuyến đi, điểm nổi bật ở điểm khởi hành, điểm đến, và trên đường đi.
+- Mô tả danh lam thắng cảnh, vẻ đẹp tự nhiên, văn hóa, ẩm thực đặc trưng.
+- Khoảng 300-500 từ, tự nhiên, dùng emoji phù hợp.
+- Lý do nên đi tour này, nhưng không đề cập đến lịch trình cụ thể.
+
+Trả về mô tả trực tiếp, không cần format đặc biệt.`;
+
+                                            const result = await model.generateContent(prompt);
+                                            const aiDescription = result.response.text();
+                                            handleFormChange("description", aiDescription); // Set vào description
+                                            toast({ title: "Đã tạo gợi ý", description: "Mô tả đã được cập nhật từ AI" });
+                                        } catch (error) {
+                                            console.error('AI generate error:', error);
+                                            toast({ title: "Lỗi tạo gợi ý", description: "Không thể tạo mô tả từ AI, vui lòng thử lại", variant: "destructive" });
+                                        } finally {
+                                            setAiLoadingDescription(false);
+                                        }
+                                    }}
+                                disabled={aiLoadingDescription || !(formData.departureFrom && formData.destination )}
+                                >
+                                    {aiLoadingDescription ? "Đang tạo..." : "Tạo gợi ý AI"}
+                                </Button>
+                            {/* )} */}
+                        </div>
                         <JoditEditorWrapper
                             value={formData.description}
                             onChange={(newContent) => handleFormChange("description", newContent)}
-                            placeholder="Mô tả chi tiết ngày này"
+                            placeholder="Mô tả chi tiết tour..."
                         />
                         {formErrors.description && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.description}</p>
@@ -2855,7 +2899,7 @@ export default function Tours() {
                                         Số ngày lịch trình hiện tại: {formData.itinerary.length} — mong đợi theo thời lượng: {expected} ngày.
                                     </p>
                                     <div className="flex items-center space-x-2">
-                                        <Button
+                                        {/* <Button
                                             size="sm"
                                             onClick={() => {
                                                 const nextIt = ensureItineraryLength(expected, formData.itinerary || []);
@@ -2863,7 +2907,7 @@ export default function Tours() {
                                             }}
                                         >
                                             Đồng bộ với thời lượng
-                                        </Button>
+                                        </Button> */}
                                     </div>
                                 </div>
                             );
@@ -2877,6 +2921,88 @@ export default function Tours() {
                                  <Plus className="w-4 h-4 mr-2" />
                                  Thêm ngày
                              </Button> */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                    // Kiểm tra nếu itinerary rỗng
+                                    if (!formData.itinerary || formData.itinerary.length === 0) {
+                                        toast({ title: "Không có lịch trình", description: "Vui lòng thêm ngày vào lịch trình trước", variant: "destructive" });
+                                        return;
+                                    }
+
+                                    // Set loading cho tất cả ngày
+                                    const allIndices = formData.itinerary.map((_, idx) => idx);
+                                    setAiLoading(prev => {
+                                        const next = { ...prev };
+                                        allIndices.forEach(idx => next[idx] = true);
+                                        return next;
+                                    });
+
+                                    try {
+                                        // Loop qua tất cả ngày và tạo gợi ý
+                                        const updatedItinerary = [...formData.itinerary];
+                                        for (let index = 0; index < formData.itinerary.length; index++) {
+                                            const day = formData.itinerary[index];
+                                            const dayNumber = (day as any).day ?? index + 1;
+                                            const existingAddress = (day as any).address ?? (day as any).title ?? "";
+
+                                            // Prompt để tạo cả tiêu đề và chi tiết cho ngày
+                                            const prompt = `Bạn là trợ lý du lịch chuyên nghiệp. Tạo gợi ý hoàn chỉnh cho ngày ${dayNumber} của tour du lịch ${formData.duration} ngày từ ${formData.departureFrom} đến ${formData.destination}.
+
+${existingAddress ? `Tiêu đề hiện tại: "${existingAddress}". Bạn có thể giữ hoặc cải thiện tiêu đề này.` : 'Tạo tiêu đề hấp dẫn cho ngày này.'}
+
+Yêu cầu:
+- Tiêu đề: Ngắn gọn, hấp dẫn (ví dụ: "Khám phá hang Sửng Sốt và làng chài nổi").
+- Chi tiết: Mô tả đầy đủ hoạt động, điểm tham quan, trải nghiệm trong ngày. Khoảng 200-300 từ, tự nhiên, dùng emoji phù hợp.
+
+Trả về định dạng JSON: {"title": "Tiêu đề", "description": "Chi tiết mô tả"}`;
+
+                                            const result = await model.generateContent(prompt);
+                                            const responseText = result.response.text();
+
+                                            // Parse JSON từ AI response
+                                            let aiData;
+                                            try {
+                                                aiData = JSON.parse(responseText);
+                                            } catch {
+                                                // Nếu không parse được, fallback: tách thủ công (giả sử format "Title: ... Description: ...")
+                                                const titleMatch = responseText.match(/title["\s:]+([^"\n]+)/i) || responseText.match(/^([^\n]+)/);
+                                                const descMatch = responseText.match(/description["\s:]+(.+)/is);
+                                                aiData = {
+                                                    title: titleMatch ? titleMatch[1].trim() : `Ngày ${dayNumber}: ${existingAddress || 'Khám phá điểm đến'}`,
+                                                    description: descMatch ? descMatch[1].trim() : responseText.replace(/title["\s:]+[^"\n]*/i, '').trim()
+                                                };
+                                            }
+
+                                            // Update itinerary
+                                            updatedItinerary[index] = {
+                                                ...updatedItinerary[index],
+                                                address: aiData.title,
+                                                description: aiData.description
+                                            };
+                                        }
+
+                                        // Update formData với tất cả ngày đã được tạo
+                                        handleFormChange("itinerary", updatedItinerary);
+                                        toast({ title: "Đã tạo gợi ý cho tất cả ngày", description: `Đã cập nhật ${formData.itinerary.length} ngày từ AI` });
+                                    } catch (error) {
+                                        console.error('AI generate error:', error);
+                                        toast({ title: "Lỗi tạo gợi ý", description: "Không thể tạo mô tả từ AI, vui lòng thử lại", variant: "destructive" });
+                                    } finally {
+                                        // Clear loading cho tất cả ngày
+                                        setAiLoading(prev => {
+                                            const next = { ...prev };
+                                            allIndices.forEach(idx => next[idx] = false);
+                                            return next;
+                                        });
+                                    }
+                                }}
+                                disabled={Object.values(aiLoading).some(Boolean)}
+                                style={{ display: formData.duration || formData.durationDisplay ? 'inline-flex' : 'none' }}
+                            >
+                                {Object.values(aiLoading).some(Boolean) ? "Đang tạo..." : "Tạo gợi ý AI cho tất cả lịch trình"}
+                            </Button>
                         </div>
                         {formData.itinerary.map((day, index) => (
                             <div key={index} className="border rounded-lg p-4 space-y-4">
@@ -2899,6 +3025,7 @@ export default function Tours() {
                                              <Trash2 className="w-4 h-4 mr-2" />
                                              Xóa
                                          </Button> */}
+                                        
                                     </div>
                                 </div>
                                 <div>
@@ -2944,7 +3071,7 @@ export default function Tours() {
                         </p>
                     </div>
 
-                    <div>
+                    {/* <div>
                         <Label htmlFor="videoUrl">Video URL (YouTube/Vimeo)</Label>
                         <Input
                             id="videoUrl"
@@ -2956,10 +3083,10 @@ export default function Tours() {
                         {formErrors.videoUrl && (
                             <p className="text-sm text-red-500 mt-1">{formErrors.videoUrl}</p>
                         )}
-                    </div>
+                    </div> */}
                 </TabsContent>
 
-                <TabsContent value="seo" className="space-y-4 mt-6">
+                {/* <TabsContent value="seo" className="space-y-4 mt-6">
                     <div>
                         <Label htmlFor="metaTitle">Meta Title</Label>
                         <Input
@@ -2998,7 +3125,7 @@ export default function Tours() {
                             placeholder="keyword1, keyword2, keyword3"
                         />
                     </div>
-                </TabsContent>
+                </TabsContent> */}
 
                 <TabsContent value="settings" className="space-y-4 mt-6">
                     <div>

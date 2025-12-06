@@ -820,10 +820,14 @@ export default function XeDuLich() {
                                     </CardContent>
                                 </Card>
                             ) : promotions.length === 0 ? (
-                                <div className="col-span-3 text-sm text-[hsl(var(--muted-foreground))]">Hiện không có khuyến mãi cho chuyến xe</div>
+                                <Card className="col-span-3 text-center">
+                                    <CardContent>
+                                        <div className="text-sm text-[hsl(var(--muted-foreground))] mb-2">Hiện không có khuyến mãi cho chuyến xe</div>
+                                    </CardContent>
+                                </Card>
                             ) : (
                                 // show only first 3 promotions
-                                            promotions.slice(0, 3).map((p: any, idx: number) => {
+                                promotions.slice(0, 3).map((p: any, idx: number) => {
                                     const colors = [
                                         'from-purple-500 to-indigo-500',
                                         'from-orange-500 to-red-500',
@@ -1298,7 +1302,7 @@ export default function XeDuLich() {
                                     selectedDate={selectedDate}
                                 />
                             )}
-                            
+
                         </div>
                     </div>
                 </div>
