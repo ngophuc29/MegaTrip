@@ -52,6 +52,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi">
       <head>
         <title>{getTitle()}</title>
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        <link rel="shortcut icon" href="/favicon.ico" />
         {/* ...có thể thêm meta tags khác ở đây nếu muốn... */}
       </head>
       <body>

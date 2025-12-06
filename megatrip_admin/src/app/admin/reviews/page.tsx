@@ -60,7 +60,7 @@ export default function Reviews() {
 
     const [pagination, setPagination] = useState({
         current: 1,
-        pageSize: 10,
+        pageSize: 100,
     });
 
     // Fetch reviews from API
@@ -76,10 +76,12 @@ export default function Reviews() {
             const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || 'https://megatripserver.onrender.com'}/api/reviews?${params}`);
             if (!res.ok) throw new Error('Failed to fetch reviews');
             const data = await res.json();
+            // Sort data để cái mới (createdAt) lên đầu
+            const sortedData = data.data.sort((a: Review, b: Review) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
             return {
-                data: data.data,
+                data: sortedData,
                 pagination: {
-                    total: data.data.length, // Assuming API returns total, adjust if needed
+                    total: data.total || data.data.length, // Giả sử server trả về data.total, nếu không dùng data.data.length
                     current: pagination.current,
                     pageSize: pagination.pageSize,
                 },
@@ -415,7 +417,7 @@ export default function Reviews() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
@@ -449,7 +451,7 @@ export default function Reviews() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                {/* <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -463,7 +465,7 @@ export default function Reviews() {
                             <Star className="w-8 h-8 text-yellow-500 fill-current" />
                         </div>
                     </CardContent>
-                </Card>
+                </Card> */}
             </div>
 
             <Card>

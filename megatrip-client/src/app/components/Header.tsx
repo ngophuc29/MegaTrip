@@ -117,7 +117,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ve-may-bay') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/ve-may-bay')) {
-                      window.location.reload();
+                      window.location.href = '/ve-may-bay';
                     } else {
                       router.push('/ve-may-bay');
                     }
@@ -133,7 +133,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/xe-du-lich') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/xe-du-lich')) {
-                      window.location.reload();
+                      window.location.href = '/xe-du-lich';
                     } else {
                       router.push('/xe-du-lich');
                     }
@@ -149,7 +149,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tour') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/tour')) {
-                      window.location.reload();
+                      window.location.href = '/tour';
                     } else {
                       router.push('/tour');
                     }
@@ -165,7 +165,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/khuyen-mai') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/khuyen-mai')) {
-                      window.location.reload();
+                      window.location.href = '/khuyen-mai';
                     } else {
                       router.push('/khuyen-mai');
                     }
@@ -181,7 +181,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/tin-tuc') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/tin-tuc')) {
-                      window.location.reload();
+                      window.location.href = '/tin-tuc';
                     } else {
                       router.push('/tin-tuc');
                     }
@@ -197,7 +197,7 @@ export default function Header() {
                   className={`flex items-center space-x-1 text-sm font-medium transition-colors ${pathname.startsWith('/ho-tro') ? 'text-[hsl(var(--primary))] font-bold' : 'text-foreground hover:text-primary'}`}
                   onClick={() => {
                     if (pathname.startsWith('/ho-tro')) {
-                      window.location.reload();
+                      window.location.href = '/ho-tro';
                     } else {
                       router.push('/ho-tro');
                     }
@@ -314,7 +314,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/ve-may-bay')) {
-                        window.location.reload();
+                        window.location.href = '/ve-may-bay';
                       } else {
                         router.push('/ve-may-bay');
                       }
@@ -329,7 +329,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/xe-du-lich')) {
-                        window.location.reload();
+                        window.location.href = '/xe-du-lich';
                       } else {
                         router.push('/xe-du-lich');
                       }
@@ -344,7 +344,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/tour')) {
-                        window.location.reload();
+                        window.location.href = '/tour';
                       } else {
                         router.push('/tour');
                       }
@@ -359,7 +359,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/khuyen-mai')) {
-                        window.location.reload();
+                        window.location.href = '/khuyen-mai';
                       } else {
                         router.push('/khuyen-mai');
                       }
@@ -374,7 +374,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/tin-tuc')) {
-                        window.location.reload();
+                        window.location.href = '/tin-tuc';
                       } else {
                         router.push('/tin-tuc');
                       }
@@ -389,7 +389,7 @@ export default function Header() {
                     onClick={() => {
                       setIsSheetOpen(false);
                       if (pathname.startsWith('/ho-tro')) {
-                        window.location.reload();
+                        window.location.href = '/ho-tro';
                       } else {
                         router.push('/ho-tro');
                       }
