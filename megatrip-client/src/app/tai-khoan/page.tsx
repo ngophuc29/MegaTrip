@@ -764,14 +764,20 @@ function TaiKhoan() {
     };
 
     function getTravelDateForFlight(ticket: any) {
-        if (ticket.type !== 'flight') return ticket.travelDate;
-        const leg = getLegFromUniq(ticket.uniq);
-        if (leg === 'Chuyến đi (Outbound)') {
-            return ticket.reservationInfo?.flights?.outbound?.date || ticket.travelDate;
-        } else if (leg === 'Chuyến về (Inbound)') {
-            return ticket.reservationInfo?.flights?.inbound?.date || ticket.travelDate;
+        let date = ticket.travelDate;
+        if (ticket.type === 'flight') {
+            const leg = getLegFromUniq(ticket.uniq);
+            if (leg === 'Chuyến đi (Outbound)') {
+                date = ticket.reservationInfo?.flights?.outbound?.date || ticket.travelDate;
+            } else if (leg === 'Chuyến về (Inbound)') {
+                date = ticket.reservationInfo?.flights?.inbound?.date || ticket.travelDate;
+            }
         }
-        return ticket.travelDate;
+        // Chỉ lấy phần date nếu có 'T'
+        if (date && typeof date === 'string' && date.includes('T')) {
+            return date.split('T')[0];
+        }
+        return date;
     }
     function getLegFromUniq(uniq: string) {
         if (uniq?.includes('outbound')) return 'Chuyến đi (Outbound)';
@@ -780,10 +786,60 @@ function TaiKhoan() {
     }
     // Thêm function để lấy giờ xuất phát cho flight đã đổi lịch
     function getDepartureTimeForChangedFlight(ticket: any, orderDetails: any) {
-        if (ticket.type === 'flight' && orderDetails?.order?.changeCalendar && orderDetails?.order?.inforChangeCalendar?.data?.meta?.selectedOption?.departure?.time) {
-            return orderDetails.order.inforChangeCalendar.data.meta.selectedOption.departure.time;
+        if (ticket.type === 'flight') {
+            // Kiểm tra nếu là vé cũ (có trong oldTickets)
+            const isOldTicket = orderDetails?.oldTickets?.some((o: any) => o._id === ticket._id);
+            if (isOldTicket) {
+                // Vé cũ: luôn dùng reservationInfo, dựa trên leg từ uniq
+                const isOutbound = ticket.uniq?.includes('outbound');
+                const leg = isOutbound ? 'outbound' : 'inbound';
+                const time = ticket.reservationInfo?.flights?.[leg]?.time;
+                if (time) {
+                    const parts = time.split(' - ');
+                    return parts[0] || time;
+                }
+            } else {
+                // Vé mới: ưu tiên selectedOption nếu có changeCalendar
+                if (orderDetails?.order?.changeCalendar && orderDetails?.order?.inforChangeCalendar?.data?.meta?.selectedOption?.departure?.time) {
+                    return orderDetails.order.inforChangeCalendar.data.meta.selectedOption.departure.time;
+                }
+                // Fallback to reservationInfo, dựa trên leg từ uniq
+                const isOutbound = ticket.uniq?.includes('outbound');
+                const leg = isOutbound ? 'outbound' : 'inbound';
+                const time = ticket.reservationInfo?.flights?.[leg]?.time;
+                if (time) {
+                    const parts = time.split(' - ');
+                    return parts[0] || time;
+                }
+            }
         }
-        return ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "";
+        // Cho tour, ưu tiên startDateTime từ reservationInfo.details
+        if (ticket.type === 'tour') {
+            const startDateTime = ticket.reservationInfo?.details?.startDateTime;
+            if (startDateTime) {
+                try {
+                    const dt = new Date(startDateTime.replace('Z', ''));
+                    if (!isNaN(dt.getTime())) {
+                        return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                    }
+                } catch { }
+            }
+        }
+        // Fallback cho bus và các loại khác
+        if (!ticket.travelStart) return "";
+        try {
+            if (ticket.travelStart.includes('T')) {
+                const dt = new Date(ticket.travelStart.replace('Z', ''));
+                if (!isNaN(dt.getTime())) {
+                    return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+                }
+            } else {
+                return ticket.travelStart;
+            }
+        } catch {
+            return ticket.travelStart;
+        }
+        return "";
     }
     return (
         <Protected>
@@ -1533,8 +1589,8 @@ function TaiKhoan() {
                                                                     <span className='text-sm font-bold'>Họ và tên hành khách : </span>
                                                                     {ticket.passenger ? (() => { try { return JSON.parse(ticket.passenger).name } catch { return ticket.passenger } })() : ''}
                                                                 </div>
-                                                                <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {ticket.travelDate}</div>
-                                                                <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{ticket.travelStart ? new Date(ticket.travelStart).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ""}</span></div>
+                                                                <div className="text-xs text-muted-foreground mt-1">Ngày sử dụng: {getTravelDateForFlight(ticket)}</div>
+                                                                <div className="text-xs text-muted-foreground mt-1">Giờ xuất phát : <span>{getDepartureTimeForChangedFlight(ticket, orderDetails)}</span></div>
                                                                 {/* Thêm chuyến và ghế nếu là flight */}
                                                                 {ticket.type === 'flight' && (
                                                                     <>
@@ -1556,7 +1612,7 @@ function TaiKhoan() {
 
                                         {(orderDetails as any).tickets && (orderDetails as any).tickets.length > 0 && (
                                             <div>
-                                                <h4 className="font-semibold">{(orderDetails as any).oldTickets?.length > 0 ? 'Vé đã đổi / Vé' : 'Vé'}</h4>
+                                                <h4 className="font-semibold">{(orderDetails as any).oldTickets?.length > 0 ? 'Vé đã đổi' : 'Vé'}</h4>
                                                 <div className="space-y-2">
                                                     {(
                                                         // Chỉ show vé mới (không phải vé cũ)

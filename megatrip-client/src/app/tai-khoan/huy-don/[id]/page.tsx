@@ -137,10 +137,13 @@ export default function HuyDonPage() {
             if (item?.quantity) return Number(item.quantity) || 1;
             return 1;
         })();
-        const serviceDateRaw = snap?.details?.startDateTime ?? snap?.details?.date ?? order.createdAt;
+        // Nếu đã đổi lịch, dùng dateChangeCalendar thay vì date gốc
+        const serviceDateRaw = order.changeCalendar && order.dateChangeCalendar
+            ? order.dateChangeCalendar
+            : (snap?.details?.startDateTime ?? snap?.details?.date ?? order.createdAt);
         let serviceDate = serviceDateRaw ? new Date(serviceDateRaw).toISOString().slice(0, 10) : '';
 
-        // Nếu là flight, lấy ngày từ flights
+        // Nếu là flight, lấy ngày từ flights (giữ nguyên logic)
         if (item?.type === 'flight') {
             const flights = snap?.flights;
             if (flights?.outbound && flights?.inbound) {

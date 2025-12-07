@@ -1151,34 +1151,21 @@ export default function DoiLichPage() {
                     console.log('Tour options loaded:', opts.map(o => o.labelDate)); // Debug log
                     setOptions(opts);
                 } else if (type === 'bus') {
-
                     const r = await fetch(`${base}/api/buses/${encodeURIComponent(productId)}`);
                     if (!r.ok) throw new Error(String(r.status));
                     const j = await r.json();
                     const bus = j && j.data ? j.data : j;
-                    // let dates = Array.isArray(bus?.departureDates) && bus.departureDates.length ? bus.departureDates : (bus?.departureAt ? [bus.departureAt] : []);
                     let dates = Array.isArray(bus?.departureDates) ? bus.departureDates.map((d: string) => d.split('T')[0]) : (bus?.departureAt ? [bus.departureAt.split('T')[0]] : []);
-                    // Filter chỉ giữ ngày > today + 3 days
-                    const now = new Date();
-                    // dates = dates.filter(d => {
-                    //     const depDate = new Date(d);
-                    //     const depDateMidnight = new Date(depDate.getFullYear(), depDate.getMonth(), depDate.getDate());
-                    //     const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                    //     const daysDiff = (depDateMidnight.getTime() - nowMidnight.getTime()) / (1000 * 60 * 60 * 24);
-                    //     return daysDiff > 3;
-                    // });
                     dates = dates.filter((d: any) => {
-                        const depDate = new Date(d + 'T00:00:00'); // assuming d is YYYY-MM-DD
+                        const depDate = new Date(d + 'T00:00:00');
                         const hoursDiff = (depDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-                        return hoursDiff >= 24; // Match canChange policy for bus
+                        return hoursDiff >= 24;
                     });
-                    console.log('dates bus after filter:', dates);
 
                     const adultUnit = Number(bus?.adultPrice || bus?.price || 0);
                     const childUnit = Number(bus?.childPrice || 0);
                     const infantUnit = 0;
 
-                    // try fetch slot info per date from bus slot endpoint if available
                     const dateList = (dates || []).map((d: any) => {
                         try { return new Date(d).toISOString(); } catch { return String(d); }
                     });
@@ -1196,9 +1183,11 @@ export default function DoiLichPage() {
                     });
                     const slotResults = await Promise.all(slotPromises);
 
+                    // Lấy giờ thực từ bus.departureAt hoặc bus.time (nếu có)
+                    const time = bus.time || new Date(bus.departureAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+
                     const opts = slotResults.map((res: any, idx: number) => {
                         const dateIso = res.dateIso;
-                        const time = bus?.time || (new Date(dateList[idx] || dateIso)).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
                         let seatsAvailable = null;
                         if (res.slot) {
                             if (typeof res.slot.available === 'number') seatsAvailable = Number(res.slot.available);
@@ -1207,7 +1196,7 @@ export default function DoiLichPage() {
                         if (seatsAvailable == null) seatsAvailable = Number(bus?.seatsAvailable ?? bus?.seatsTotal ?? 0);
                         return {
                             id: `bus-${idx}-${dateIso}`,
-                            time,
+                            time, // Dùng giờ thực từ bus
                             fare: adultUnit * (adults + children) + infantUnit * infants,
                             notes: undefined,
                             labelDate: dateIso,
@@ -1215,7 +1204,7 @@ export default function DoiLichPage() {
                             perPax: { adult: adultUnit, child: childUnit, infant: infantUnit }
                         } as any;
                     }).filter((o: any) => Number(o.seatsAvailable || 0) >= seatCount);
-                    console.log('Bus options loaded:', opts.map(o => o.labelDate)); // Debug log
+                    console.log('Bus options loaded:', opts.map(o => o.labelDate));
                     setOptions(opts);
                 } else {
                     setOptions([]);
@@ -1317,11 +1306,21 @@ export default function DoiLichPage() {
                 if (!Number.isNaN(dt.getTime())) return dt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
             } catch { }
         }
+
+        
         // Cho flight, lấy từ flights.outbound.time nếu có
         if (booking?.type === 'flight') {
             const flights = snap?.flights;
             if (flights?.outbound?.time) {
                 return flights.outbound.time;
+            }
+        }
+        // Cho bus, ưu tiên snap.details.time (ví dụ "18:11 - 14:11" -> lấy "18:11")
+        if (booking?.type === 'bus') {
+            const time = snap?.details?.time;
+            if (time && typeof time === 'string') {
+                const parts = time.split(' - ');
+                return parts[0] || '-'; // Lấy giờ khởi hành
             }
         }
         // Fallback từ booking.details
