@@ -18,6 +18,7 @@ export default function DangKy() {
   const [success, setSuccess] = useState('');
   const [checked, setChecked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<any>({ email: '', password: '', confirm: '', otp: '' }); // Thêm state lỗi từng field
   const router = useRouter();
 
   // Check if already logged in and redirect without rendering
@@ -30,19 +31,48 @@ export default function DangKy() {
     }
   }, [router]);
   if (!checked) return null;
+
+  // Hàm validate form đăng ký
+  const validateForm = () => {
+    const errors = { email: '', password: '', confirm: '' };
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!form.email.trim()) {
+      errors.email = 'Email là bắt buộc';
+    } else if (!emailRegex.test(form.email)) {
+      errors.email = 'Email không hợp lệ';
+    }
+    if (!form.password) {
+      errors.password = 'Mật khẩu là bắt buộc';
+    } else if (form.password.length < 8) {
+      errors.password = 'Mật khẩu phải ít nhất 8 ký tự';
+    }
+    if (!form.confirm) {
+      errors.confirm = 'Xác nhận mật khẩu là bắt buộc';
+    } else if (form.password !== form.confirm) {
+      errors.confirm = 'Mật khẩu xác nhận không khớp';
+    }
+    setFieldErrors(errors);
+    return !Object.values(errors).some(e => e);
+  };
+
+  // Hàm validate OTP
+  const validateOtp = () => {
+    const errors = { otp: '' };
+    if (!otp.trim()) {
+      errors.otp = 'OTP là bắt buộc';
+    } else if (!/^\d{6}$/.test(otp)) {
+      errors.otp = 'OTP phải là 6 chữ số';
+    }
+    setFieldErrors(errors);
+    return !errors.otp;
+  };
+
   // Đăng ký tài khoản
   const handleRegister = async (e: any) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (!form.email || !form.password || !form.confirm) {
-      setError('Vui lòng nhập đầy đủ thông tin');
-      return;
-    }
-    if (form.password !== form.confirm) {
-      setError('Mật khẩu xác nhận không khớp');
-      return;
-    }
+    if (!validateForm()) return; // Validate trước khi submit
     setIsLoading(true);
     try {
       await auth.register({ email: form.email, password: form.password });
@@ -75,10 +105,7 @@ export default function DangKy() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    if (!otp) {
-      setError('Vui lòng nhập mã OTP');
-      return;
-    }
+    if (!validateOtp()) return; // Validate trước khi submit
     setIsLoading(true);
     try {
       const res = await auth.verifyOtp({ email: form.email, code: otp });
@@ -89,6 +116,25 @@ export default function DangKy() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Hàm handle onChange với validation real-time
+  const handleFormChange = (field: string, value: string) => {
+    setForm(f => ({ ...f, [field]: value }));
+    // Validate real-time
+    if (field === 'email') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      setFieldErrors((e: any) => ({ ...e, email: !value.trim() ? 'Email là bắt buộc' : !emailRegex.test(value) ? 'Email không hợp lệ' : '' }));
+    } else if (field === 'password') {
+      setFieldErrors((e: any) => ({ ...e, password: !value ? 'Mật khẩu là bắt buộc' : value.length < 8 ? 'Mật khẩu phải ít nhất 8 ký tự' : '' }));
+    } else if (field === 'confirm') {
+      setFieldErrors((e: any) => ({ ...e, confirm: !value ? 'Xác nhận mật khẩu là bắt buộc' : value !== form.password ? 'Mật khẩu xác nhận không khớp' : '' }));
+    }
+  };
+
+  const handleOtpChange = (value: string) => {
+    setOtp(value);
+    setFieldErrors((e: any) => ({ ...e, otp: !value.trim() ? 'OTP là bắt buộc' : !/^\d{6}$/.test(value) ? 'OTP phải là 6 chữ số' : '' }));
   };
 
   return (
@@ -121,18 +167,20 @@ export default function DangKy() {
                 <form className="space-y-5" onSubmit={handleRegister}>
                   <div>
                     <Label htmlFor="email" className="font-semibold">Email/Số điện thoại di động</Label>
-                    <Input id="email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
+                    <Input id="email" type="email" value={form.email} onChange={e => handleFormChange('email', e.target.value)} placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
+                    {fieldErrors.email && <div className="text-red-600 text-sm">{fieldErrors.email}</div>}
                   </div>
                   <div>
                     <Label htmlFor="password" className="font-semibold">Mật khẩu</Label>
-                    <Input id="password" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required />
+                    <Input id="password" type="password" value={form.password} onChange={e => handleFormChange('password', e.target.value)} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required />
+                    {fieldErrors.password && <div className="text-red-600 text-sm">{fieldErrors.password}</div>}
                   </div>
                   <div>
                     <Label htmlFor="confirm" className="font-semibold">Xác nhận mật khẩu</Label>
-                    <Input id="confirm" type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required />
+                    <Input id="confirm" type="password" value={form.confirm} onChange={e => handleFormChange('confirm', e.target.value)} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required />
+                    {fieldErrors.confirm && <div className="text-red-600 text-sm">{fieldErrors.confirm}</div>}
                   </div>
                   {error && <div className="text-red-600 text-sm text-center">{error}</div>}
-                  {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Đăng ký</Button> */}
                   <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
                     {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
                   </Button>
@@ -148,15 +196,13 @@ export default function DangKy() {
                     <Mail className="h-5 w-5 text-primary" />
                     <span className="font-medium">Nhập mã OTP đã gửi tới email</span>
                   </div>
-                  <Input id="otp" value={otp} onChange={e => setOtp(e.target.value)} placeholder="Nhập mã OTP" required autoFocus className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" />
+                  <Input id="otp" value={otp} onChange={e => handleOtpChange(e.target.value)} placeholder="Nhập mã OTP" required autoFocus className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" />
+                  {fieldErrors.otp && <div className="text-red-600 text-sm">{fieldErrors.otp}</div>}
                   {error && <div className="text-red-600 text-sm text-center">{error}</div>}
                   {success && <div className="text-green-600 text-sm text-center">{success}</div>}
-                  {/* <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>Xác nhận OTP</Button> */}
-
                   <Button type="submit" className="w-full mt-2 rounded-full font-semibold text-lg py-2" disabled={isLoading} style={{ background: 'hsl(var(--primary))', color: 'hsl(var(--primary-foreground))', border: '1px solid hsl(var(--primary))' }}>
                     {isLoading ? 'Đang xác nhận...' : 'Xác nhận OTP'}
                   </Button>
-
                   <div className="text-center mt-4">
                     <Button type="button" variant="link" onClick={handleResendOtp} disabled={isLoading} className="text-primary font-medium hover:underline">
                       {isLoading ? 'Đang gửi...' : 'Gửi lại mã OTP'}
@@ -177,7 +223,7 @@ export default function DangKy() {
                 <span className="px-3 text-xs text-muted-foreground">hoặc đăng ký với</span>
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
               </div>
-              <Button
+              {/* <Button
                 type="button"
                 className="w-full flex items-center justify-center gap-2 rounded-full font-bold shadow transition px-4 py-3 border text-base"
                 style={{ background: 'hsl(var(--primary-50))', color: 'hsl(var(--primary-700))', borderColor: 'hsl(var(--primary))' }}
@@ -196,7 +242,7 @@ export default function DangKy() {
                     </g>
                   </svg>
                 </span>
-              </Button>
+              </Button> */}
               <div className="text-xs text-muted-foreground text-center mt-6">
                 Bằng cách tiếp tục, bạn đồng ý với <Link href="/dieu-khoan" className="text-primary underline">Điều khoản</Link> và <Link href="/dieu-kien" className="text-primary underline">Điều kiện</Link> này và bạn đã được thông báo về <Link href="/chinh-sach-bao-mat" className="text-primary underline">Chính sách bảo vệ dữ liệu</Link> của chúng tôi.
               </div>

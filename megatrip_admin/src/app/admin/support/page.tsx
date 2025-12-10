@@ -1134,8 +1134,8 @@ const Support: React.FC = () => {
         try {
             if (isCancel && (selectedTicket as any).refundInfo) {
                 const refundInfo = (selectedTicket as any).refundInfo;
-                const amount = 10000;
-                // const amount = refundInfo.refundAmount; // Sử dụng số tiền hoàn dự kiến từ refundInfo
+                // const amount = 10000;
+                const amount = refundInfo.refundAmount; // Sử dụng số tiền hoàn dự kiến từ refundInfo
 
                 let refundResult: any = null;
 

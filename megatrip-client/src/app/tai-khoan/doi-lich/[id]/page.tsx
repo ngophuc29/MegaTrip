@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from '../../../components/ui/radio-group';
 import { Separator } from '../../../components/ui/separator';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
-import { toast } from '../../../components/ui/use-toast';
+import { toast } from 'sonner';
 import { ArrowLeft, CalendarDays, Clock, Plane, Ticket, TrendingUp, ChevronRight, Bus, MapPin } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 interface Booking {
@@ -647,13 +647,13 @@ export default function DoiLichPage() {
         });
 
         if (!booking || !selectedDateLabel) {
-            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày mới' });
+            toast.error('Vui lòng chọn ngày mới');
             return;
         }
-
         // Check phải chọn ghế cho flight/bus
-        if ((booking.type === 'flight' || booking.type === 'bus') && selectedSeats.length === 0) {
-            toast({ title: 'Chưa chọn ghế', description: 'Vui lòng chọn ghế trước khi xác nhận đổi lịch.' });
+        const pc = paxCountsFromOrder(order || ({} as any));
+        if ((booking.type === 'flight' || booking.type === 'bus') && selectedSeats.length !== pc.seatCount) {
+            toast.error(`Vui lòng chọn đủ ${pc.seatCount} ghế cho ${pc.adults} người lớn và ${pc.children} trẻ em.`);
             return;
         }
 
@@ -661,17 +661,17 @@ export default function DoiLichPage() {
         if (!selectedOption && optionsForSelectedDate && optionsForSelectedDate.length > 0) {
             // set state and ask user to confirm again (simple & safe)
             setSelectedOptionId(optionsForSelectedDate[0].id);
-            toast({ title: 'Đã chọn mặc định', description: 'Đã tự chọn chuyến đầu tiên trong ngày. Vui lòng nhấn lại Xác nhận.' });
+            toast('Đã tự chọn chuyến đầu tiên trong ngày. Vui lòng nhấn lại Xác nhận.');
             return;
         }
 
         if (!ackChecked) {
-            toast({ title: 'Chưa đồng ý', description: 'Bạn phải đồng ý chính sách trước khi xác nhận' });
+            toast.error('Bạn phải đồng ý chính sách trước khi xác nhận');
             return;
         }
 
         if (!canChange) {
-            toast({ title: 'Không đủ điều kiện đổi', description: 'Không thể đổi lịch — kiểm tra chính sách thời hạn đổi.' });
+            toast.error('Không thể đổi lịch — kiểm tra chính sách thời hạn đổi.');
             return;
         }
 
@@ -687,11 +687,11 @@ export default function DoiLichPage() {
 
     async function handlePay() {
         if (!booking || !order || !selectedDateLabel || !selectedOption) {
-            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn ngày và chuyến mới' });
+            toast.error('Vui lòng chọn ngày và chuyến mới');
             return;
         }
         if (!payAckConfirmed) {
-            toast({ title: 'Chưa xác nhận', description: 'Vui lòng xác nhận trước khi thanh toán' });
+            toast.error('Vui lòng xác nhận trước khi thanh toán');
             return;
         }
 
@@ -749,10 +749,7 @@ export default function DoiLichPage() {
             if (amountDue <= 0) {
                 const refundAmount = Math.abs(amountDue) || refund || 0;
                 const id = saveRequest();
-                toast({
-                    title: 'Yêu cầu lưu',
-                    description: refundAmount > 0 ? `Không cần thanh toán. Sẽ hoàn lại ${formatPrice(refundAmount)}. Mã yêu cầu ${id}` : `Không cần thanh toán. Mã yêu cầu ${id}`
-                });
+                toast.success(refundAmount > 0 ? `Không cần thanh toán. Sẽ hoàn lại ${formatPrice(refundAmount)}. Mã yêu cầu ${id}` : `Không cần thanh toán. Mã yêu cầu ${id}`);
                 setPayOpen(false);
                 router.push('/tai-khoan');
                 return;
@@ -821,7 +818,7 @@ export default function DoiLichPage() {
             }
         } catch (err: any) {
             console.error('Payment init failed:', err); // Log lỗi tổng
-            toast({ title: 'Lỗi thanh toán', description: String(err?.message || err) });
+            toast.error(String(err?.message || err));
             return;
         }
     }
@@ -1481,14 +1478,14 @@ export default function DoiLichPage() {
             return;
         }
         if (selectedSeats.length >= max) {
-            toast({ title: 'Giới hạn chỗ', description: `Bạn chỉ được chọn tối đa ${max} ghế` });
+            toast.error(`Bạn chỉ có thể chọn tối đa ${max} ghế.`);
             return;
         }
         // Check availability cho bus
         if (booking?.type === 'bus') {
             const seat = seatMap.find(s => s.seatId === seatId);
             if (seat && seat.status !== 'available') {
-                toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
+                toast.error('Ghế này đã được đặt/không thể chọn');
                 return;
             }
         }
@@ -1497,7 +1494,7 @@ export default function DoiLichPage() {
             const allSeats = flightSeatMap.rows.flatMap((r: any) => r.seats || []);
             const seat = allSeats.find((s: any) => s.id === seatId);
             if (seat && seat.availability !== 'AVAILABLE') {
-                toast({ title: 'Ghế không khả dụng', description: 'Ghế này đã được đặt/không thể chọn' });
+                toast.error('Ghế này đã được đặt/không thể chọn');
                 return;
             }
             // Confirm cho paid seat

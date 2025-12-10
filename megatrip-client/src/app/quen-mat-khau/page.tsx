@@ -16,7 +16,7 @@ export default function QuenMatKhau() {
         e.preventDefault();
         setError('');
         setSuccess('');
-        if (!email) return setError('Vui lòng nhập email');
+        if (!email) return setError('Vui lòng nhập đúng email');
         setLoading(true);
         try {
             await auth.forgotPassword({ email });

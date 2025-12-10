@@ -132,11 +132,11 @@ function DangNhap() {
                   <Link href="/quen-mat-khau" className="text-primary font-medium hover:underline">Quên mật khẩu?</Link>
                 </div>
               </form>
-              <div className="my-4 w-full flex items-center">
+              {/* <div className="my-4 w-full flex items-center">
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
                 <span className="px-3 text-xs text-muted-foreground">hoặc đăng nhập với</span>
                 <span className="flex-1 h-px bg-[hsl(var(--primary))]"></span>
-              </div>
+              </div> */}
 
               <div className="text-xs text-muted-foreground text-center mt-6">
                 Bằng cách tiếp tục, bạn đồng ý với <Link href="/dieu-khoan" className="text-primary underline">Điều khoản</Link> và <Link href="/dieu-kien" className="text-primary underline">Điều kiện</Link> này và bạn đã được thông báo về <Link href="/chinh-sach-bao-mat" className="text-primary underline">Chính sách bảo vệ dữ liệu</Link> của chúng tôi.

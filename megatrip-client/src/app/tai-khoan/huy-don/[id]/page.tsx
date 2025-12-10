@@ -13,7 +13,7 @@ import { Separator } from '../../../components/ui/separator';
 import { Input } from '../../../components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '../../../components/ui/dialog';
 import { AlertTriangle, ArrowLeft, CreditCard, DollarSign, FileText, Info, Plane, ChevronRight, Bus, MapPin } from 'lucide-react';
-import { toast } from '../../../components/ui/use-toast';
+import { toast } from 'sonner';
 import { me } from '@/apis/auth';
 
 interface Booking {
@@ -341,7 +341,7 @@ export default function HuyDonPage() {
 
     const submitCancelRequest = async () => {
         if (!reason) {
-            toast({ title: 'Thiếu thông tin', description: 'Vui lòng chọn lý do.' });
+            toast.error('Vui lòng chọn lý do.');
             return;
         }
 
@@ -376,17 +376,17 @@ export default function HuyDonPage() {
             });
             if (!resp.ok) {
                 const txt = await resp.text().catch(() => '');
-                toast({ title: 'Gửi yêu cầu thất bại', description: `Lỗi server: ${resp.status} ${txt}` });
+                toast.error(`Gửi yêu cầu thất bại: Lỗi server: ${resp.status} ${txt}`);
                 return;
             }
             const json = await resp.json();
             const ticket = json.ticket || json.data || json;
-            toast({ title: 'Yêu cầu đã gửi', description: `Mã yêu cầu: ${ticket?.ticketNumber || ticket?.id || '–'}` });
+            toast.success(`Yêu cầu đã gửi: Mã yêu cầu: ${ticket?.ticketNumber || ticket?.id || '–'}`);
             if (typeof window !== 'undefined') window.history.replaceState({ activeTab: 'requests' }, '');
             router.push('/tai-khoan');
         } catch (err) {
             console.error('submitCancelRequest error', err);
-            toast({ title: 'Lỗi mạng', description: 'Không thể kết nối tới server. Vui lòng thử lại.' });
+            toast.error('Lỗi mạng: Không thể kết nối tới server. Vui lòng thử lại.');
         }
     };
 

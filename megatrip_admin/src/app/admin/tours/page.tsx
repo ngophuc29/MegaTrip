@@ -2098,7 +2098,9 @@ export default function Tours() {
             if (!selectedTour?.id) return null;
             const res = await fetch(`${API_BASE}/api/tours/${selectedTour.id}/slots`);
             if (!res.ok) throw new Error('Failed to fetch tour slots');
-            return res.json();
+            const data = await res.json();
+            console.log('tourSlotsData từ API:', data);  // Thêm log này
+            return data;
         },
         enabled: modalOpen && modalMode === "view" && !!selectedTour?.id,
     });
