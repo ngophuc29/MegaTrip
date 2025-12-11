@@ -112,7 +112,7 @@ function DangNhap() {
             <CardContent className="pt-2 pb-6">
               <form className="space-y-5" onSubmit={handleLogin}>
                 <div>
-                  <Label htmlFor="email" className="font-semibold">Email/Số điện thoại di động</Label>
+                  <Label htmlFor="email" className="font-semibold">Email</Label>
                   <Input id="email" type="email" placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
                 </div>
                 <div>
