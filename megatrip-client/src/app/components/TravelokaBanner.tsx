@@ -101,7 +101,7 @@ const sidebarPromotions = [
   },
   {
     id: 4,
-    title: 'Tết 2025 - Ưu đãi khủng',
+    title: 'Tết 2026 - Ưu đãi khủng',
     subtitle: 'Đặt ngay để nhận giá tốt nhất',
     discount: 'TET2025',
     color: 'bg-gradient-to-r from-orange-500 to-yellow-500',
@@ -389,33 +389,36 @@ export default function TravelokaBanner() {
           <div className="mb-6">
             <h3 className="text-[hsl(var(--background))] font-semibold text-base mb-3">🔥 Ưu đãi Hot</h3>
             <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
-              {sidebarPromotions.map((promo) => (
-                <div
-                  key={promo.id}
-                  className={cn(
-                    `${promo.color} min-w-[260px] max-w-xs rounded-lg p-3 text-[hsl(var(--background))] cursor-pointer hover:scale-105 transition-transform shadow-lg flex-shrink-0`
-                  )}
-                >
-                  <div className="flex items-start space-x-3">
-                    <span className="text-2xl">{promo.icon}</span>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-1">
-                        <h4 className="font-semibold text-sm">{promo.title}</h4>
-                        <Badge className="bg-[hsl(var(--background))/0.2] text-[hsl(var(--background))] text-xs px-2 py-1">
-                          {promo.discount}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-[hsl(var(--background))/0.9] leading-tight">{promo.subtitle}</p>
-                      <Button
-                        size="sm"
-                        className="mt-2 bg-[hsl(var(--background))/0.2] hover:bg-[hsl(var(--background))/0.3] text-[hsl(var(--background))] text-xs h-7 px-3"
-                      >
-                        Xem ngay →
-                      </Button>
+              {/* Placeholder tĩnh thay cho carousel interactive */}
+              <div className="min-w-[260px] max-w-xs rounded-lg p-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-[hsl(var(--background))] shadow-lg flex-shrink-0">
+                <div className="flex items-start space-x-3">
+                  <span className="text-2xl">🚀</span>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-sm">Khám phá ưu đãi đặc biệt</h4>
+                    <p className="text-xs text-[hsl(var(--background))/0.9] leading-tight">
+                      Đặt vé sớm để nhận giá tốt nhất và trải nghiệm dịch vụ chất lượng cao.
+                    </p>
+                    <div className="mt-2 text-xs text-[hsl(var(--background))/0.8]">
+                      Liên hệ hotline: 1900 6969
                     </div>
                   </div>
                 </div>
-              ))}
+              </div>
+              {/* Có thể thêm 1-2 placeholder nữa nếu muốn giữ width tương tự */}
+              <div className="min-w-[260px] max-w-xs rounded-lg p-3 bg-gradient-to-r from-green-500 to-emerald-500 text-[hsl(var(--background))] shadow-lg flex-shrink-0">
+                <div className="flex items-start space-x-3">
+                  <span className="text-2xl">🌟</span>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-sm">Dịch vụ khách hàng 24/7</h4>
+                    <p className="text-xs text-[hsl(var(--background))/0.9] leading-tight">
+                      Hỗ trợ nhanh chóng cho mọi nhu cầu đặt vé và du lịch.
+                    </p>
+                    <div className="mt-2 text-xs text-[hsl(var(--background))/0.8]">
+                      Email: support@megatrip.com
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

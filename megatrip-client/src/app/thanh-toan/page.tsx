@@ -2131,7 +2131,7 @@ function ThanhToan() {
                       )}
                     </div>
                     {/* Shuttle pickup (bus only) */}
-                    {mounted && bookingType === "bus" && (
+                    {false && mounted && bookingType === "bus" && (
                       <div className="md:col-span-2">
                         <Label htmlFor="shuttlePickup">
                           Điểm đón trung chuyển (nếu xa bến)
