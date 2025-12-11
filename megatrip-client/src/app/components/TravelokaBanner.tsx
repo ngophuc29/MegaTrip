@@ -387,7 +387,7 @@ export default function TravelokaBanner() {
 
           {/* Ưu đãi Hot Carousel */}
           <div className="mb-6">
-            <h3 className="text-[hsl(var(--background))] font-semibold text-base mb-3">🔥 Ưu đãi Hot</h3>
+            <h3 className="text-[hsl(var(--background))] font-semibold text-base mb-3">🔥 Thông tin nhanh</h3>
             <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
               {/* Placeholder tĩnh thay cho carousel interactive */}
               <div className="min-w-[260px] max-w-xs rounded-lg p-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-[hsl(var(--background))] shadow-lg flex-shrink-0">
