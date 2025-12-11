@@ -235,8 +235,8 @@ export default function DoiLichPage() {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({
                     grant_type: 'client_credentials',
-                    client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
-                    client_secret: '9fcdtMUicUy6ZAGm'
+                    client_id: process.env.NEXT_PUBLIC_AMADEUS_CLIENT_ID || '',
+                    client_secret: process.env.NEXT_PUBLIC_AMADEUS_CLIENT_SECRET || ''
                 })
             });
             const tokenJson = await tokenRes.json();
@@ -287,8 +287,8 @@ export default function DoiLichPage() {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
                 grant_type: 'client_credentials',
-                client_id: 'e9bhGWGeAIZG4qLn708d5oAV3gDDaWut',
-                client_secret: '9fcdtMUicUy6ZAGm'
+                client_id: process.env.NEXT_PUBLIC_AMADEUS_CLIENT_ID || '',
+                client_secret: process.env.NEXT_PUBLIC_AMADEUS_CLIENT_SECRET || ''
             })
         });
         const tokenJson = await tokenRes.json();

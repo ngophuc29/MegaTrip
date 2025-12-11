@@ -85,12 +85,12 @@ const addOnServices = [
     //     price: 200000,
     //     description: 'Thêm 10kg hành lý ký gửi (tối đa 33kg)',
     // },
-    {
-        id: 'seat_selection',
-        name: 'Chọn chỗ ngồi',
-        price: 150000,
-        description: 'Chọn chỗ ngồi yêu thích trên máy bay',
-    },
+    // {
+    //     id: 'seat_selection',
+    //     name: 'Chọn chỗ ngồi',
+    //     price: 150000,
+    //     description: 'Chọn chỗ ngồi yêu thích trên máy bay',
+    // },
     {
         id: 'meal_upgrade',
         name: 'Nâng cấp suất ăn',
