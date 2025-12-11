@@ -578,28 +578,28 @@ export default function ChiTietVeMayBay() {
                     });
                 } else if (typeof val === 'object') {
                     if (val) {
-                    Object.entries(val).forEach(([subKey, entry]: any, idx) => {
-                        if (!entry) return;
-                        const price = entry?.price?.amount ?? entry?.amount ?? entry?.amount?.value ?? null;
-                        const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? entry?.currency ?? 'VND';
-                        const qty = entry?.quantity ?? null;
-                        let name = entry?.name ?? entry?.brand ?? `${key} ${subKey}`;
-                        let desc = entry?.fareNotes?.descriptions?.[0]?.text ?? entry?.text ?? entry?.description ?? key;
-                        if (key === 'bags') {
-                            name = entry?.name ? `${entry.name}${qty ? ` (${qty} kiện)` : ''}` : `${key} ${subKey}${qty ? ` (${qty} kiện)` : ''}`;
-                            const qtyNote = qty ? `Số kiện: ${qty}` : '';
-                            desc = [qtyNote, desc].filter(Boolean).join('\n');
-                        }
-                        includedAddOns.push({
-                            id: `${key}_${subKey}`,
-                            name,
-                            price: price != null ? Number(String(price).replace(/[^\d.-]/g, '')) : 0,
-                            currency: currency ?? 'VND',
-                            description: desc ? String(desc).slice(0, 300) : key,
-                            raw: entry,
-                            sourceKey: key,
+                        Object.entries(val).forEach(([subKey, entry]: any, idx) => {
+                            if (!entry) return;
+                            const price = entry?.price?.amount ?? entry?.amount ?? entry?.amount?.value ?? null;
+                            const currency = entry?.price?.currencyCode ?? entry?.price?.currency ?? entry?.currency ?? 'VND';
+                            const qty = entry?.quantity ?? null;
+                            let name = entry?.name ?? entry?.brand ?? `${key} ${subKey}`;
+                            let desc = entry?.fareNotes?.descriptions?.[0]?.text ?? entry?.text ?? entry?.description ?? key;
+                            if (key === 'bags') {
+                                name = entry?.name ? `${entry.name}${qty ? ` (${qty} kiện)` : ''}` : `${key} ${subKey}${qty ? ` (${qty} kiện)` : ''}`;
+                                const qtyNote = qty ? `Số kiện: ${qty}` : '';
+                                desc = [qtyNote, desc].filter(Boolean).join('\n');
+                            }
+                            includedAddOns.push({
+                                id: `${key}_${subKey}`,
+                                name,
+                                price: price != null ? Number(String(price).replace(/[^\d.-]/g, '')) : 0,
+                                currency: currency ?? 'VND',
+                                description: desc ? String(desc).slice(0, 300) : key,
+                                raw: entry,
+                                sourceKey: key,
+                            });
                         });
-                    });
                     }
                 }
             }
@@ -2290,7 +2290,7 @@ export default function ChiTietVeMayBay() {
                                                 {selectedAddOnsByLeg.outbound.length > 0 && (
                                                     <div className="space-y-1">
                                                         {selectedAddOnsByLeg.outbound.map((addOnId) => {
-                                                            const addOn:any = dynamicAddOnServices.find((service) => service.id === addOnId);
+                                                            const addOn: any = dynamicAddOnServices.find((service) => service.id === addOnId);
                                                             if (!addOn) return null;
                                                             const qty = addOnPerPassenger[addOnId] || 1; // Lấy số lượng
                                                             return (

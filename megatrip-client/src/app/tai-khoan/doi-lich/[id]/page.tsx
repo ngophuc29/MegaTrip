@@ -635,6 +635,22 @@ export default function DoiLichPage() {
     // const handleConfirm = () => { if (!booking || !selectedDate || !selectedOption) return; setOtp(''); setOtpOpen(true); };
     // open payment modal after primary ackChecked
     const handleConfirm = () => {
+        console.log('=== DEBUG handleConfirm ===');
+        console.log('booking:', booking);
+        console.log('selectedDateLabel:', selectedDateLabel);
+        console.log('selectedOptionId:', selectedOptionId);
+        console.log('selectedOption:', selectedOption);
+        console.log('ackChecked:', ackChecked);
+        console.log('canChange:', canChange);
+        console.log('optionsForSelectedDate:', optionsForSelectedDate);
+        console.log('extraPay (số tiền cần thanh toán từ UI):', extraPay);
+        console.log('newTotal (tổng chuyến mới):', newTotal);
+        console.log('fareDiff (chênh lệch giá):', fareDiff);
+        console.log('penaltyAmount (phạt):', penaltyAmount);
+        console.log('refundBack (hoàn lại):', refundBack);
+        console.log('selectedSeatFees (phí ghế):', selectedSeatFees);
+        console.log('selectedSeats:', selectedSeats);
+        console.log('================================');
         // debug info
         console.log('handleConfirm click', {
             booking,
@@ -765,7 +781,7 @@ export default function DoiLichPage() {
             if (payMethod === 'momo') {
                 const paymentBody = {
                     orderId: changeCode,
-                    amount: Math.max(0, Math.round(amountDue)),
+                    amount: Math.max(0, Math.round(extraPay)),
                     orderInfo: `Thanh toán đổi lịch - ${order.orderNumber || ''}`,
                     orderDescription: `${booking.title} — ${selectedDateLabel} ${selectedOption?.time ?? ''}`,
                     extraData: JSON.stringify({ originalOrder: order.orderNumber, changeCode })
@@ -789,7 +805,7 @@ export default function DoiLichPage() {
                 }
             } else if (payMethod === 'zalopay') {
                 const paymentBody = {
-                    amount: Math.max(0, Math.round(amountDue)),
+                    amount: Math.max(0, Math.round(extraPay)),
                     description: `Thanh toán đổi lịch ${order.orderNumber || ''}`,
                     orderId: changeCode,
                     app_user: order.customerEmail || 'guest',

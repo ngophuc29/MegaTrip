@@ -1361,10 +1361,10 @@ const sampleSeatLayout = [
                                     >
                                         Tiếp tục thanh toán
                                     </Button>
-                                    <Button variant="outline" className="w-full">
+                                    {/* <Button variant="outline" className="w-full">
                                         <PlusCircle className="h-4 w-4 mr-2" />
                                         Thêm vào giỏ hàng
-                                    </Button>
+                                    </Button> */}
                                 </div>
 
                                 {/* Contact */}
