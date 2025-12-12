@@ -1947,7 +1947,7 @@ export default function DoiLichPage() {
                                             </span>
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
-                                            <span>Phạt theo chính sách ({Math.round(penaltyPercent * 100)}%)</span>
+                                            <span>Phạt theo chính sách {booking?.type === 'bus' ? '' : `(${Math.round(penaltyPercent * 100)}%)`}</span>
                                             <span className="font-medium text-red-600">{formatPrice(penaltyAmount)}</span>
                                         </div>
                                         {/* <div className="flex items-center justify-between text-sm">

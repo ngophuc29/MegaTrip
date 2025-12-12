@@ -4351,7 +4351,7 @@ function ThanhToan() {
                   <strong>Tour:</strong>
                   <ul className="list-disc ml-5 mt-1">
                     <li>Trên 5 ngày: 30% giá trị tour</li>
-                    <li>Từ 5 ngày trước: 50% giá trị tour</li>
+                    <li>Từ 3 đến 5 ngày trước: 50% giá trị tour</li>
                     <li>3 ngày trước: 100% giá trị tour</li>
                   </ul>
                 </li>

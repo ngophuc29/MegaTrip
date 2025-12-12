@@ -121,7 +121,7 @@ Liên hệ hỗ trợ để hủy đơn cụ thể.
 
 **Tour:**
 - Trên 5 ngày: Phí 30% giá trị tour
-- Từ 5 ngày trước: Phí 50% giá trị tour
+- Từ 3 đến 5 ngày trước: Phí 50% giá trị tour
 - 3 ngày trước: Phí 100% giá trị tour
 
 **Xe khách:**

@@ -519,18 +519,18 @@ export default function KhuyenMai() {
                                         </div>
 
                                         {/* Terms */}
-                                        <div className="mt-4 p-3 rounded-lg" style={{ background: 'hsl(var(--info-foreground))' }}>
+                                        {/* <div className="mt-4 p-3 rounded-lg" style={{ background: 'hsl(var(--info-foreground))' }}>
                                             <div className="flex items-start gap-2">
                                                 <AlertCircle className="h-4 w-4" style={{ color: 'hsl(var(--info))' }} />
                                                 <p className="text-xs" style={{ color: 'hsl(var(--info))' }}>{voucher.terms}</p>
                                             </div>
-                                        </div>
+                                        </div> */}
 
                                         {/* Action Button */}
-                                        <Button className="w-full mt-4" size="sm">
+                                        {/* <Button className="w-full mt-4" size="sm">
                                             <Gift className="h-4 w-4 mr-2" />
                                             Lưu mã và đặt ngay
-                                        </Button>
+                                        </Button> */}
                                     </CardContent>
                                 </Card>
                             );

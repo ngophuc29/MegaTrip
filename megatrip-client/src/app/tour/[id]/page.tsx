@@ -172,7 +172,7 @@ const tourDetails = {
         megatrip: `Megatrip hủy trước 3 ngày do không đủ số lượng hành khách: Hoàn tiền 100%. Hoàn trả phần còn lại trong 14 ngày làm việc (trừ cuối tuần, lễ Tết). Đến trễ hoặc tự ý rời tour: mất 100%.`,
         reschedule: {
             rules: {
-                'Từ 5 ngày trước': '50% giá trị tour',
+                'Từ 3 đến 5 ngày trước': '50% giá trị tour',
                 '3 ngày trước': '100% giá trị tour.',
                 // '2 ngày trước': '50% giá trị tour.',
             },
