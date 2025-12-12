@@ -420,7 +420,7 @@ export default function DoiLichPage() {
 
     // payment modal state
     const [payOpen, setPayOpen] = useState<boolean>(false);
-    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('zalopay');
+    const [payMethod, setPayMethod] = useState<'momo' | 'zalopay'>('momo');
     const [payAckConfirmed, setPayAckConfirmed] = useState<boolean>(false);
 
     const [options, setOptions] = useState<Option[]>([]);
@@ -693,7 +693,7 @@ export default function DoiLichPage() {
 
         // ready to open payment modal
         setPayAckConfirmed(false);
-        setPayMethod('zalopay');
+        setPayMethod('momo');
         setPayOpen(true);
     };
 

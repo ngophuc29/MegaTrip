@@ -1137,46 +1137,50 @@ const Support: React.FC = () => {
                 // const amount = 10000;
                 const amount = refundInfo.refundAmount; // Sử dụng số tiền hoàn dự kiến từ refundInfo
 
+
                 let refundResult: any = null;
 
-                if (refundInfo.transId) {
-                    const refundBody = {
-                        orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
-                        amount,
-                        transId: refundInfo.transId,
-                        description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
-                    };
-                    const momoResp = await fetch("https://demo-payment-nc15.onrender.com/momo/refund", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(refundBody),
-                    });
-                    if (!momoResp.ok) {
-                        const txt = await momoResp.text().catch(() => "");
-                        throw new Error(`Refund (momo) lỗi: ${momoResp.status} ${txt}`);
+                if (amount > 0) {
+                    if (refundInfo.transId) {
+                        const refundBody = {
+                            orderId: `REFUND_${refundInfo.orderRef || ticketId}_${Date.now().toString().slice(-6)}`,
+                            amount,
+                            transId: refundInfo.transId,
+                            description: `Hoàn tiền đơn hàng ${refundInfo.orderRef || ticketId}`,
+                        };
+                        const momoResp = await fetch("https://demo-payment-nc15.onrender.com/momo/refund", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(refundBody),
+                        });
+                        if (!momoResp.ok) {
+                            const txt = await momoResp.text().catch(() => "");
+                            throw new Error(`Refund (momo) lỗi: ${momoResp.status} ${txt}`);
+                        }
+                        refundResult = await momoResp.json();
+                    } else if (refundInfo.zp_trans_id) {
+                        const zaloBody = {
+                            zp_trans_id: refundInfo.zp_trans_id,
+                            amount,
+                            description: `Khách hàng hủy đơn ${refundInfo.orderRef || ticketId}`,
+                        };
+                        const zaloResp = await fetch("https://demo-payment-nc15.onrender.com/zalo/refund", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(zaloBody),
+                        });
+                        if (!zaloResp.ok) {
+                            const txt = await zaloResp.text().catch(() => "");
+                            throw new Error(`Refund (zalo) lỗi: ${zaloResp.status} ${txt}`);
+                        }
+                        refundResult = await zaloResp.json();
+                    } else {
+                        toast({ title: "Thiếu thông tin giao dịch", description: "Không có transId hoặc zp_trans_id để thực hiện refund." });
+                        return;
                     }
-                    refundResult = await momoResp.json();
-                } else if (refundInfo.zp_trans_id) {
-                    const zaloBody = {
-                        zp_trans_id: refundInfo.zp_trans_id,
-                        amount,
-                        description: `Khách hàng hủy đơn ${refundInfo.orderRef || ticketId}`,
-                    };
-                    const zaloResp = await fetch("https://demo-payment-nc15.onrender.com/zalo/refund", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(zaloBody),
-                    });
-                    if (!zaloResp.ok) {
-                        const txt = await zaloResp.text().catch(() => "");
-                        throw new Error(`Refund (zalo) lỗi: ${zaloResp.status} ${txt}`);
-                    }
-                    refundResult = await zaloResp.json();
                 } else {
-                    toast({ title: "Thiếu thông tin giao dịch", description: "Không có transId hoặc zp_trans_id để thực hiện refund." });
-                    return;
+                    refundResult = { message: "Không cần hoàn tiền (số tiền = 0)" };
                 }
-
                 await Promise.all([
                     fetch(`${API_BASE}/api/support/${encodeURIComponent(ticketId)}/messages`, {
                         method: "POST",
@@ -1496,7 +1500,7 @@ const Support: React.FC = () => {
                             </div>
                         </CardContent>
                     </Card>
-                  
+
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Đã giải quyết</CardTitle>

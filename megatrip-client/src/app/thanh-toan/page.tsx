@@ -653,7 +653,7 @@ function ThanhToan() {
   }, [searchParams]);
 
   const [currentStep, setCurrentStep] = useState(1);
-  const [selectedPayment, setSelectedPayment] = useState("zalopay");
+  const [selectedPayment, setSelectedPayment] = useState("momo");
   const [needInvoice, setNeedInvoice] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
 
@@ -4395,7 +4395,7 @@ function ThanhToan() {
             <div>
               <h3 className="font-semibold text-base mb-2">7. Điều khoản thanh toán</h3>
               <ul className="list-disc ml-5 space-y-1">
-                <li>Thanh toán qua VNPay, MoMo, ZaloPay được bảo mật.</li>
+                <li>Thanh toán qua MoMo, ZaloPay được bảo mật.</li>
                 <li>Hoàn tiền trong 7-14 ngày qua tài khoản gốc.</li>
                 <li>Không hoàn tiền cho đơn đã sử dụng.</li>
               </ul>
