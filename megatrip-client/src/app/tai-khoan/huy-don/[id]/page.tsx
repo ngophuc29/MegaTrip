@@ -172,7 +172,7 @@ export default function HuyDonPage() {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const payload:any = await me();
+                const payload: any = await me();
                 const resolvedUserId = payload?._id ?? payload?.id ?? payload?.userId ?? payload?._id?.$oid ?? null;
                 setCustomerId(resolvedUserId);
             } catch (err) {
@@ -218,10 +218,13 @@ export default function HuyDonPage() {
         if (!booking) return { canCancel: false, message: 'Không tìm thấy đơn hàng.' } as const;
         if (booking.status !== 'confirmed') return { canCancel: false, message: 'Chỉ hủy được đơn đã xác nhận.' } as const;
         const today = new Date();
-        const service = new Date(booking.serviceDate + 'T00:00:00');
-        if (service <= today) return { canCancel: false, message: 'Đơn đã qua ngày sử dụng.' } as const;
-        const diffDays = Math.ceil((service.getTime() - today.getTime()) / (24 * 3600 * 1000));
-        const diffHours = Math.ceil((service.getTime() - today.getTime()) / (3600 * 1000));
+        const serviceDateObj = new Date(booking.serviceDate + 'T00:00:00');
+        const isPast = serviceDateObj.getFullYear() < today.getFullYear() ||
+            (serviceDateObj.getFullYear() === today.getFullYear() && serviceDateObj.getMonth() < today.getMonth()) ||
+            (serviceDateObj.getFullYear() === today.getFullYear() && serviceDateObj.getMonth() === today.getMonth() && serviceDateObj.getDate() < today.getDate());
+        if (isPast) return { canCancel: false, message: 'Đơn đã qua ngày sử dụng.' } as const;
+        const diffDays = Math.ceil((serviceDateObj.getTime() - today.getTime()) / (24 * 3600 * 1000));
+        const diffHours = Math.ceil((serviceDateObj.getTime() - today.getTime()) / (3600 * 1000));
 
         // Bus cancellation policy
         if (booking.type === 'bus') {
@@ -532,16 +535,20 @@ export default function HuyDonPage() {
                                                 <div className="font-medium">Chính sách hoàn tiền theo nhà vận chuyển</div>
                                                 {(policy as any).canCancel ? (
                                                     <>
-                                                        <div className="mt-1">Nhà vận chuyển: {(policy as any).airlinePolicy.name} • Còn {(policy as any).diffDays} ngày đến ngày sử dụng</div>
+                                                        <div className="mt-1">Nhà vận chuyển: {(policy as any).airlinePolicy.name} • {(policy as any).diffDays === 0 ? 'Hôm nay là ngày sử dụng' : `Còn ${(policy as any).diffDays} ngày đến ngày sử dụng`}</div>
                                                         <div className="mt-2">
                                                             <div className="text-xs font-medium">Bảng phí</div>
                                                             <ul className="list-disc ml-4 mt-1 space-y-1">
-                                                                {((policy as any).airlinePolicy.tiers as { minDays: number; feeRate: number }[]).map((t: any, idx: number) => (
-                                                                    <li key={idx}>
-                                                                        ≥ {t.minDays} ngày trước giờ bay: Phí {Math.round(t.feeRate * 100)}%
-                                                                        {t.feeRate === (policy as any).tier.feeRate && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}
-                                                                    </li>
-                                                                ))}
+                                                                {((policy as any).airlinePolicy.tiers as { minDays: number; feeRate: number }[]).map((t: any, idx: number) => {
+                                                                    const nextMinDays = ((policy as any).airlinePolicy.tiers as { minDays: number; feeRate: number }[])[idx + 1]?.minDays;
+                                                                    const rangeText = nextMinDays ? `${nextMinDays}-${t.minDays} ngày trước` : `Trong ${t.minDays + 1} ngày trước`;
+                                                                    return (
+                                                                        <li key={idx}>
+                                                                            {rangeText} giờ bay: Phí {Math.round(t.feeRate * 100)}%
+                                                                            {t.feeRate === (policy as any).tier.feeRate && <span className="ml-1 text-[11px] px-1 py-0.5 rounded bg-amber-200 text-amber-900">Áp dụng</span>}
+                                                                        </li>
+                                                                    );
+                                                                })}
                                                             </ul>
                                                             <div className="text-xs mt-1">Thuế/Phí không hoàn: {formatPrice((policy as any).airlinePolicy.nonRefundableTaxPerPax)} mỗi hành khách • Phí nền tảng: {formatPrice((policy as any).airlinePolicy.platformFee)}</div>
                                                         </div>

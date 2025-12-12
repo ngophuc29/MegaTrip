@@ -167,7 +167,7 @@ export default function DangKy() {
                 <form className="space-y-5" onSubmit={handleRegister}>
                   <div>
                     <Label htmlFor="email" className="font-semibold">Email</Label>
-                    <Input id="email" type="email" value={form.email} onChange={e => handleFormChange('email', e.target.value)} placeholder="Ví dụ: +84901234567 hoặc yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
+                    <Input id="email" type="email" value={form.email} onChange={e => handleFormChange('email', e.target.value)} placeholder="Ví dụ: yourname@email.com" className="rounded-full focus-ring bg-[hsl(var(--muted))] border border-[hsl(var(--primary))] focus:border-[hsl(var(--primary))]" required autoFocus />
                     {fieldErrors.email && <div className="text-red-600 text-sm">{fieldErrors.email}</div>}
                   </div>
                   <div>

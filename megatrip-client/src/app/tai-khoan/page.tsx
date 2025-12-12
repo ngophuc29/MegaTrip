@@ -1209,7 +1209,14 @@ function TaiKhoan() {
                                                                                         </Tooltip.Portal>
                                                                                     </Tooltip.Root>
                                                                                 </Tooltip.Provider>
-                                                                            ) : new Date(booking.serviceDate) < new Date() ? (
+                                                                            ) : (() => {
+                                                                                const serviceDateObj = new Date(booking.serviceDate);
+                                                                                const today = new Date();
+                                                                                const isPast = serviceDateObj.getFullYear() < today.getFullYear() ||
+                                                                                    (serviceDateObj.getFullYear() === today.getFullYear() && serviceDateObj.getMonth() < today.getMonth()) ||
+                                                                                    (serviceDateObj.getFullYear() === today.getFullYear() && serviceDateObj.getMonth() === today.getMonth() && serviceDateObj.getDate() < today.getDate());
+                                                                                return isPast;
+                                                                            })() ? (
                                                                                 <Tooltip.Provider>
                                                                                     <Tooltip.Root>
                                                                                         <Tooltip.Trigger asChild>
@@ -1492,7 +1499,7 @@ function TaiKhoan() {
                         <div className="p-4 space-y-4">
                             {loadingDetails ? (
                                 <div className="text-center">Đang tải...</div>
-                            ) : orderDetails  ? (
+                            ) : orderDetails ? (
                                 <>
 
                                     {/* Thông tin cơ bản */}
