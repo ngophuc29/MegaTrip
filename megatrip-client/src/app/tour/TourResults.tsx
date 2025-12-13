@@ -117,11 +117,11 @@ export default function TourResults({
                     </div>
                   </div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center">
+                    {/* <div className="flex items-center">
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                      <span className="text-sm font-medium">{tour.rating}</span>
+                      <span className="text-sm font-medium">{tour.rating}</span> */}
                       {/* <span className="text-sm text-[hsl(var(--muted-foreground))] ml-1">({tour.reviews})</span> */}
-                    </div>
+                    {/* </div> */}
                     <div className="flex items-center text-sm text-[hsl(var(--muted-foreground))] gap-1">
                       <span className='ml-1'>
 
