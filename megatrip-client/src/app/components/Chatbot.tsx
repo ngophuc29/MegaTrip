@@ -497,7 +497,7 @@ Câu hỏi user: "${input}"
 
                 const lines: string[] = []
                 for (const t of toursList.slice(0, 5)) {
-                    const up = (t.startDates || []).map((s: string) => new Date(s)).sort((a, b) => a.getTime() - b.getTime())
+                    const up = (t.startDates || []).map((s: string) => new Date(s)).sort((a:any, b:any) => a.getTime() - b.getTime())
                     let dateText = ''
                     if (up.length === 1) dateText = `khởi hành ${formatDate(up[0].toISOString())}`
                     else if (up.length > 1) dateText = `khởi hành từ ${formatDate(up[0].toISOString())} đến ${formatDate(up[up.length - 1].toISOString())}`
